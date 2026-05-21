@@ -141,3 +141,43 @@ class TestEqualPenaltyTiebreak:
         assert not (ca_has and cb_has)
         if ca_has:
             assert not cb_has
+
+
+class TestCandidateDiversity:
+    def test_allocator_does_not_starve_on_implement_major_pair_ordering(self):
+        vehicles_raw, implements_raw, compat, pm, v_idx, i_idx = _build_setup(40, 2)
+        orders = [_order("o0", 500), _order("o1", 500)]
+        operators = [_operator("op0")]
+
+        # Feasible pairs are generated implement-major in preprocessing. The
+        # first 40 entries all use i0; i1 only appears after the old cap of 30.
+        feasible = {
+            "o0": [(vehicle, 0) for vehicle in range(40)] + [(1, 1)],
+            "o1": [(vehicle, 0) for vehicle in range(40)] + [(2, 1)],
+        }
+        cluster: ClusterSpec = {
+            "cluster_id": "cluster_a",
+            "depot_id": "d0",
+            "order_ids": ["o0", "o1"],
+            "allocated_vehicle_implements": {},
+            "total_penalty_per_day": 1000.0,
+        }
+
+        result = allocate_resources(
+            [cluster],
+            orders,
+            vehicles_raw,
+            implements_raw,
+            operators,
+            compat,
+            pm,
+            v_idx,
+            i_idx,
+            feasible,
+        )
+
+        allocated = result[0]["allocated_vehicle_implements"]
+        allocated_implements = {iid for iids in allocated.values() for iid in iids}
+
+        assert len(allocated) == 2
+        assert allocated_implements == {"i0", "i1"}

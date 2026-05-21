@@ -6,8 +6,8 @@ means-implement pairs to orders at production scale.
 **Problem class**: Heterogeneous Fleet VRP with Time Windows (HFVRPTW) +
 Multi-resource Scheduling + Profit-Maximizing Order Selection.
 
-**Default benchmark scale**: 1500 vehicles, 6000 implements, 2500 concurrent
-orders, 500 depots. Larger runs can be requested from the CLI or Makefile.
+**Default benchmark scale**: 100 vehicles, 400 implements, 250 concurrent
+orders, 50 depots. Larger runs can be requested from the CLI or Makefile.
 
 **Stack**: Python 3.10+, OR-Tools routing library, NumPy, scikit-learn, Pydantic v2, uv.
 

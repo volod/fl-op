@@ -16,11 +16,16 @@ Algorithm:
 """
 
 import logging
+import math
 from typing import Any
 
 import numpy as np
 
-from fl_op.core.constants import MAX_PAIRS_PER_ORDER
+from fl_op.core.constants import (
+    MAX_PAIRS_PER_ORDER,
+    PREALLOC_MIN_RESOURCES_PER_MULTI_ORDER_CLUSTER,
+    PREALLOC_ORDERS_PER_RESOURCE,
+)
 from fl_op.models.types import ClusterSpec
 
 logger = logging.getLogger(__name__)
@@ -80,14 +85,14 @@ def allocate_resources(
         depot_id = cluster["depot_id"]
         cluster_orders = [o for o in orders if o["order_id"] in cluster["order_ids"]]
 
-        # Gather all feasible V-I pairs across orders in this cluster
-        # {vehicle_id: [(score, implement_id), ...]}
-        vehicle_candidates: dict[str, list[tuple[float, str]]] = {}
+        # Gather feasible V-I pairs across orders in this cluster, then choose
+        # a bounded, diverse set. Do not truncate before filtering claimed
+        # resources: pair lists are implement-major, so early truncation can
+        # collapse a cluster to one implement and starve later clusters.
+        pair_candidates: dict[tuple[str, str], float] = {}
 
         for order in cluster_orders:
             pairs = feasible_pairs.get(order["order_id"], [])
-            # Cap per order before routing model construction
-            pairs = pairs[:MAX_PAIRS_PER_ORDER]
             for v_idx, i_idx in pairs:
                 vid = idx_to_vehicle.get(v_idx)
                 iid = idx_to_implement.get(i_idx)
@@ -96,21 +101,41 @@ def allocate_resources(
                 if vid in claimed_vehicles or iid in claimed_implements:
                     continue
                 score = float(power_margin[v_idx, i_idx])
-                vehicle_candidates.setdefault(vid, []).append((score, iid))
+                key = (vid, iid)
+                if key not in pair_candidates or score > pair_candidates[key]:
+                    pair_candidates[key] = score
 
-        # For each vehicle, pick its best unclaimed implement
+        # Pick at most one implement per vehicle and one vehicle per implement.
+        # The limit keeps the downstream routing model bounded while still
+        # allowing enough resource diversity for multi-order clusters.
+        desired_resources = math.ceil(
+            len(cluster_orders) / PREALLOC_ORDERS_PER_RESOURCE
+        )
+        if len(cluster_orders) > 1:
+            desired_resources = max(
+                desired_resources,
+                PREALLOC_MIN_RESOURCES_PER_MULTI_ORDER_CLUSTER,
+            )
+        cluster_resource_limit = min(
+            len(cluster_orders),
+            MAX_PAIRS_PER_ORDER,
+            desired_resources,
+        )
+        sorted_candidates = sorted(
+            pair_candidates.items(),
+            key=lambda item: (-item[1], item[0][0], item[0][1]),
+        )
         allocated: dict[str, list[str]] = {}
-        for vid, candidates in vehicle_candidates.items():
-            if vid in claimed_vehicles:
+        reserved_implements: set[str] = set()
+        for (vid, iid), _score in sorted_candidates:
+            if len(allocated) >= cluster_resource_limit:
+                break
+            if vid in allocated or iid in reserved_implements:
                 continue
-            # Sort by score descending; tiebreak by implement_id for determinism
-            candidates.sort(key=lambda x: (-x[0], x[1]))
-            for score, iid in candidates:
-                if iid not in claimed_implements:
-                    claimed_implements.add(iid)
-                    claimed_vehicles.add(vid)
-                    allocated[vid] = [iid]
-                    break
+            claimed_implements.add(iid)
+            claimed_vehicles.add(vid)
+            reserved_implements.add(iid)
+            allocated[vid] = [iid]
 
         # Assign one operator per cluster (highest available from depot)
         available_ops = [
@@ -118,6 +143,10 @@ def allocate_resources(
             for op in depot_operators.get(depot_id, [])
             if op["operator_id"] not in claimed_operators
         ]
+        if not available_ops:
+            available_ops = [
+                op for op in operators if op["operator_id"] not in claimed_operators
+            ]
         if available_ops:
             # Stable assignment: first available (list is deterministic from input order)
             op = available_ops[0]

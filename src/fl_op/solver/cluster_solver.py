@@ -36,6 +36,22 @@ def _haversine_s(lat1: float, lon1: float, lat2: float, lon2: float) -> int:
     return max(1, int(km * _SECONDS_PER_KM))
 
 
+def _estimate_operation_seconds(
+    order: dict[str, Any],
+    implement: dict[str, Any],
+) -> int:
+    """Estimate field service duration for one order and implement."""
+    area = float(order.get("area_ha", 0))
+    working_width = float(implement.get("working_width_m", 12))
+    op_speed = float(implement.get("max_speed_kmh", 8))
+    if working_width > 0 and op_speed > 0:
+        op_hours = area / (working_width / 1000 * op_speed * 10)
+        op_hours = max(0.5, min(op_hours, 24.0))
+    else:
+        op_hours = 1.0
+    return int(op_hours * 3600)
+
+
 def _mark_all_infeasible(
     cluster_dict: dict[str, Any],
     reason: str,
@@ -189,16 +205,40 @@ def _solve_cluster_inner(
         ti = manager.IndexToNode(to_index)
         return time_matrix[fi][ti]
 
-    transit_cb_idx = routing.RegisterTransitCallback(time_callback)
-    routing.SetArcCostEvaluatorOfAllVehicles(transit_cb_idx)
+    cost_cb_idx = routing.RegisterTransitCallback(time_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(cost_cb_idx)
+
+    # Service time is vehicle/implement-specific. OR-Tools must see field
+    # operation duration during optimization; otherwise it can unrealistically
+    # place a whole cluster on one route because only travel time is constrained.
+    vehicle_transit_cb_indices: list[int] = []
+    for rv in routing_vehicles:
+        implement = rv["implement"]
+        service_s_by_node = [0] + [
+            _estimate_operation_seconds(order, implement)
+            for order in cluster_orders
+        ]
+
+        def vehicle_time_callback(
+            from_index: int,
+            to_index: int,
+            service_s_by_node: list[int] = service_s_by_node,
+        ) -> int:
+            fi = manager.IndexToNode(from_index)
+            ti = manager.IndexToNode(to_index)
+            return time_matrix[fi][ti] + service_s_by_node[fi]
+
+        vehicle_transit_cb_indices.append(
+            routing.RegisterTransitCallback(vehicle_time_callback)
+        )
 
     # Time dimension: hard time windows from order deadlines + operator shifts
     now_epoch = int(datetime.now(tz=timezone.utc).timestamp())
     # Use seconds-from-now as time units; max horizon = 30 days
     horizon_s = 30 * 24 * 3600
 
-    routing.AddDimension(
-        transit_cb_idx,
+    routing.AddDimensionWithVehicleTransits(
+        vehicle_transit_cb_indices,
         horizon_s,  # max waiting time (slack)
         horizon_s,  # max total time per vehicle
         False,  # do not force start cumul to zero
@@ -287,18 +327,11 @@ def _solve_cluster_inner(
 
             arrival_s = solution.Value(time_dim.CumulVar(index))
             field = field_map.get(order.get("field_id", ""))
-            area = float(order.get("area_ha", 0))
-            working_width = float(rv["implement"].get("working_width_m", 12))
-            op_speed = float(rv["implement"].get("max_speed_kmh", 8))
-            # Estimate operation duration: area / (width * speed) in hours -> seconds
-            if working_width > 0 and op_speed > 0:
-                op_hours = area / (working_width / 1000 * op_speed * 10)  # ha/(km*m -> ha/h)
-                op_hours = max(0.5, min(op_hours, 24.0))
-            else:
-                op_hours = 1.0
+            op_seconds = _estimate_operation_seconds(order, rv["implement"])
+            op_hours = op_seconds / 3600.0
 
             start_epoch = now_epoch + arrival_s
-            end_epoch = start_epoch + int(op_hours * 3600)
+            end_epoch = start_epoch + op_seconds
 
             dispatch_packages.append(
                 {

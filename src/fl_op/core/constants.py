@@ -8,6 +8,11 @@ DEFAULT_GENERATE_IMPLEMENTS: int = 6000
 DEFAULT_GENERATE_ORDERS: int = 2500
 DEFAULT_GENERATE_DEPOTS: int = 500
 
+# Resource pre-allocation reserves enough V-I pairs for parallelism without
+# hoarding the whole fleet in the first high-penalty clusters.
+PREALLOC_ORDERS_PER_RESOURCE: int = 5
+PREALLOC_MIN_RESOURCES_PER_MULTI_ORDER_CLUSTER: int = 2
+
 # ---------------------------------------------------------------------------
 # Weather restriction thresholds (hard constraints)
 # ---------------------------------------------------------------------------
