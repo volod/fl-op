@@ -260,23 +260,36 @@ See ADR-012 for the rationale.
 
 ### 5.4 Parallelism
 
-Clusters are solved in parallel using `multiprocessing.Pool`:
+Clusters are solved in parallel using `concurrent.futures.ProcessPoolExecutor`:
 
 ```python
-pool = Pool(
-    processes=cpu_count(),
-    context=mp.get_context("spawn"),
-    maxtasksperchild=1,
-)
+ctx = multiprocessing.get_context("spawn")
+with ProcessPoolExecutor(
+    max_workers=n_workers,
+    mp_context=ctx,
+    initializer=_pool_initializer,
+) as executor:
+    future_to_cluster = {
+        executor.submit(_worker_fn, cluster, ...): cluster
+        for cluster in clusters
+    }
+    for future in as_completed(future_to_cluster, timeout=overall_timeout):
+        dispatch, infeasible = future.result()
+        ...
 ```
 
 **Why spawn?** The `fork` start method inherits the parent's OR-Tools C++ objects,
 which contain internal state that is not safe to share across processes. `spawn` starts
 a clean Python interpreter. See ADR-009.
 
-**Why maxtasksperchild=1?** OR-Tools allocates C++ heap memory for routing models.
-This memory is not always released when the Python object goes out of scope. Recycling
-the worker process after each cluster task prevents memory accumulation over many clusters.
+**Why `initializer=_pool_initializer`?** The initializer runs once per worker at pool
+creation time, pre-importing OR-Tools and the cluster solver. All tasks dispatched to
+that worker pay zero import cost, amortising spawn overhead over all clusters.
+
+**Why `as_completed`?** Fast clusters are collected immediately in completion order.
+The `timeout` parameter is a ceiling on total wall-clock time for the whole pool, not
+per-cluster multiplied by count, avoiding unnecessary blocking when most clusters
+finish quickly.
 
 **Why num_workers=1?** OR-Tools 9.15 uses CP-SAT as the internal sub-solver. The
 threading knob for the routing library is `sat_parameters.num_workers`, not the older
@@ -295,10 +308,12 @@ Every cluster worker returns a 2-tuple:
 
     (list[DispatchPackage], list[InfeasibleOrder])
 
-The aggregator asserts `len(result) == 2` before unpacking. If the worker raises an
-exception (OR-Tools timeout, memory error, unexpected failure), the aggregator catches
-it and records all orders in that cluster as infeasible with reason `solver_error`.
-See ADR-007.
+The aggregator asserts the result is a 2-tuple before unpacking. If the worker raises
+an exception (OR-Tools timeout, memory error, unexpected failure), the pool layer
+catches it in `future.result()` and records all orders in that cluster as infeasible
+with reason `worker_crash`. Internal exceptions caught inside `solve_cluster` itself
+use reason `solver_exception`. A pool-level overall timeout records reason
+`solver_timeout`. See ADR-007.
 
 ---
 
@@ -413,8 +428,15 @@ from 50 minutes to ~6 minutes.
 | BallTree clustering | `src/fl_op/solver/preprocessing.py` |
 | Pre-allocator | `src/fl_op/solver/resource_allocator.py` |
 | Greedy warm-start scorer | `src/fl_op/solver/greedy.py` |
-| OR-Tools routing worker | `src/fl_op/solver/cluster_solver.py` |
-| Parallel pool + aggregation | `src/fl_op/solver/aggregator.py` |
-| Reschedule | `src/fl_op/solver/reschedule.py` |
-| Contract query | `src/fl_op/solver/query.py` |
+| OR-Tools routing model construction | `src/fl_op/solver/routing_model.py` |
+| Travel time + operation time estimation | `src/fl_op/solver/travel_time.py` |
+| OR-Tools routing worker (plain dict I/O) | `src/fl_op/solver/cluster_solver.py` |
+| ProcessPoolExecutor pool + as_completed | `src/fl_op/solver/cluster_pool.py` |
+| KPI aggregation + report writing | `src/fl_op/solver/aggregator.py` |
+| Solve command pipeline | `src/fl_op/solver/solve_pipeline.py` |
+| Reschedule helpers (events, plan diff) | `src/fl_op/solver/reschedule.py` |
+| Reschedule command pipeline | `src/fl_op/solver/reschedule_pipeline.py` |
+| Contract query helpers (time index) | `src/fl_op/solver/query.py` |
+| Contract query command pipeline | `src/fl_op/solver/query_pipeline.py` |
 | All numeric constants | `src/fl_op/core/constants.py` |
+| Run telemetry (wall/CPU/RSS/phases) | `src/fl_op/core/telemetry.py` |

@@ -6,8 +6,9 @@ means-implement pairs to orders at production scale.
 **Problem class**: Heterogeneous Fleet VRP with Time Windows (HFVRPTW) +
 Multi-resource Scheduling + Profit-Maximizing Order Selection.
 
-**Default benchmark scale**: 100 vehicles, 400 implements, 250 concurrent
-orders, 50 depots. Larger runs can be requested from the CLI or Makefile.
+**Default scale**: 100 vehicles, 400 implements, 250 concurrent orders,
+50 depots (overridable via CLI flags, environment variables, or Makefile).
+Production-scale runs (3000+ vehicles) require explicit overrides.
 
 **Stack**: Python 3.10+, OR-Tools routing library, NumPy, scikit-learn, Pydantic v2, uv.
 
@@ -32,8 +33,8 @@ generate-data  ->  solve  ->  analyse  ->  console statistics
 To run each step manually:
 
 ```bash
-# Generate synthetic dataset: 50 vehicles, 200 implements, 20 orders, 5 depots
-.venv/bin/fl-op generate-data --vehicles 50 --implements 200 --orders 20 --depots 5 --seed 42
+# Generate synthetic dataset at default scale: 100 vehicles, 400 implements, 250 orders, 50 depots
+.venv/bin/fl-op generate-data --vehicles 100 --implements 400 --orders 250 --depots 50 --seed 42
 
 # Solve: picks up the most recent generated dataset automatically
 .venv/bin/fl-op solve --data latest
@@ -58,17 +59,24 @@ To run each step manually:
 
 ```bash
 .venv/bin/fl-op generate-data \
-    --vehicles 1500 \
-    --implements 6000 \
-    --orders 2500 \
-    --depots 500 \
+    --vehicles 100 \
+    --implements 400 \
+    --orders 250 \
+    --depots 50 \
     --seed 42
 ```
 
-Those are the CLI defaults, so the same run can be started with:
+Those are the CLI defaults (set via environment variables or `.env`), so the
+same run can be started with:
 
 ```bash
 .venv/bin/fl-op generate-data --seed 42
+```
+
+For large-scale runs, pass the desired counts explicitly:
+
+```bash
+.venv/bin/fl-op generate-data --vehicles 3000 --implements 20000 --orders 2500 --depots 50 --seed 42
 ```
 
 Output written to `.data/generate-data/current-timestamp/`:
@@ -103,7 +111,7 @@ Or point to a specific dataset directory:
 .venv/bin/fl-op solve --data .data/generate-data/current-timestamp/
 ```
 
-**Example output** (50 vehicles / 200 implements / 20 orders):
+**Example output** (small run — 50 vehicles / 200 implements / 20 orders):
 
 ```
 Fleet Optimization Schedule Report
@@ -156,7 +164,9 @@ infeasible_orders.json # orders that could not be assigned with reason codes
   "total_estimated_margin_eur": 347629.82,
   "greedy_baseline_margin_eur": 386670.36,
   "solver_improvement_eur": -39040.54,
-  "total_fuel_l": 6905.79
+  "total_fuel_l": 6905.79,
+  "total_fertilizer_kg": 1240.50,
+  "infeasibility_reasons": {"no_allocated_vehicles": 3}
 }
 ```
 
@@ -196,8 +206,9 @@ Then reschedule:
 
 Orders with status `started` are frozen. The solver re-optimises remaining
 orders with the current fleet state. Output goes to `.data/reschedule/<ts>/`
-and includes a `plan_diff.json` (structured) and `plan_diff.txt` (human summary
-of what changed vs. the previous schedule).
+and includes a `plan_diff.json` (structured diff: `frozen_orders`, `added`,
+`removed`, `rescheduled`, `newly_infeasible`) and `plan_diff.txt` (human
+summary of what changed vs. the previous schedule).
 
 ---
 
@@ -261,8 +272,9 @@ Response in under 5 seconds at production scale. No solver call involved.
 
 | Scale | generate-data | solve (8 cores) |
 |-------|--------------|-----------------|
-| Smoke test (50v / 200i / 20o / 5d) | < 1 s | < 5 s |
-| Default benchmark (1500v / 6000i / 2500o / 500d) | < 60 s | 5-10 min |
+| Smoke test (10v / 30i / 5o / 2d) | < 1 s | < 5 s |
+| Default / CI (100v / 400i / 250o / 50d) | < 5 s | < 60 s |
+| Large scale (3000v / 20000i / 2500o / 50d) | < 60 s | 5-10 min |
 
 Run the default benchmark manually (not a CI target):
 
@@ -283,46 +295,17 @@ make data VEHICLES=3000 IMPLEMENTS=20000 ORDERS=2500 DEPOTS=50
 ```
 .data/
   generate-data/<timestamp>/     # dataset for one generate-data run
-  solve/<timestamp>/             # schedule + KPIs for one solve run
-  reschedule/<timestamp>/        # updated schedule + plan_diff
-  query-contract/<timestamp>/    # feasibility result for one new order
+  solve/<timestamp>/             # schedule.json, schedule_kpis.json,
+                                 # schedule_report.txt, infeasible_orders.json
+  reschedule/<timestamp>/        # same outputs as solve + plan_diff.json,
+                                 # plan_diff.txt
+  query-contract/<timestamp>/    # query_result.json
 ```
 
-All JSON files include `schema_version: "1.0"` and `run_metadata` for
-traceability. Old runs are never overwritten; each run gets its own timestamp
-directory.
-
----
-
-## Project Structure
-
-```
-src/fl_op/
-  main.py                  # CLI entry point (click group, 5 commands)
-  core/
-    constants.py           # all numeric constants (no magic numbers)
-    paths.py               # --latest resolver, path traversal guard
-  models/
-    enums.py               # OperationType, ImplementType, VehicleType, OrderStatus
-    types.py               # TypedDict pipeline contracts
-    vehicle.py / implement.py / operator.py / depot.py
-    field.py / order.py / contract.py / weather.py
-    compat_matrix.py       # numpy bool + float32 ndarray, memmap I/O
-  data/
-    generator.py           # vectorized synthetic data + real CSV merge
-  solver/
-    preprocessing.py       # compat filter + haversine BallTree clustering
-    resource_allocator.py  # global pre-allocation (penalty-weighted priority)
-    greedy.py              # vectorized warm-start scorer
-    cluster_solver.py      # OR-Tools routing library worker
-    aggregator.py          # multiprocessing Pool + KPI aggregation
-    analysis/              # solve artifact loading, metrics, console report
-    reschedule.py          # rolling-horizon re-optimization
-    query.py               # fast contract feasibility query
-docs/
-  design/                  # approved system design + engineering review test plan
-  adr/                     # 15 Architecture Decision Records
-```
+All solve/reschedule JSON files include `schema_version: "1.0"`, `run_metadata`
+(timestamp, command args, dataset path), and `run_telemetry` (wall time, CPU
+time, phase breakdown, peak RSS). Old runs are never overwritten; each run gets
+its own timestamp directory.
 
 ---
 
@@ -349,9 +332,11 @@ docs/
 make venv          # create .venv and install all dependencies
 make quickstart    # generate-data + solve + analyse at smoke-test scale
 make data          # default benchmark (manual, ~10 min)
-uv run pytest      # run test suite (24 tests, < 5 s)
+uv run pytest      # run test suite (99 tests, < 120 s)
 ```
 
 Tests require no external services. The smoke test (`tests/test_smoke.py`)
-runs the full generate-data -> solve -> reschedule -> query-contract pipeline
-on a 10-vehicle dataset.
+runs the full generate-data -> solve -> analyse -> reschedule -> query-contract
+pipeline at minimum scale (10 vehicles, 30 implements, 5 orders, 2 depots).
+The session fixture in `tests/conftest.py` generates a 50v/200i/20o/5d dataset
+shared across all unit tests.
