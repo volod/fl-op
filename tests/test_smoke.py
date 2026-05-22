@@ -22,7 +22,7 @@ def test_e2e_smoke(tmp_path):
         data_dir = str(data_dirs[-1])
 
         # 2. Solve
-        from fl_op.solver.aggregator import run_solve
+        from fl_op.solver.solve_pipeline import run_solve
 
         try:
             run_solve(data_dir=data_dir)
@@ -52,7 +52,7 @@ def test_e2e_smoke(tmp_path):
         run_analyse(schedule_dir=str(solve_dir))
 
         # 3. Reschedule (no events; should rerun on pending orders)
-        from fl_op.solver.reschedule import run_reschedule
+        from fl_op.solver.reschedule_pipeline import run_reschedule
 
         try:
             run_reschedule(
@@ -86,7 +86,7 @@ def test_e2e_smoke(tmp_path):
             "estimated_revenue_eur": 8000,
         }))
 
-        from fl_op.solver.query import run_query
+        from fl_op.solver.query_pipeline import run_query
 
         run_query(
             data_dir=data_dir,

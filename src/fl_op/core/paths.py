@@ -1,8 +1,11 @@
 """Shared CLI path helpers."""
 
+import os
 import pathlib
 
 import click
+
+DATA_ROOT = pathlib.Path(os.environ.get("DATA_DIR", ".data"))
 
 
 def resolve_latest(
@@ -19,7 +22,7 @@ def resolve_latest(
 
 
 def _latest_run_dir(base_subdir: str) -> pathlib.Path:
-    base = pathlib.Path(".data") / base_subdir
+    base = DATA_ROOT / base_subdir
     if not base.exists():
         raise click.BadParameter(
             f"No runs found under {base}. Run the command first.",

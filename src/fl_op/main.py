@@ -1,6 +1,27 @@
 import logging
+import os
+import pathlib
 import sys
 from typing import Any, Callable, TypeVar
+
+
+def _load_dotenv() -> None:
+    """Load .env into os.environ (stdlib only, does not override existing vars)."""
+    env_file = pathlib.Path(".env")
+    if not env_file.exists():
+        return
+    with env_file.open() as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            if key and key not in os.environ:
+                os.environ[key] = value.strip()
+
+
+_load_dotenv()
 
 import click
 
@@ -15,6 +36,9 @@ from fl_op.core.paths import resolve_latest
 logger = logging.getLogger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
 INTERRUPTED_EXIT_CODE = 130
+
+_LOG_LEVEL_ENV = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
+_SEED_ENV: int | None = int(os.environ["SEED"]) if os.environ.get("SEED") else None
 
 
 def _data_option(func: F) -> F:
@@ -39,7 +63,7 @@ def _schedule_option(func: F) -> F:
 @click.option("--verbose", is_flag=True, default=False, help="Enable debug logging.")
 def cli(verbose: bool) -> None:
     """fl-op: agricultural fleet optimization CLI."""
-    level = logging.DEBUG if verbose else logging.INFO
+    level = logging.DEBUG if verbose else _LOG_LEVEL_ENV
     logging.basicConfig(
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         level=level,
@@ -71,7 +95,13 @@ def cli(verbose: bool) -> None:
     show_default=True,
     type=int,
 )
-@click.option("--seed", default=None, type=int, help="Random seed for reproducibility.")
+@click.option(
+    "--seed",
+    default=_SEED_ENV,
+    show_default=True,
+    type=int,
+    help="Random seed for reproducibility. Defaults to $SEED env var if set.",
+)
 @click.option(
     "--data-path",
     default=None,
@@ -103,7 +133,7 @@ def generate_data(
 @_data_option
 def solve(data: str) -> None:
     """Run full fleet scheduling solver."""
-    from fl_op.solver.aggregator import run_solve
+    from fl_op.solver.solve_pipeline import run_solve
 
     data_dir = resolve_latest(data, "generate-data")
     run_solve(data_dir=str(data_dir))
@@ -131,7 +161,7 @@ def analyse(schedule: str) -> None:
 )
 def reschedule(data: str, schedule: str, events: str | None) -> None:
     """Re-run solver after in-progress updates."""
-    from fl_op.solver.reschedule import run_reschedule
+    from fl_op.solver.reschedule_pipeline import run_reschedule
 
     data_dir = resolve_latest(data, "generate-data")
     schedule_dir = resolve_latest(schedule, "solve")
@@ -149,7 +179,7 @@ def reschedule(data: str, schedule: str, events: str | None) -> None:
 )
 def query_contract(data: str, schedule: str, order: str) -> None:
     """Evaluate feasibility and margin estimate for a new order against current schedule."""
-    from fl_op.solver.query import run_query
+    from fl_op.solver.query_pipeline import run_query
 
     data_dir = resolve_latest(data, "generate-data")
     schedule_dir = resolve_latest(schedule, "solve")

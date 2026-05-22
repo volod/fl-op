@@ -1,7 +1,7 @@
-"""TypedDict definitions for cross-process pipeline contracts.
+"""TypedDict definitions for the solver pipeline contracts.
 
-These types cross the multiprocessing.Pool boundary as plain Python dicts.
-No Pydantic, no OR-Tools objects — only JSON-serialisable primitives.
+Plain JSON-serialisable primitives only — no Pydantic models, no OR-Tools
+objects. Kept simple so the types remain easy to log, assert, and serialise.
 """
 
 from typing import Any

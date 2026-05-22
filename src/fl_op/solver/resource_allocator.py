@@ -1,18 +1,26 @@
 """Global pre-allocation pass: reserves implements and operators to clusters.
 
-Prevents cross-cluster double-assignment of physical resources (a sprayer cannot
-be in two clusters simultaneously).
+Prevents cross-cluster double-booking of implements (a sprayer cannot be at two
+fields simultaneously). Vehicles are assigned using a two-pass strategy:
+
+  Pass 1 (preferred): only vehicles not yet assigned to any cluster.
+  Pass 2 (fallback):  allow vehicles already in one cluster, up to
+                      _MAX_VEHICLE_ASSIGNMENTS per vehicle.
+
+The fallback applies only when no unassigned vehicle is compatible with a
+cluster's operation type. Since each cluster solver runs independently in
+parallel, shared vehicles risk scheduling conflicts; the fallback keeps that
+risk contained to compatibility-constrained edge cases.
 
 Algorithm:
   1. Sort clusters by total_penalty_per_day descending (penalty-weighted urgency).
      Tiebreak by cluster_id for determinism.
   2. For each cluster in order:
-     a. For each order in the cluster, find all feasible V-I pairs (from compat matrix).
-     b. For each physical vehicle_id in the cluster, collapse to the single highest-scoring
-        V-I pair that uses an as-yet-unclaimed implement and operator.
-     c. Reserve the chosen implement_id and operator_id.
-  3. Return clusters with allocated_vehicle_implements populated; clusters with no
-     valid allocations retain an empty dict (they will be marked infeasible by solver).
+     a. Collect feasible V-I pairs (from compat matrix), skipping claimed implements.
+     b. Run pass-1 to prefer unassigned vehicles; run pass-2 if pass-1 yields nothing.
+     c. Select the highest-scoring bounded subset (cluster_resource_limit).
+     d. Reserve chosen implement_ids globally; track vehicle assignment counts.
+  3. Return clusters with allocated_vehicle_implements populated.
 """
 
 import logging
@@ -77,37 +85,43 @@ def allocate_resources(
     for op in operators:
         depot_operators.setdefault(op["depot_id"], []).append(op)
 
+    # Implements are exclusively claimed: one implement per cluster across the run.
+    # Vehicles use a two-pass assignment: prefer unassigned vehicles (pass 1),
+    # fall back to limited reuse (pass 2) only when compatibility leaves no choice.
+    _MAX_VEHICLE_ASSIGNMENTS = 2
+
     claimed_implements: set[str] = set()
-    claimed_vehicles: set[str] = set()
     claimed_operators: set[str] = set()
+    vehicle_assignment_count: dict[str, int] = {}
 
     for cluster in sorted_clusters:
         depot_id = cluster["depot_id"]
         cluster_orders = [o for o in orders if o["order_id"] in cluster["order_ids"]]
 
-        # Gather feasible V-I pairs across orders in this cluster, then choose
-        # a bounded, diverse set. Do not truncate before filtering claimed
-        # resources: pair lists are implement-major, so early truncation can
-        # collapse a cluster to one implement and starve later clusters.
-        pair_candidates: dict[tuple[str, str], float] = {}
+        def _collect_pairs(max_vehicle_uses: int) -> dict[tuple[str, str], float]:
+            candidates: dict[tuple[str, str], float] = {}
+            for order in cluster_orders:
+                for v_idx, i_idx in feasible_pairs.get(order["order_id"], []):
+                    vid = idx_to_vehicle.get(v_idx)
+                    iid = idx_to_implement.get(i_idx)
+                    if vid is None or iid is None:
+                        continue
+                    if iid in claimed_implements:
+                        continue
+                    if vehicle_assignment_count.get(vid, 0) >= max_vehicle_uses:
+                        continue
+                    score = float(power_margin[v_idx, i_idx])
+                    key = (vid, iid)
+                    if key not in candidates or score > candidates[key]:
+                        candidates[key] = score
+            return candidates
 
-        for order in cluster_orders:
-            pairs = feasible_pairs.get(order["order_id"], [])
-            for v_idx, i_idx in pairs:
-                vid = idx_to_vehicle.get(v_idx)
-                iid = idx_to_implement.get(i_idx)
-                if vid is None or iid is None:
-                    continue
-                if vid in claimed_vehicles or iid in claimed_implements:
-                    continue
-                score = float(power_margin[v_idx, i_idx])
-                key = (vid, iid)
-                if key not in pair_candidates or score > pair_candidates[key]:
-                    pair_candidates[key] = score
+        # Pass 1: unassigned vehicles only (0 existing cluster assignments)
+        pair_candidates = _collect_pairs(max_vehicle_uses=1)
+        # Pass 2: allow limited reuse when no unassigned vehicle is compatible
+        if not pair_candidates:
+            pair_candidates = _collect_pairs(max_vehicle_uses=_MAX_VEHICLE_ASSIGNMENTS)
 
-        # Pick at most one implement per vehicle and one vehicle per implement.
-        # The limit keeps the downstream routing model bounded while still
-        # allowing enough resource diversity for multi-order clusters.
         desired_resources = math.ceil(
             len(cluster_orders) / PREALLOC_ORDERS_PER_RESOURCE
         )
@@ -126,14 +140,16 @@ def allocate_resources(
             key=lambda item: (-item[1], item[0][0], item[0][1]),
         )
         allocated: dict[str, list[str]] = {}
+        reserved_vehicles: set[str] = set()
         reserved_implements: set[str] = set()
         for (vid, iid), _score in sorted_candidates:
             if len(allocated) >= cluster_resource_limit:
                 break
-            if vid in allocated or iid in reserved_implements:
+            if vid in reserved_vehicles or iid in reserved_implements:
                 continue
             claimed_implements.add(iid)
-            claimed_vehicles.add(vid)
+            vehicle_assignment_count[vid] = vehicle_assignment_count.get(vid, 0) + 1
+            reserved_vehicles.add(vid)
             reserved_implements.add(iid)
             allocated[vid] = [iid]
 
