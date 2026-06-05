@@ -50,7 +50,7 @@ def run_solver_chain(
         build_cluster_specs,
         filter_feasible_vehicle_implement_pairs,
     )
-    from fl_op.solver.resource_allocator import allocate_resources
+    from fl_op.solver.allocation import allocate_resources
 
     vehicles_raw = rows["vehicles"]
     implements_raw = rows["implements"]
@@ -72,17 +72,17 @@ def run_solver_chain(
     feasible_pairs = filter_feasible_vehicle_implement_pairs(
         orders_raw, vehicles_raw, implements_raw, compat, vehicle_index, implement_index
     )
+    scored = vectorized_score(
+        orders_raw, vehicles_raw, implements_raw, fields_raw,
+        feasible_pairs, vehicle_index, implement_index,
+    )
     clusters = build_cluster_specs(
         orders_raw, fields_raw, depots_raw, vehicles_raw, implements_raw,
         compat, vehicle_index, implement_index, order_index,
     )
     clusters = allocate_resources(
-        clusters, orders_raw, vehicles_raw, implements_raw, operators_raw,
-        compat, power_margin, vehicle_index, implement_index, feasible_pairs,
-    )
-    scored = vectorized_score(
-        orders_raw, vehicles_raw, implements_raw, fields_raw,
-        feasible_pairs, vehicle_index, implement_index,
+        clusters, orders_raw, operators_raw, power_margin,
+        vehicle_index, implement_index, feasible_pairs, scored,
     )
     greedy_assignment = greedy_assign(scored, vehicle_index, implement_index)
 

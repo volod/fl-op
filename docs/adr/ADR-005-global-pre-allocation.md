@@ -23,7 +23,7 @@ Two solutions were considered:
 
 ## Decision
 
-Implement a **global pre-allocation pass** in `src/fl_op/solver/resource_allocator.py`
+Implement a **global pre-allocation pass** in `src/fl_op/solver/allocation/`
 that runs before `multiprocessing.Pool` is opened.
 
 Clusters are processed in descending order of `sum(order.penalty_per_day)` —
@@ -51,7 +51,7 @@ Raw order count as a sort key was explicitly rejected for this reason.
 
 ## Consequences
 
-- `resource_allocator.py` must be called once, synchronously, before the Pool
+- `solver/allocation` must be called once, synchronously, before the Pool
   is opened. It must not be called inside a worker.
 - If pre-allocation exhausts all feasible implements for a cluster, that cluster
   is passed to the solver with an empty allocated_vehicle_implements dict. The

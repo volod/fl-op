@@ -205,7 +205,7 @@ Layer 2: Pre-Filter + Clustering + Global Pre-Allocation (internal pipeline step
     assigned to nearest depot by great-circle distance (straight-line for POC;
     travel-time refinement is post-POC tuning)
   Cluster orders by depot affinity
-  Global pre-allocation pass (src/fl_op/solver/resource_allocator.py):
+  Global pre-allocation pass (src/fl_op/solver/allocation/):
     sort clusters by sum(order.penalty_per_day) descending (highest total
     penalty exposure first — not raw order count; this prevents a 51-order
     cluster of low-value jobs from starving a 50-order cluster with deadline-
@@ -459,7 +459,7 @@ Not in scope for the POC implementation phase.
    OperationType-aware compatibility filtering and haversine BallTree depot-
    affinity clustering. Cluster size target in core/constants.py.
 
-5. **Global pre-allocation** (0.5 days): `src/fl_op/solver/resource_allocator.py`.
+5. **Global pre-allocation** (0.5 days): `src/fl_op/solver/allocation/`.
    Iterate clusters largest-first; reserve implements and operators to first
    claimant cluster; remove from all subsequent clusters' feasible sets.
 
@@ -607,7 +607,7 @@ Step  Module                              Depends on
   2   models/ (Pydantic + numpy matrix)   1
   3   data/generator.py                   2
   4   solver/preprocessing.py             2, 3
-  5   solver/resource_allocator.py        4
+  5   solver/allocation/                  4
   6   solver/greedy.py                    4
   7   solver/cluster_solver.py            4, 5, 6
   8   solver/aggregator.py + solve CLI    7
@@ -646,7 +646,7 @@ Flat, build-actionable task list (matches build order):
    all entity types; expose as generate-data CLI command; write to .data/generate-data/<ts>/
 10. Write src/fl_op/solver/preprocessing.py: OperationType compat filter; haversine
     BallTree depot affinity; cluster_orders_by_depot() returning dict[depot_id, ClusterSpec]
-11. Write src/fl_op/solver/resource_allocator.py: allocate_resources(clusters) reserves
+11. Write src/fl_op/solver/allocation/: allocate_resources(clusters) reserves
     implement_ids and operator_ids to clusters sorted by order count descending
 12. Write src/fl_op/solver/greedy.py: vectorized_score() using numpy broadcasting over
     V-I pairs x orders; greedy_assign() returning warm-start dict
@@ -678,7 +678,7 @@ Scope: full (all 10 steps). Architecture: 4 issues resolved (order volume, solve
 thread limit, compat matrix + geographic). Code quality: 4 resolved (worker I/O, Pydantic
 circular refs, OperationType enum, worker tuple return). Tests: 31 paths. Performance:
 greedy vectorization added. Outside voice (Codex): 2 P1 gaps resolved (V-I coupling
-via resource-uniqueness constraints; cross-cluster scarce resource via resource_allocator.py).
+via resource-uniqueness constraints; cross-cluster scarce resource via allocation).
 
 ### /autoplan CEO phase
 
@@ -688,7 +688,7 @@ greedy_baseline_margin_EUR KPI, literature check TODO.
 
 ### /autoplan Eng phase (dual voices on updated design)
 
-- resource_allocator: ranking by sum(penalty_per_day) not raw order count
+- allocation: ranking by sum(penalty_per_day) not raw order count
 - models/types.py: TypedDict DTO layer (ClusterSpec, DispatchPackage, InfeasibleOrder)
 - V-I pair collapse: one physical vehicle = one routing model vehicle per cluster
 - MAX_PAIRS_PER_ORDER=30 constant caps V-I pairs per order before routing construction
@@ -717,5 +717,5 @@ Auto-decided: 23 | User confirmed: 2 | Taste: 2 | User challenges: 0
 
 ### Net assessment
 Design is production-correct and development-ready. All P1 correctness gaps addressed.
-Key new modules: resource_allocator.py, models/types.py. Test paths: 36. TODOS: ~30 tasks.
+Key new modules: solver/allocation, models/types.py. Test paths: 36. TODOS: ~30 tasks.
 Implementation can proceed in build order defined in TODOS.md.

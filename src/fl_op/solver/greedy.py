@@ -139,20 +139,35 @@ def vectorized_score(
     return results
 
 
+def _assignment_order_priority(item: tuple[str, list[tuple[float, int, int]]]) -> tuple:
+    """Prioritize scarce, high-regret orders before flexible orders."""
+    oid, candidates = item
+    if not candidates:
+        return (1, 0, 0.0, 0.0, oid)
+
+    unique_implements = len({i_idx for _score, _v_idx, i_idx in candidates})
+    best_score = candidates[0][0]
+    second_score = candidates[1][0] if len(candidates) > 1 else -1.0e12
+    regret = best_score - second_score
+    return (0, unique_implements, -regret, -best_score, oid)
+
+
 def greedy_assign(
     scored: dict[str, list[tuple[float, int, int]]],
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
 ) -> dict[str, tuple[int, int]]:
-    """Greedy top-1 assignment: {order_id: (v_idx, i_idx)}.
+    """Greedy assignment: {order_id: (v_idx, i_idx)}.
 
-    Claims the best-scoring (v_idx, i_idx) pair for each order.
-    Once an implement index is claimed, it is not reused.
+    Orders with fewer implement alternatives and larger best-vs-second-best
+    regret are assigned first. That keeps the warm start from spending a scarce
+    implement on a flexible order before a constrained order has a chance to use
+    it. Once an implement index is claimed, it is not reused.
     """
     claimed_implements: set[int] = set()
     assignment: dict[str, tuple[int, int]] = {}
 
-    for oid, candidates in scored.items():
+    for oid, candidates in sorted(scored.items(), key=_assignment_order_priority):
         for _score, v_idx, i_idx in candidates:
             if i_idx not in claimed_implements:
                 claimed_implements.add(i_idx)

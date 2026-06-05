@@ -53,7 +53,7 @@ unnecessary when the data structure is fixed and well-understood.
   TypedDict in their type signature. Untyped `dict` return types in pipeline
   functions are a code smell.
 - `total=False` variants are used where optional fields exist (e.g.
-  `ClusterSpec.operator_id` is assigned by `resource_allocator` and absent
+  `ClusterSpec.operator_id` is assigned by `solver/allocation` and absent
   until that step runs).
 - TypedDict does not provide runtime validation. A worker that returns a dict
   with the wrong keys passes the `assert len(result) == 2` check (ADR-007) but

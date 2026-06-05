@@ -13,7 +13,7 @@ from fl_op.models.enums import ImplementType, OperationType, VehicleType
 from fl_op.models.implement import Implement
 from fl_op.models.vehicle import Vehicle
 from fl_op.models.types import ClusterSpec
-from fl_op.solver.resource_allocator import allocate_resources
+from fl_op.solver.allocation import allocate_resources
 
 
 def _veh(vid: str, power: float = 150.0) -> dict:
@@ -72,8 +72,7 @@ class TestNoCrossClusterDuplicate:
             "total_penalty_per_day": 100.0,
         }
         result = allocate_resources(
-            [c0, c1], orders, vehicles_raw, implements_raw, operators,
-            compat, pm, v_idx, i_idx, feasible,
+            [c0, c1], orders, operators, pm, v_idx, i_idx, feasible,
         )
         all_impls = []
         for c in result:
@@ -101,8 +100,7 @@ class TestPenaltyWeightedWinner:
         }
         result = allocate_resources(
             [c_low, c_high],  # intentionally pass low-penalty first
-            orders, vehicles_raw, implements_raw, operators,
-            compat, pm, v_idx, i_idx, feasible,
+            orders, operators, pm, v_idx, i_idx, feasible,
         )
         # High penalty cluster should have the implement
         c_high_result = next(c for c in result if c["cluster_id"] == "c_high")
@@ -127,8 +125,7 @@ class TestEqualPenaltyTiebreak:
         }
         result = allocate_resources(
             [cb, ca],  # pass b first, a should still win by lex order
-            orders, vehicles_raw, implements_raw, operators,
-            compat, pm, v_idx, i_idx, feasible,
+            orders, operators, pm, v_idx, i_idx, feasible,
         )
         ca_result = next(c for c in result if c["cluster_id"] == "cluster_a")
         cb_result = next(c for c in result if c["cluster_id"] == "cluster_b")
@@ -166,10 +163,7 @@ class TestCandidateDiversity:
         result = allocate_resources(
             [cluster],
             orders,
-            vehicles_raw,
-            implements_raw,
             operators,
-            compat,
             pm,
             v_idx,
             i_idx,
@@ -181,3 +175,32 @@ class TestCandidateDiversity:
 
         assert len(allocated) == 2
         assert allocated_implements == {"i0", "i1"}
+
+
+class TestScoredPreallocation:
+    def test_allocator_uses_shared_greedy_score_when_available(self):
+        vehicles_raw, implements_raw, compat, pm, v_idx, i_idx = _build_setup(2, 2)
+        orders = [_order("o0", 500)]
+        operators = [_operator("op0")]
+        feasible = {"o0": [(0, 0), (1, 1)]}
+        scored = {"o0": [(1000.0, 1, 1), (100.0, 0, 0)]}
+        cluster: ClusterSpec = {
+            "cluster_id": "cluster_a",
+            "depot_id": "d0",
+            "order_ids": ["o0"],
+            "allocated_vehicle_implements": {},
+            "total_penalty_per_day": 500.0,
+        }
+
+        result = allocate_resources(
+            [cluster],
+            orders,
+            operators,
+            pm,
+            v_idx,
+            i_idx,
+            feasible,
+            scored,
+        )
+
+        assert result[0]["allocated_vehicle_implements"] == {"v1": ["i1"]}

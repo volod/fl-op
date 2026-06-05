@@ -104,3 +104,16 @@ class TestGreedyAssign:
         all_pairs = list(result.values())
         impl_ids = [p[1] for p in all_pairs]
         assert len(impl_ids) == len(set(impl_ids))
+
+    def test_scarce_order_gets_implement_before_flexible_order(self):
+        scored = {
+            "flexible": [(100.0, 0, 0), (99.0, 0, 1)],
+            "scarce": [(95.0, 1, 0)],
+        }
+        v_idx = {"v0": 0, "v1": 1}
+        i_idx = {"i0": 0, "i1": 1}
+
+        result = greedy_assign(scored, v_idx, i_idx)
+
+        assert result["scarce"] == (1, 0)
+        assert result["flexible"] == (0, 1)

@@ -146,6 +146,8 @@ def _build_plan(
         "total_fertilizer_kg": kpis.get("total_fertilizer_kg", 0.0),
         "n_dispatched": kpis.get("n_dispatched", len(assignments)),
         "n_unassigned": kpis.get("n_infeasible", len(unassigned)),
+        "n_clusters": raw.n_clusters,
+        "n_greedy_warm_start_assignments": len(raw.greedy_assignment),
     }
     risk = RiskSummary(
         n_contract_deadlines_at_risk=len(unassigned),

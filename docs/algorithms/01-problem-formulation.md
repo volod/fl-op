@@ -236,7 +236,7 @@ described in `02-solver-pipeline.md`.
 | Compatibility matrix C | `src/fl_op/models/compat_matrix.py` |
 | x_{v,i,o} variables | OR-Tools routing model in `solver/cluster_solver.py` |
 | margin_o(v, i)      | `solver/greedy.py` vectorized scorer |
-| Order selection     | `solver/resource_allocator.py` + `solver/aggregator.py` |
+| Order selection     | `solver/allocation/` + `solver/aggregator.py` |
 | Infeasible orders   | TypedDict `InfeasibleOrder` in `models/types.py` |
 | Time window check   | `solver/preprocessing.py` filter_feasible_vehicle_implement_pairs() |
 

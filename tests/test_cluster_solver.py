@@ -201,3 +201,29 @@ class TestSolverIntegration:
             for field in ("dispatch_id", "cluster_id", "vehicle_id", "implement_id",
                           "order_id", "depot_id", "scheduled_start", "scheduled_end"):
                 assert field in pkg, f"dispatch package missing {field}"
+
+    def test_infeasible_order_does_not_sink_whole_cluster(self):
+        cd = _cluster(order_ids=["o_ok", "o_late"], allocated={"v0": ["i0"]})
+        ok = _order("o_ok", "f0")
+        late = _order("o_late", "f1")
+        late["deadline"] = "2020-01-01T00:00:00+00:00"
+        vehicles = [_vehicle("v0")]
+        implements = [_implement("i0")]
+        fields = [_field("f0"), _field("f1", 48.6, 32.1)]
+        depots = [_depot()]
+
+        dispatch, infeasible = solve_cluster(
+            cd,
+            [ok, late],
+            vehicles,
+            implements,
+            fields,
+            depots,
+            {},
+            {"v0": 0},
+            {"i0": 0},
+        )
+
+        assert {d["order_id"] for d in dispatch} == {"o_ok"}
+        assert {i["order_id"] for i in infeasible} == {"o_late"}
+        assert infeasible[0]["reason"] == "prize_collecting_unserved"

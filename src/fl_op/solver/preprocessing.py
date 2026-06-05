@@ -5,7 +5,7 @@ Pipeline:
   2. Haversine BallTree depot-affinity clustering: each order is assigned to the
      nearest depot; orders within a depot group are split into sub-clusters of
      CLUSTER_TARGET_SIZE.
-  3. Returns a list of ClusterSpec TypedDicts ready for resource_allocator.py.
+  3. Returns a list of ClusterSpec TypedDicts ready for solver/allocation.
 """
 
 import logging
@@ -156,7 +156,7 @@ def build_cluster_specs(
       1. Depot-affinity clustering via haversine BallTree.
       2. Sub-cluster each depot group to CLUSTER_TARGET_SIZE.
       3. Compute total_penalty_per_day for priority sorting.
-      4. Initialise allocated_vehicle_implements to empty (filled by resource_allocator).
+      4. Initialise allocated_vehicle_implements to empty (filled by allocation).
     """
     if order_index is None:
         order_index = {o["order_id"]: o for o in orders}

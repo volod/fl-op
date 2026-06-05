@@ -6,6 +6,7 @@ normalization and quality findings.
 """
 
 from fl_op.mapping.bindings import BindingTable, load_binding_table
-from fl_op.mapping.engine import MappingEngine, MappingResult
+from fl_op.mapping.engine import MappingEngine
+from fl_op.mapping.result import MappingResult
 
 __all__ = ["MappingEngine", "MappingResult", "BindingTable", "load_binding_table"]

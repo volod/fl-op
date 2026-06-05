@@ -426,7 +426,7 @@ from 50 minutes to ~6 minutes.
 | Compat matrix build + save/load | `src/fl_op/models/compat_matrix.py` |
 | Feasibility filter per order | `src/fl_op/solver/preprocessing.py` |
 | BallTree clustering | `src/fl_op/solver/preprocessing.py` |
-| Pre-allocator | `src/fl_op/solver/resource_allocator.py` |
+| Pre-allocator | `src/fl_op/solver/allocation/` |
 | Greedy warm-start scorer | `src/fl_op/solver/greedy.py` |
 | OR-Tools routing model construction | `src/fl_op/solver/routing_model.py` |
 | Travel time + operation time estimation | `src/fl_op/solver/travel_time.py` |
