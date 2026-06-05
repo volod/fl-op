@@ -10,8 +10,7 @@ from typing import Any
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
 from fl_op.core.paths import DATA_ROOT
 from fl_op.models.enums import OrderStatus
-from fl_op.solver.aggregator import _compute_kpis, _write_json, _write_report
-from fl_op.solver.cluster_pool import pool_solve
+from fl_op.solver.aggregator import _write_json, _write_report
 from fl_op.solver.reschedule import _apply_events, _build_plan_diff, _load_json, _write_plan_diff_txt
 
 logger = logging.getLogger(__name__)
@@ -27,12 +26,7 @@ def _load_csv(data_path: pathlib.Path, name: str) -> list[dict[str, Any]]:
 
 def run_reschedule(data_dir: str, schedule_dir: str, events_path: str | None) -> None:
     """Re-run solver after in-progress updates; write plan_diff and new schedule."""
-    from fl_op.models.compat_matrix import build_compat_matrix, save_compat_matrix
-    from fl_op.models.implement import Implement
-    from fl_op.models.vehicle import Vehicle
-    from fl_op.solver.greedy import greedy_assign, vectorized_score
-    from fl_op.solver.preprocessing import build_cluster_specs, filter_feasible_vehicle_implement_pairs
-    from fl_op.solver.resource_allocator import allocate_resources
+    from fl_op.solver.chain import run_solver_chain
 
     data_path = pathlib.Path(data_dir)
     sched_path = pathlib.Path(schedule_dir)
@@ -94,37 +88,18 @@ def run_reschedule(data_dir: str, schedule_dir: str, events_path: str | None) ->
         _write_plan_diff_txt(empty_diff, out_dir / "plan_diff.txt")
         sys.exit(0)
 
-    vehicle_index = {v["vehicle_id"]: i for i, v in enumerate(vehicles_raw)}
-    implement_index = {im["implement_id"]: i for i, im in enumerate(implements_raw)}
-    order_index = {o["order_id"]: o for o in remaining_orders}
-
-    vehicles_parsed = [Vehicle.model_validate(v) for v in vehicles_raw]
-    implements_parsed = [Implement.model_validate(im) for im in implements_raw]
-    compat, power_margin = build_compat_matrix(vehicles_parsed, implements_parsed)
-    save_compat_matrix(compat, power_margin, out_dir / "matrix")
-
-    feasible_pairs = filter_feasible_vehicle_implement_pairs(
-        remaining_orders, vehicles_raw, implements_raw, compat, vehicle_index, implement_index
-    )
-    clusters = build_cluster_specs(
-        remaining_orders, fields_raw, depots_raw, vehicles_raw, implements_raw,
-        compat, vehicle_index, implement_index, order_index,
-    )
-    clusters = allocate_resources(
-        clusters, remaining_orders, vehicles_raw, implements_raw, operators_raw,
-        compat, power_margin, vehicle_index, implement_index, feasible_pairs,
-    )
-    scored = vectorized_score(
-        remaining_orders, vehicles_raw, implements_raw, fields_raw,
-        feasible_pairs, vehicle_index, implement_index,
-    )
-    greedy_assignment = greedy_assign(scored, vehicle_index, implement_index)
-
-    all_dispatch, all_infeasible = pool_solve(
-        clusters, remaining_orders, vehicles_raw, implements_raw, fields_raw, depots_raw,
-        greedy_assignment, vehicle_index, implement_index,
-    )
-    kpis = _compute_kpis(all_dispatch, all_infeasible, remaining_orders, greedy_assignment)
+    rows = {
+        "vehicles": vehicles_raw,
+        "implements": implements_raw,
+        "orders": remaining_orders,
+        "depots": depots_raw,
+        "fields": fields_raw,
+        "operators": operators_raw,
+    }
+    result = run_solver_chain(rows, matrix_out_dir=out_dir)
+    all_dispatch = result.dispatch
+    all_infeasible = result.infeasible
+    kpis = result.kpis
 
     run_metadata = {
         "timestamp": ts,

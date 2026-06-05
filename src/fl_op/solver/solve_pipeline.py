@@ -11,8 +11,7 @@ from typing import Any
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
 from fl_op.core.paths import DATA_ROOT
 from fl_op.core.telemetry import RunTelemetry
-from fl_op.solver.aggregator import _compute_kpis, _write_json, _write_report
-from fl_op.solver.cluster_pool import pool_solve
+from fl_op.solver.aggregator import _write_json, _write_report
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +56,7 @@ def _check_cross_cluster_vehicle_overlap(
 
 def run_solve(data_dir: str) -> None:
     """Full solve pipeline: load -> preprocess -> pre-allocate -> greedy -> pool -> write."""
-    from fl_op.models.compat_matrix import build_compat_matrix, save_compat_matrix
-    from fl_op.models.implement import Implement
-    from fl_op.models.vehicle import Vehicle
-    from fl_op.solver.greedy import greedy_assign, vectorized_score
-    from fl_op.solver.preprocessing import build_cluster_specs, filter_feasible_vehicle_implement_pairs
-    from fl_op.solver.resource_allocator import allocate_resources
+    from fl_op.solver.chain import run_solver_chain
 
     telemetry = RunTelemetry()
     data_path = pathlib.Path(data_dir)
@@ -71,77 +65,41 @@ def run_solve(data_dir: str) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Loading data from %s", data_path)
-    vehicles_raw = _load_csv(data_path, "vehicles.csv")
-    implements_raw = _load_csv(data_path, "implements.csv")
-    orders_raw = _load_csv(data_path, "orders.csv")
-    depots_raw = _load_csv(data_path, "depots.csv")
-    fields_raw = _load_csv(data_path, "fields.csv")
-    operators_raw = _load_csv(data_path, "operators.csv")
+    rows = {
+        "vehicles": _load_csv(data_path, "vehicles.csv"),
+        "implements": _load_csv(data_path, "implements.csv"),
+        "orders": _load_csv(data_path, "orders.csv"),
+        "depots": _load_csv(data_path, "depots.csv"),
+        "fields": _load_csv(data_path, "fields.csv"),
+        "operators": _load_csv(data_path, "operators.csv"),
+    }
 
     logger.info(
         "Loaded: %d vehicles, %d implements, %d orders, %d depots, %d fields",
-        len(vehicles_raw), len(implements_raw), len(orders_raw),
-        len(depots_raw), len(fields_raw),
+        len(rows["vehicles"]), len(rows["implements"]), len(rows["orders"]),
+        len(rows["depots"]), len(rows["fields"]),
     )
 
-    if not orders_raw:
+    if not rows["orders"]:
         logger.error("No orders found in %s. Check the data directory.", data_path)
         sys.exit(1)
     telemetry.mark_phase("load_data")
 
-    vehicle_index = {v["vehicle_id"]: i for i, v in enumerate(vehicles_raw)}
-    implement_index = {im["implement_id"]: i for i, im in enumerate(implements_raw)}
-    order_index = {o["order_id"]: o for o in orders_raw}
-
-    logger.info("Building compatibility matrix (%d x %d)", len(vehicles_raw), len(implements_raw))
-    vehicles_parsed = [Vehicle.model_validate(v) for v in vehicles_raw]
-    implements_parsed = [Implement.model_validate(im) for im in implements_raw]
-    compat, power_margin = build_compat_matrix(vehicles_parsed, implements_parsed)
-    save_compat_matrix(compat, power_margin, out_dir / "matrix")
-    telemetry.mark_phase("compatibility_matrix")
-
-    logger.info("Building cluster specs")
-    feasible_pairs = filter_feasible_vehicle_implement_pairs(
-        orders_raw, vehicles_raw, implements_raw, compat, vehicle_index, implement_index
-    )
-    clusters = build_cluster_specs(
-        orders_raw, fields_raw, depots_raw, vehicles_raw, implements_raw,
-        compat, vehicle_index, implement_index, order_index,
-    )
-    telemetry.mark_phase("preprocessing")
-
-    logger.info("Allocating resources across %d clusters", len(clusters))
-    clusters = allocate_resources(
-        clusters, orders_raw, vehicles_raw, implements_raw, operators_raw,
-        compat, power_margin, vehicle_index, implement_index, feasible_pairs,
-    )
-    telemetry.mark_phase("resource_allocation")
-
-    logger.info("Computing greedy warm-start scores")
-    scored = vectorized_score(
-        orders_raw, vehicles_raw, implements_raw, fields_raw,
-        feasible_pairs, vehicle_index, implement_index,
-    )
-    greedy_assignment = greedy_assign(scored, vehicle_index, implement_index)
-    telemetry.mark_phase("greedy_warm_start")
-
-    logger.info("Launching cluster solvers (%d clusters)", len(clusters))
-    all_dispatch, all_infeasible = pool_solve(
-        clusters, orders_raw, vehicles_raw, implements_raw, fields_raw, depots_raw,
-        greedy_assignment, vehicle_index, implement_index,
-    )
+    result = run_solver_chain(rows, matrix_out_dir=out_dir)
+    all_dispatch = result.dispatch
+    all_infeasible = result.infeasible
+    kpis = result.kpis
     telemetry.mark_phase("cluster_solving")
 
-    kpis = _compute_kpis(all_dispatch, all_infeasible, orders_raw, greedy_assignment)
     _check_cross_cluster_vehicle_overlap(all_dispatch)
 
     run_metadata = {
         "timestamp": ts,
         "data_dir": str(data_path),
-        "n_clusters": len(clusters),
-        "n_vehicles": len(vehicles_raw),
-        "n_implements": len(implements_raw),
-        "n_orders": len(orders_raw),
+        "n_clusters": result.n_clusters,
+        "n_vehicles": len(rows["vehicles"]),
+        "n_implements": len(rows["implements"]),
+        "n_orders": len(rows["orders"]),
     }
     run_telemetry = telemetry.snapshot()
 

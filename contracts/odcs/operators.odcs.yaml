@@ -1,0 +1,80 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: operators
+version: 1.0.0
+status: active
+name: Operators Master
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: Operator identity, shift availability, and certifications.
+  usage: Operator assignment and certification compatibility.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: operators.csv
+customProperties:
+  - property: xOptimization
+    value:
+      extensionVersion: 0.1.0
+      semanticModelRef: urn:xopt:model:agricultural-custom-services:0.1.0
+      dataProductRole: operatorMaster
+      assetRole: operator
+      avroSchemaRef: operators.avsc
+      mappingVersion: 1.0.0
+      permittedPlanningUses: [periodic-planning, rolling-dispatch]
+      defaultQualityPolicyRef: dq://operators/master/v1
+schema:
+  - name: operators
+    logicalType: object
+    physicalType: csv
+    properties:
+      - name: operator_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the operator.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:asset-id, binding: asset.assetId}
+      - name: name
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Operator display name.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:display-name, binding: asset.name}
+      - name: shift_start_s
+        logicalType: integer
+        physicalType: int
+        required: true
+        description: Shift start, seconds since midnight.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:availability:shift-start, binding: asset.availability.shiftStart, canonicalUnit: s, quantityKind: time, missingValuePolicy: accept-with-warning}
+      - name: shift_end_s
+        logicalType: integer
+        physicalType: int
+        required: true
+        description: Shift end, seconds since midnight.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:availability:shift-end, binding: asset.availability.shiftEnd, canonicalUnit: s, quantityKind: time, missingValuePolicy: accept-with-warning}
+      - name: certified_operations
+        logicalType: array
+        physicalType: string
+        required: true
+        description: Operation types the operator is certified for (stringified list).
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:capability:operator-certification, binding: asset.capabilities.certifiedOperations, quantityKind: categorical-set, planningUse: [compatibility-filter], missingValuePolicy: reject-for-planning}
+      - name: depot_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Home depot reference.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:relationship:home-depot, binding: asset.homeDepotRef}

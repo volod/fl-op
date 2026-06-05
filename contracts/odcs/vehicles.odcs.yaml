@@ -1,0 +1,115 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: vehicles
+version: 1.0.0
+status: active
+name: Vehicles Asset Master
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: Stable characteristics of mobile prime-mover assets.
+  usage: Bundle generation, compatibility filtering, repositioning cost.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: vehicles.csv
+customProperties:
+  - property: xOptimization
+    value:
+      extensionVersion: 0.1.0
+      semanticModelRef: urn:xopt:model:agricultural-custom-services:0.1.0
+      dataProductRole: assetMaster
+      assetRole: mobile-prime-mover
+      avroSchemaRef: vehicles.avsc
+      mappingVersion: 1.0.0
+      permittedPlanningUses:
+        - periodic-planning
+        - rolling-dispatch
+      migrationPolicyRef: migration://assets/master/v1
+      defaultQualityPolicyRef: dq://assets/master/v1
+schema:
+  - name: vehicles
+    logicalType: object
+    physicalType: csv
+    properties:
+      - name: vehicle_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the vehicle.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:asset-id, binding: asset.assetId}
+      - name: vehicle_type
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Source vehicle category.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:asset-type, binding: asset.assetType}
+      - name: rated_power_kw
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Nominal rated continuous engine power.
+        customProperties:
+          - property: xOptimization
+            value:
+              extensionVersion: 0.1.0
+              semanticTerm: urn:xopt:capability:rated-power
+              binding: asset.capabilities.ratedPower
+              canonicalUnit: kW
+              quantityKind: power
+              planningUse: [capacity, compatibility-filter]
+              qualityPolicyRef: dq://assets/rated-power/v1
+              missingValuePolicy: reject-for-planning
+      - name: fuel_tank_l
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Usable fuel tank volume.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:capability:fuel-tank-volume, binding: asset.capabilities.fuelTankVolume, canonicalUnit: L, quantityKind: volume, missingValuePolicy: accept-with-warning}
+      - name: fuel_consumption_l_per_h
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Average fuel consumption at working load.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:capability:fuel-consumption-rate, binding: asset.capabilities.fuelConsumptionRate, canonicalUnit: L/h, quantityKind: flow-rate, missingValuePolicy: accept-with-warning}
+      - name: current_lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Current latitude at planning horizon start.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:latitude, binding: asset.location.lat, canonicalUnit: deg, quantityKind: angle, missingValuePolicy: reject-for-planning}
+      - name: current_lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Current longitude at planning horizon start.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:longitude, binding: asset.location.lon, canonicalUnit: deg, quantityKind: angle, missingValuePolicy: reject-for-planning}
+      - name: depot_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Home depot reference.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:relationship:home-depot, binding: asset.homeDepotRef}
+      - name: travel_speed_kmh
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Average field travel speed.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:capability:travel-speed, binding: asset.capabilities.travelSpeed, canonicalUnit: km/h, quantityKind: speed, missingValuePolicy: fallback-to-conservative-value}

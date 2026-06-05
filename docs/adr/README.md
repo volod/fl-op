@@ -25,3 +25,8 @@ with a status of "superseded by ADR-NNN".
 | [ADR-013](ADR-013-typed-dict-pipeline-contracts.md) | TypedDict layer for pipeline contracts | Accepted |
 | [ADR-014](ADR-014-penalty-weighted-allocation.md) | Penalty-weighted cluster priority in pre-allocator | Accepted |
 | [ADR-015](ADR-015-sklearn-balltree.md) | sklearn.neighbors.BallTree instead of scipy | Accepted |
+| [ADR-016](ADR-016-canonical-model-layer.md) | Solver-neutral canonical model with a snapshot seam | Accepted |
+| [ADR-017](ADR-017-avro-odcs-contracts-fastavro.md) | Real Avro + ODCS contracts via fastavro, dual fingerprints | Accepted |
+| [ADR-018](ADR-018-snapshot-immutability-reproducibility.md) | Immutable, reproducibly-hashed planning snapshots | Accepted |
+| [ADR-019](ADR-019-python-native-rolling-ortools.md) | Python-native OR-Tools rolling adapter instead of Timefold | Accepted |
+| [ADR-020](ADR-020-snapshot-solver-payload-bridge.md) | Snapshot solver-payload bridge driven by contract bindings | Accepted |

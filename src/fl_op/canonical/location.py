@@ -1,0 +1,26 @@
+"""Canonical Location abstraction (spec 4.1 Location).
+
+Field parcels and depots are both mapped onto Location. Depot material balances
+are represented separately as InventoryPosition records on the snapshot.
+"""
+
+from typing import Any, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class Location(BaseModel):
+    """A point of interest: field-entry point, depot, or loading station."""
+
+    model_config = ConfigDict(frozen=True)
+
+    location_id: str
+    location_type: str  # field | depot | loading-station
+    lat: float
+    lon: float
+    name: str = ""
+    area_ha: Optional[float] = None
+    soil_type: str = ""
+    polygon: list[list[float]] = Field(default_factory=list)
+    source_ref: str = ""
+    extra: dict[str, Any] = Field(default_factory=dict)

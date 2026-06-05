@@ -1,0 +1,133 @@
+{
+  "type": "record",
+  "name": "Implement",
+  "namespace": "org.example.agri.assets",
+  "doc": "Attachable implement (related equipment). Source dataset: implements.csv.",
+  "x-optimization": {
+    "extensionVersion": "0.1.0",
+    "semanticEntity": "urn:xopt:entity:asset",
+    "dataProductRole": "assetMaster",
+    "assetRole": "implement",
+    "entityKeyField": "implement_id"
+  },
+  "fields": [
+    {
+      "name": "implement_id",
+      "type": "string",
+      "doc": "Stable identifier of the implement.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:identity:asset-id",
+        "binding": "asset.assetId",
+        "planningUse": ["identity"]
+      }
+    },
+    {
+      "name": "implement_type",
+      "type": "string",
+      "doc": "Source implement category (PLOW, SPRAYER, SEEDER, ...).",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:attribute:asset-type",
+        "binding": "asset.assetType",
+        "planningUse": ["classification"]
+      }
+    },
+    {
+      "name": "compatible_operations",
+      "type": "string",
+      "doc": "Categorical capability: operation types this implement can perform. Stored as a stringified list in source CSV.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:capability:compatible-operations",
+        "binding": "asset.capabilities.compatibleOperations",
+        "quantityKind": "categorical-set",
+        "planningUse": ["compatibility-filter"],
+        "missingValuePolicy": "reject-for-planning"
+      }
+    },
+    {
+      "name": "required_power_kw",
+      "type": "double",
+      "doc": "Continuous power draw demanded from the prime mover.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:capability:required-power",
+        "binding": "asset.capabilities.requiredPower",
+        "canonicalUnit": "kW",
+        "quantityKind": "power",
+        "planningUse": ["compatibility-filter"],
+        "qualityPolicyRef": "dq://implements/required-power/v1",
+        "missingValuePolicy": "reject-for-planning"
+      }
+    },
+    {
+      "name": "working_width_m",
+      "type": "double",
+      "doc": "Working width used for area-rate estimation.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:capability:working-width",
+        "binding": "asset.capabilities.workingWidth",
+        "canonicalUnit": "m",
+        "quantityKind": "length",
+        "planningUse": ["duration-estimation"],
+        "missingValuePolicy": "reject-for-planning"
+      }
+    },
+    {
+      "name": "min_speed_kmh",
+      "type": "double",
+      "doc": "Minimum operating speed.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:capability:min-operating-speed",
+        "binding": "asset.capabilities.minOperatingSpeed",
+        "canonicalUnit": "km/h",
+        "quantityKind": "speed",
+        "planningUse": ["duration-estimation"],
+        "missingValuePolicy": "accept-with-warning"
+      }
+    },
+    {
+      "name": "max_speed_kmh",
+      "type": "double",
+      "doc": "Maximum operating speed.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:capability:max-operating-speed",
+        "binding": "asset.capabilities.maxOperatingSpeed",
+        "canonicalUnit": "km/h",
+        "quantityKind": "speed",
+        "planningUse": ["duration-estimation"],
+        "missingValuePolicy": "accept-with-warning"
+      }
+    },
+    {
+      "name": "fertilizer_capacity_kg",
+      "type": "double",
+      "default": 0.0,
+      "doc": "Onboard fertilizer capacity; 0 for non-fertilizer implements.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:capability:fertilizer-capacity",
+        "binding": "asset.capabilities.fertilizerCapacity",
+        "canonicalUnit": "kg",
+        "quantityKind": "mass",
+        "planningUse": ["capacity"],
+        "missingValuePolicy": "fallback-to-conservative-value"
+      }
+    },
+    {
+      "name": "depot_id",
+      "type": "string",
+      "doc": "Home depot reference.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:relationship:home-depot",
+        "binding": "asset.homeDepotRef",
+        "planningUse": ["assignment"]
+      }
+    }
+  ]
+}

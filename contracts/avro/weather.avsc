@@ -1,0 +1,119 @@
+{
+  "type": "record",
+  "name": "WeatherWindow",
+  "namespace": "org.example.agri.weather",
+  "doc": "Weather forecast window mapped to a canonical Forecast. Source dataset: weather.json.",
+  "x-optimization": {
+    "extensionVersion": "0.1.0",
+    "semanticEntity": "urn:xopt:entity:forecast",
+    "dataProductRole": "weatherForecasts",
+    "entityKeyField": "window_id",
+    "validFromField": "valid_from",
+    "validToField": "valid_to"
+  },
+  "fields": [
+    {
+      "name": "window_id",
+      "type": "string",
+      "doc": "Stable identifier of the forecast window.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:identity:forecast-id",
+        "binding": "forecast.forecastId",
+        "planningUse": ["identity"]
+      }
+    },
+    {
+      "name": "valid_from",
+      "type": "string",
+      "doc": "ISO-8601 start of the forecast interval.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:time:forecast-from",
+        "binding": "forecast.forecastFor.from",
+        "quantityKind": "timestamp",
+        "planningUse": ["weather-window"]
+      }
+    },
+    {
+      "name": "valid_to",
+      "type": "string",
+      "doc": "ISO-8601 end of the forecast interval.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:time:forecast-to",
+        "binding": "forecast.forecastFor.to",
+        "quantityKind": "timestamp",
+        "planningUse": ["weather-window"]
+      }
+    },
+    {
+      "name": "wind_ms",
+      "type": "double",
+      "doc": "Sustained wind speed.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:forecast:wind-speed",
+        "binding": "forecast.value.windSpeed",
+        "canonicalUnit": "m/s",
+        "quantityKind": "speed",
+        "planningUse": ["weather-window"],
+        "missingValuePolicy": "fallback-to-conservative-value"
+      }
+    },
+    {
+      "name": "rain_mm_per_h",
+      "type": "double",
+      "doc": "Hourly rainfall.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:forecast:precipitation-rate",
+        "binding": "forecast.value.precipitationRate",
+        "canonicalUnit": "mm/h",
+        "quantityKind": "flow-rate",
+        "planningUse": ["weather-window"],
+        "missingValuePolicy": "fallback-to-conservative-value"
+      }
+    },
+    {
+      "name": "soil_moisture_pct",
+      "type": "double",
+      "doc": "Volumetric soil moisture.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:forecast:soil-moisture",
+        "binding": "forecast.value.soilMoisture",
+        "canonicalUnit": "%",
+        "quantityKind": "ratio",
+        "planningUse": ["weather-window"],
+        "missingValuePolicy": "fallback-to-conservative-value"
+      }
+    },
+    {
+      "name": "lat",
+      "type": "double",
+      "doc": "Forecast location latitude (WGS-84).",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:attribute:latitude",
+        "binding": "forecast.location.lat",
+        "canonicalUnit": "deg",
+        "quantityKind": "angle",
+        "planningUse": ["geospatial"]
+      }
+    },
+    {
+      "name": "lon",
+      "type": "double",
+      "doc": "Forecast location longitude (WGS-84).",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:attribute:longitude",
+        "binding": "forecast.location.lon",
+        "canonicalUnit": "deg",
+        "quantityKind": "angle",
+        "planningUse": ["geospatial"]
+      }
+    }
+  ]
+}

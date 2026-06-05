@@ -1,0 +1,96 @@
+apiVersion: x-optimization/v0.1.0
+kind: OptimizationProfile
+
+metadata:
+  id: agricultural-custom-services
+  version: 0.1.0
+  extensionVersion: 0.1.0
+  semanticModelRef: urn:xopt:model:agricultural-custom-services:0.1.0
+
+# Input contracts consumed to build a planning snapshot. Each entry references a
+# contract id registered in contracts/registry.yaml.
+inputContracts:
+  - vehicles
+  - implements
+  - operators
+  - depots
+  - fields
+  - orders
+  - weather
+
+planningModes:
+  - id: periodic
+    adapter: ortools-periodic
+  - id: rolling
+    adapter: ortools-rolling
+
+bundleGeneration:
+  roles:
+    primaryAsset:
+      - mobile-prime-mover
+      - self-propelled-application-asset
+    relatedEquipment:
+      - implement
+      - trailer
+      - material-carrier
+    operator:
+      - equipment-operator
+
+# Hard / medium / soft constraints. Constraints the slice enforces are marked
+# enforced: true; the remainder are declared and validated for adapter support
+# coverage but not yet wired into the solver.
+constraints:
+  - id: compatible-equipment
+    severity: hard
+    enforced: true
+  - id: sufficient-power
+    severity: hard
+    enforced: true
+  - id: operator-qualified
+    severity: hard
+    enforced: false
+  - id: asset-available
+    severity: hard
+    enforced: true
+  - id: no-double-booking
+    severity: hard
+    enforced: true
+  - id: required-material-available
+    severity: medium
+    enforced: false
+  - id: respect-contract-time-window
+    severity: hard
+    enforced: true
+  - id: respect-weather-window
+    severity: hard
+    enforced: false
+  - id: respect-field-restrictions
+    severity: medium
+    enforced: false
+  - id: respect-manual-overrides
+    severity: hard
+    enforced: false
+  - id: protect-frozen-tasks
+    severity: hard
+    enforced: true
+
+objectives:
+  mode: lexicographic
+  priorities:
+    - maximize-mandatory-contract-fulfillment
+    - minimize-contractual-penalties
+    - maximize-expected-contribution-margin
+    - minimize-plan-instability
+    - minimize-repositioning-time
+    - minimize-empty-distance
+    - minimize-idle-time
+    - balance-utilization
+
+planningDefaults:
+  periodicHorizonDays: 7
+  rollingHorizonHours: 48
+  freezeWindowMinutes: 60
+  maxAssignmentRoutingIterations: 3
+
+outputContracts:
+  - dispatch-plans

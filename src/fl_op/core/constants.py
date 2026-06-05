@@ -91,3 +91,84 @@ SCORE_WEIGHT_REPOSITION: float = float(os.environ.get("SCORE_WEIGHT_REPOSITION",
 
 # Bumped when the structure of any output JSON file changes in a breaking way.
 ARTIFACT_SCHEMA_VERSION: str = "1.0"
+
+# ---------------------------------------------------------------------------
+# x-optimization extension namespace
+# ---------------------------------------------------------------------------
+
+# Canonical extension namespace key embedded in Avro/ODCS metadata (spec 8.1).
+XOPT_NAMESPACE: str = "x-optimization"
+
+# ODCS custom-property name (camelCase per ODCS convention, spec 8.3).
+XOPT_ODCS_PROPERTY: str = "xOptimization"
+
+# Version of the optimization extension itself, independent of Avro/ODCS/
+# mapping/profile/adapter versions (spec 8.4).
+XOPT_EXTENSION_VERSION: str = "0.1.0"
+
+# apiVersion stamped on OptimizationProfile documents (spec 15.4).
+XOPT_API_VERSION: str = "x-optimization/v0.1.0"
+
+# Semantic-model URN for the agricultural custom-services domain.
+URN_MODEL: str = "urn:xopt:model:agricultural-custom-services:0.1.0"
+
+# URN prefixes used by semantic terms and bindings.
+URN_CAPABILITY_PREFIX: str = "urn:xopt:capability:"
+URN_RELATIONSHIP_PREFIX: str = "urn:xopt:relationship:"
+URN_ENTITY_PREFIX: str = "urn:xopt:entity:"
+
+# ---------------------------------------------------------------------------
+# Planning horizons and rolling-dispatch windows (spec 19.3, 20.1, 31)
+# ---------------------------------------------------------------------------
+
+# Periodic (batch) planning horizon length.
+PERIODIC_HORIZON_DAYS: int = int(os.environ.get("PERIODIC_HORIZON_DAYS", "7"))
+
+# Rolling (stream) dispatch horizon length.
+ROLLING_HORIZON_HOURS: int = int(os.environ.get("ROLLING_HORIZON_HOURS", "48"))
+
+# Tasks whose planned start falls within this window are frozen (not replanned).
+FREEZE_WINDOW_MINUTES: int = int(os.environ.get("FREEZE_WINDOW_MINUTES", "60"))
+
+# Maximum CP-SAT/routing feedback iterations before stopping (spec 20.6).
+MAX_ASSIGNMENT_ROUTING_ITERATIONS: int = int(
+    os.environ.get("MAX_ASSIGNMENT_ROUTING_ITERATIONS", "3")
+)
+
+# Score penalty applied per assignment changed after the freeze window (spec 19.9).
+DEFAULT_CHANGE_PENALTY: int = int(os.environ.get("DEFAULT_CHANGE_PENALTY", "1000"))
+
+# ---------------------------------------------------------------------------
+# Integer scaling units for solver quantities (spec 20.3)
+# ---------------------------------------------------------------------------
+
+# Versioned so a change to any scale factor forces a profile/adapter bump.
+INTEGER_SCALING_POLICY_VERSION: str = "1.0.0"
+
+SCALE_TIME_UNITS_PER_MINUTE: int = 1          # internal time unit = minutes
+SCALE_DISTANCE_UNITS_PER_METER: int = 1       # internal distance unit = meters
+SCALE_POWER_UNITS_PER_KW: int = 10            # deciwatts of kW (0.1 kW resolution)
+SCALE_FUEL_UNITS_PER_LITER: int = 1000        # milliliters
+SCALE_MASS_UNITS_PER_KG: int = 1000           # grams
+SCALE_MONEY_UNITS_PER_EUR: int = 100          # euro cents (smallest currency unit)
+SCALE_PROBABILITY_BASIS_POINTS: int = 10000   # 1.0 == 10000 basis points
+
+# ---------------------------------------------------------------------------
+# Solver-adapter identity
+# ---------------------------------------------------------------------------
+
+ADAPTER_ORTOOLS_PERIODIC_ID: str = "ortools-periodic"
+ADAPTER_ORTOOLS_ROLLING_ID: str = "ortools-rolling"
+ADAPTER_VERSION: str = "0.1.0"
+
+# Snapshot/adapter compatibility version recorded on every snapshot and plan.
+ADAPTER_COMPATIBILITY_VERSION: str = "0.1.0"
+
+# Maximum number of compatible (prime-mover, implement) operational bundles
+# materialized into a snapshot for inspection/explanation. The solver chain does
+# its own compatibility filtering, so this only bounds the snapshot artifact size.
+BUNDLE_GENERATION_CAP: int = int(os.environ.get("BUNDLE_GENERATION_CAP", "2000"))
+
+# Version dimensions stamped onto snapshots and plans for governance/lineage.
+MAPPING_VERSION: str = "1.0.0"
+OPTIMIZATION_PROFILE_VERSION: str = "0.1.0"

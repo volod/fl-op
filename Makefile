@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: venv setenv quickstart analyse data clean
+.PHONY: venv setenv quickstart analyse data demo contracts clean
 
 PYTHON := .venv/bin/python
 FL_OP := .venv/bin/fl-op
@@ -37,6 +37,17 @@ quickstart: venv
 
 analyse: venv
 	$(FL_OP) analyse --schedule latest
+
+# Validate the declarative data-contract suite (Avro + ODCS + dual fingerprints).
+contracts: venv
+	$(FL_OP) contracts validate
+
+# Full declarative demo: contracts -> snapshot -> periodic (batch) -> rolling (stream).
+demo: venv
+	@echo "Generating demo dataset ($(QUICKSTART_SEED_ARG))..."
+	$(FL_OP) generate-data --vehicles $(VEHICLES) --implements $(IMPLEMENTS) --orders $(ORDERS) --depots $(DEPOTS) $(QUICKSTART_SEED_ARG)
+	$(FL_OP) demo --data latest
+	@echo "Demo complete. See $(DATA_DIR)/plan-periodic/ and $(DATA_DIR)/plan-rolling/ for results."
 
 # Full benchmark (manual only, not a CI target):
 #   make data

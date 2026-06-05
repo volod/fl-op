@@ -186,6 +186,82 @@ def query_contract(data: str, schedule: str, order: str) -> None:
     run_query(data_dir=str(data_dir), schedule_dir=str(schedule_dir), order_path=order)
 
 
+@cli.group("contracts")
+def contracts_group() -> None:
+    """Declarative data-contract operations (Avro + ODCS + x-optimization)."""
+
+
+@contracts_group.command("validate")
+@click.option("--write", is_flag=True, default=False, help="Persist recomputed fingerprints to the registry.")
+def contracts_validate(write: bool) -> None:
+    """Validate all contracts: round-trip, dual fingerprints, ODCS/Avro agreement."""
+    from fl_op.planning.runner import run_contracts_validate
+
+    ok = run_contracts_validate(persist=write)
+    if not ok:
+        raise SystemExit(1)
+
+
+@cli.group("snapshot")
+def snapshot_group() -> None:
+    """Immutable planning-snapshot operations."""
+
+
+@snapshot_group.command("build")
+@_data_option
+@click.option("--mode", type=click.Choice(["periodic", "rolling"]), default="periodic", show_default=True)
+@click.option("--effective-at", default=None, help="ISO-8601 effective timestamp (default: now).")
+def snapshot_build(data: str, mode: str, effective_at: str | None) -> None:
+    """Map source data into canonical objects and build a reproducible snapshot."""
+    from fl_op.planning.runner import run_snapshot_build
+
+    data_dir = resolve_latest(data, "generate-data")
+    run_snapshot_build(str(data_dir), mode=mode, effective_at=effective_at)
+
+
+@cli.group("plan")
+def plan_group() -> None:
+    """Run optimization adapters and publish canonical plans."""
+
+
+@plan_group.command("periodic")
+@_data_option
+def plan_periodic(data: str) -> None:
+    """Periodic (batch) OR-Tools plan from an immutable snapshot."""
+    from fl_op.planning.runner import run_plan_periodic
+
+    data_dir = resolve_latest(data, "generate-data")
+    run_plan_periodic(str(data_dir))
+
+
+@plan_group.command("rolling")
+@_data_option
+@click.option(
+    "--events",
+    required=False,
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    help="Path to events.jsonl driving rolling replanning.",
+)
+@click.option("--effective-at", default=None, help="ISO-8601 effective timestamp (default: now).")
+def plan_rolling(data: str, events: str | None, effective_at: str | None) -> None:
+    """Rolling (stream) OR-Tools dispatch producing immutable plan revisions."""
+    from fl_op.planning.runner import run_plan_rolling
+
+    data_dir = resolve_latest(data, "generate-data")
+    run_plan_rolling(str(data_dir), events_path=events, effective_at=effective_at)
+
+
+@cli.command("demo")
+@_data_option
+def demo(data: str) -> None:
+    """Run the full contract -> snapshot -> batch + stream demonstration."""
+    from fl_op.planning.runner import run_demo
+
+    data_dir = resolve_latest(data, "generate-data")
+    run_demo(str(data_dir))
+
+
 def _run_cli(command: click.Command, args: list[str] | None = None) -> None:
     """Run a Click command with consistent interrupt handling."""
     try:

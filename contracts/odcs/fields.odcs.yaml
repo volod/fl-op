@@ -1,0 +1,87 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: fields
+version: 1.0.0
+status: active
+name: Field Parcels
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: Field polygons and field-entry points mapped to canonical Locations.
+  usage: Geospatial clustering, field-entry coordinates, field restrictions.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: fields.csv
+customProperties:
+  - property: xOptimization
+    value:
+      extensionVersion: 0.1.0
+      semanticModelRef: urn:xopt:model:agricultural-custom-services:0.1.0
+      dataProductRole: fieldParcels
+      avroSchemaRef: fields.avsc
+      mappingVersion: 1.0.0
+      permittedPlanningUses: [periodic-planning, rolling-dispatch]
+      defaultQualityPolicyRef: dq://fields/master/v1
+schema:
+  - name: fields
+    logicalType: object
+    physicalType: csv
+    properties:
+      - name: field_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the field parcel.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:location-id, binding: location.locationId}
+      - name: name
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Human-readable field name.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:display-name, binding: location.name}
+      - name: area_ha
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Field area.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:area, binding: location.areaHa, canonicalUnit: ha, quantityKind: area}
+      - name: polygon
+        logicalType: array
+        physicalType: string
+        required: false
+        description: Field polygon vertices (stringified list of [lat, lon]).
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:polygon, binding: location.polygon, quantityKind: geometry, missingValuePolicy: accept-with-warning}
+      - name: centroid_lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Field-entry latitude proxy (centroid).
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:latitude, binding: location.lat, canonicalUnit: deg, quantityKind: angle, missingValuePolicy: reject-for-planning}
+      - name: centroid_lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Field-entry longitude proxy (centroid).
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:longitude, binding: location.lon, canonicalUnit: deg, quantityKind: angle, missingValuePolicy: reject-for-planning}
+      - name: soil_type
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Soil classification.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:soil-type, binding: location.soilType}

@@ -1,0 +1,90 @@
+{
+  "type": "record",
+  "name": "Operator",
+  "namespace": "org.example.agri.operators",
+  "doc": "Equipment operator mapped to a canonical operator Asset. Source dataset: operators.csv.",
+  "x-optimization": {
+    "extensionVersion": "0.1.0",
+    "semanticEntity": "urn:xopt:entity:asset",
+    "dataProductRole": "operatorMaster",
+    "assetRole": "operator",
+    "entityKeyField": "operator_id"
+  },
+  "fields": [
+    {
+      "name": "operator_id",
+      "type": "string",
+      "doc": "Stable identifier of the operator.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:identity:asset-id",
+        "binding": "asset.assetId",
+        "planningUse": ["identity"]
+      }
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "default": "",
+      "doc": "Operator display name.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:attribute:display-name",
+        "binding": "asset.name",
+        "planningUse": ["display"]
+      }
+    },
+    {
+      "name": "shift_start_s",
+      "type": "int",
+      "doc": "Shift start, seconds since midnight.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:availability:shift-start",
+        "binding": "asset.availability.shiftStart",
+        "canonicalUnit": "s",
+        "quantityKind": "time",
+        "planningUse": ["availability"],
+        "missingValuePolicy": "accept-with-warning"
+      }
+    },
+    {
+      "name": "shift_end_s",
+      "type": "int",
+      "doc": "Shift end, seconds since midnight (may exceed 86400 for night shifts).",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:availability:shift-end",
+        "binding": "asset.availability.shiftEnd",
+        "canonicalUnit": "s",
+        "quantityKind": "time",
+        "planningUse": ["availability"],
+        "missingValuePolicy": "accept-with-warning"
+      }
+    },
+    {
+      "name": "certified_operations",
+      "type": "string",
+      "doc": "Categorical capability: operation types the operator is certified for. Stringified list in source CSV.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:capability:operator-certification",
+        "binding": "asset.capabilities.certifiedOperations",
+        "quantityKind": "categorical-set",
+        "planningUse": ["compatibility-filter"],
+        "missingValuePolicy": "reject-for-planning"
+      }
+    },
+    {
+      "name": "depot_id",
+      "type": "string",
+      "doc": "Home depot reference.",
+      "x-optimization": {
+        "extensionVersion": "0.1.0",
+        "semanticTerm": "urn:xopt:relationship:home-depot",
+        "binding": "asset.homeDepotRef",
+        "planningUse": ["assignment"]
+      }
+    }
+  ]
+}

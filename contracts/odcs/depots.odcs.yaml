@@ -1,0 +1,79 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: depots
+version: 1.0.0
+status: active
+name: Depots and Loading Stations
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: Depot locations and material inventory positions.
+  usage: Repositioning anchors, fuel and fertilizer availability.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: depots.csv
+customProperties:
+  - property: xOptimization
+    value:
+      extensionVersion: 0.1.0
+      semanticModelRef: urn:xopt:model:agricultural-custom-services:0.1.0
+      dataProductRole: depots
+      avroSchemaRef: depots.avsc
+      mappingVersion: 1.0.0
+      permittedPlanningUses: [periodic-planning, rolling-dispatch]
+      defaultQualityPolicyRef: dq://depots/master/v1
+schema:
+  - name: depots
+    logicalType: object
+    physicalType: csv
+    properties:
+      - name: depot_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the depot.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:location-id, binding: location.locationId}
+      - name: name
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Human-readable depot name.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:display-name, binding: location.name}
+      - name: lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Depot latitude.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:latitude, binding: location.lat, canonicalUnit: deg, quantityKind: angle, missingValuePolicy: reject-for-planning}
+      - name: lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Depot longitude.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:longitude, binding: location.lon, canonicalUnit: deg, quantityKind: angle, missingValuePolicy: reject-for-planning}
+      - name: fuel_available_l
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Available diesel inventory.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:inventory:fuel, binding: location.inventory.fuel, canonicalUnit: L, quantityKind: volume, planningUse: [material-availability], missingValuePolicy: fallback-to-conservative-value}
+      - name: fertilizer_available_kg
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Available fertilizer inventory.
+        customProperties:
+          - property: xOptimization
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:inventory:fertilizer, binding: location.inventory.fertilizer, canonicalUnit: kg, quantityKind: mass, planningUse: [material-availability], missingValuePolicy: fallback-to-conservative-value}

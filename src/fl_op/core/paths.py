@@ -7,6 +7,10 @@ import click
 
 DATA_ROOT = pathlib.Path(os.environ.get("DATA_DIR", ".data"))
 
+# Root of the declarative contract layer (Avro schemas, ODCS contracts,
+# optimization profiles, and the file-based registry index).
+CONTRACTS_ROOT = pathlib.Path(os.environ.get("CONTRACTS_DIR", "contracts"))
+
 
 def resolve_latest(
     path_or_latest: str,
