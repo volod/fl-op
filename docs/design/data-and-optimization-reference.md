@@ -1,0 +1,836 @@
+# Data Definition and Optimization Definition Reference
+
+Domain: `agricultural-custom-services` | Tenant: `fleet-ops`
+Semantic model: `urn:xopt:model:agricultural-custom-services:0.1.0`
+Extension version: `0.1.0`
+
+---
+
+## 1. Overview
+
+This document describes every source-data contract, canonical entity, and
+optimization declaration used by the fleet-ops planning system.  It is derived
+directly from the contract files under `contracts/` and the canonical model
+under `src/fl_op/canonical/`.
+
+The system uses two contract layers:
+
+- **Avro schemas** (`contracts/avro/*.avsc`) - physical record shape and
+  field-level `x-optimization` metadata (binding, unit, planning use, missing-
+  value policy).
+- **ODCS contracts** (`contracts/odcs/*.odcs.yaml`) - governance envelope
+  (version, quality-policy refs, permitted planning uses) wrapping the same
+  fields via `xOptimization` custom properties.
+
+Both layers are registered in `contracts/registry.yaml` and loaded by
+`src/fl_op/contracts/`.
+
+---
+
+## 2. Contract Registry
+
+| Contract ID        | Source File         | Format  | Canonical Entity   | Asset Role           |
+|--------------------|---------------------|---------|--------------------|----------------------|
+| `vehicles`         | `vehicles.csv`      | csv     | `asset`            | `mobile-prime-mover` |
+| `implements`       | `implements.csv`    | csv     | `asset`            | `implement`          |
+| `operators`        | `operators.csv`     | csv     | `asset`            | `operator`           |
+| `depots`           | `depots.csv`        | csv     | `location`         | `depot`              |
+| `fields`           | `fields.csv`        | csv     | `location`         | -                    |
+| `orders`           | `orders.csv`        | csv     | `task`             | -                    |
+| `weather`          | `weather.json`      | json    | `forecast`         | -                    |
+| `execution-events` | `events.jsonl`      | jsonl   | `execution-event`  | -                    |
+
+All contracts except `execution-events` have a paired ODCS contract and are
+consumed by the `agricultural-custom-services` optimization profile.
+
+---
+
+## 3. Source Data Contracts
+
+### 3.1 Vehicles (`vehicles.csv`)
+
+Avro record: `Vehicle` (`org.example.agri.assets`)
+Semantic entity: `urn:xopt:entity:asset`
+Data product role: `assetMaster`
+Quality policy: `dq://assets/master/v1`
+Migration policy: `migration://assets/master/v1`
+Permitted uses: `periodic-planning`, `rolling-dispatch`
+
+| Field                    | Avro Type | Required | Canonical Binding                        | Unit  | Qty Kind  | Planning Use                       | Missing-Value Policy              |
+|--------------------------|-----------|----------|------------------------------------------|-------|-----------|------------------------------------|-----------------------------------|
+| `vehicle_id`             | string    | yes      | `asset.assetId`                          | -     | -         | identity                           | -                                 |
+| `vehicle_type`           | string    | yes      | `asset.assetType`                        | -     | -         | classification                     | -                                 |
+| `rated_power_kw`         | double    | yes      | `asset.capabilities.ratedPower`          | kW    | power     | capacity, compatibility-filter     | reject-for-planning               |
+| `fuel_tank_l`            | double    | yes      | `asset.capabilities.fuelTankVolume`      | L     | volume    | capacity                           | accept-with-warning               |
+| `fuel_consumption_l_per_h` | double  | yes      | `asset.capabilities.fuelConsumptionRate` | L/h   | flow-rate | cost                               | accept-with-warning               |
+| `current_lat`            | double    | yes      | `asset.location.lat`                     | deg   | angle     | geospatial                         | reject-for-planning               |
+| `current_lon`            | double    | yes      | `asset.location.lon`                     | deg   | angle     | geospatial                         | reject-for-planning               |
+| `depot_id`               | string    | yes      | `asset.homeDepotRef`                     | -     | -         | assignment                         | -                                 |
+| `travel_speed_kmh`       | double    | no       | `asset.capabilities.travelSpeed`         | km/h  | speed     | routing                            | fallback-to-conservative-value    |
+
+Semantic terms: `urn:xopt:identity:asset-id`, `urn:xopt:attribute:asset-type`,
+`urn:xopt:capability:rated-power`, `urn:xopt:capability:fuel-tank-volume`,
+`urn:xopt:capability:fuel-consumption-rate`, `urn:xopt:attribute:latitude`,
+`urn:xopt:attribute:longitude`, `urn:xopt:relationship:home-depot`,
+`urn:xopt:capability:travel-speed`
+
+Quality policy override on `rated_power_kw`: `dq://assets/rated-power/v1`
+
+
+### 3.2 Implements (`implements.csv`)
+
+Avro record: `Implement` (`org.example.agri.assets`)
+Semantic entity: `urn:xopt:entity:asset`
+Data product role: `assetMaster`
+Quality policy: `dq://implements/master/v1`
+Permitted uses: `periodic-planning`, `rolling-dispatch`
+
+| Field                    | Avro Type | Required | Canonical Binding                             | Unit  | Qty Kind       | Planning Use           | Missing-Value Policy           |
+|--------------------------|-----------|----------|-----------------------------------------------|-------|----------------|------------------------|--------------------------------|
+| `implement_id`           | string    | yes      | `asset.assetId`                               | -     | -              | identity               | -                              |
+| `implement_type`         | string    | yes      | `asset.assetType`                             | -     | -              | classification         | -                              |
+| `compatible_operations`  | string    | yes      | `asset.capabilities.compatibleOperations`     | -     | categorical-set| compatibility-filter   | reject-for-planning            |
+| `required_power_kw`      | double    | yes      | `asset.capabilities.requiredPower`            | kW    | power          | compatibility-filter   | reject-for-planning            |
+| `working_width_m`        | double    | yes      | `asset.capabilities.workingWidth`             | m     | length         | duration-estimation    | reject-for-planning            |
+| `min_speed_kmh`          | double    | yes      | `asset.capabilities.minOperatingSpeed`        | km/h  | speed          | duration-estimation    | accept-with-warning            |
+| `max_speed_kmh`          | double    | yes      | `asset.capabilities.maxOperatingSpeed`        | km/h  | speed          | duration-estimation    | accept-with-warning            |
+| `fertilizer_capacity_kg` | double    | no       | `asset.capabilities.fertilizerCapacity`       | kg    | mass           | capacity               | fallback-to-conservative-value |
+| `depot_id`               | string    | yes      | `asset.homeDepotRef`                          | -     | -              | assignment             | -                              |
+
+Semantic terms: `urn:xopt:identity:asset-id`, `urn:xopt:attribute:asset-type`,
+`urn:xopt:capability:compatible-operations`, `urn:xopt:capability:required-power`,
+`urn:xopt:capability:working-width`, `urn:xopt:capability:min-operating-speed`,
+`urn:xopt:capability:max-operating-speed`, `urn:xopt:capability:fertilizer-capacity`,
+`urn:xopt:relationship:home-depot`
+
+Quality policy override on `required_power_kw`: `dq://implements/required-power/v1`
+
+
+### 3.3 Operators (`operators.csv`)
+
+Avro record: `Operator` (`org.example.agri.operators`)
+Semantic entity: `urn:xopt:entity:asset`
+Data product role: `operatorMaster`
+Quality policy: `dq://operators/master/v1`
+Permitted uses: `periodic-planning`, `rolling-dispatch`
+
+| Field                   | Avro Type | Required | Canonical Binding                          | Unit | Qty Kind       | Planning Use         | Missing-Value Policy        |
+|-------------------------|-----------|----------|--------------------------------------------|------|----------------|----------------------|-----------------------------|
+| `operator_id`           | string    | yes      | `asset.assetId`                            | -    | -              | identity             | -                           |
+| `name`                  | string    | no       | `asset.name`                               | -    | -              | display              | -                           |
+| `shift_start_s`         | int       | yes      | `asset.availability.shiftStart`            | s    | time           | availability         | accept-with-warning         |
+| `shift_end_s`           | int       | yes      | `asset.availability.shiftEnd`              | s    | time           | availability         | accept-with-warning         |
+| `certified_operations`  | string    | yes      | `asset.capabilities.certifiedOperations`   | -    | categorical-set| compatibility-filter | reject-for-planning         |
+| `depot_id`              | string    | yes      | `asset.homeDepotRef`                       | -    | -              | assignment           | -                           |
+
+Note: `shift_end_s` may exceed 86400 for night shifts.
+Semantic terms: `urn:xopt:identity:asset-id`, `urn:xopt:attribute:display-name`,
+`urn:xopt:availability:shift-start`, `urn:xopt:availability:shift-end`,
+`urn:xopt:capability:operator-certification`, `urn:xopt:relationship:home-depot`
+
+
+### 3.4 Depots (`depots.csv`)
+
+Avro record: `Depot` (`org.example.agri.depots`)
+Semantic entity: `urn:xopt:entity:location`
+Data product role: `depots`
+Quality policy: `dq://depots/master/v1`
+Permitted uses: `periodic-planning`, `rolling-dispatch`
+
+| Field                     | Avro Type | Required | Canonical Binding              | Unit | Qty Kind | Planning Use          | Missing-Value Policy           |
+|---------------------------|-----------|----------|--------------------------------|------|----------|-----------------------|--------------------------------|
+| `depot_id`                | string    | yes      | `location.locationId`          | -    | -        | identity              | -                              |
+| `name`                    | string    | no       | `location.name`                | -    | -        | display               | -                              |
+| `lat`                     | double    | yes      | `location.lat`                 | deg  | angle    | geospatial            | reject-for-planning            |
+| `lon`                     | double    | yes      | `location.lon`                 | deg  | angle    | geospatial            | reject-for-planning            |
+| `fuel_available_l`        | double    | yes      | `location.inventory.fuel`      | L    | volume   | material-availability | fallback-to-conservative-value |
+| `fertilizer_available_kg` | double    | yes      | `location.inventory.fertilizer`| kg   | mass     | material-availability | fallback-to-conservative-value |
+
+Semantic terms: `urn:xopt:identity:location-id`, `urn:xopt:attribute:display-name`,
+`urn:xopt:attribute:latitude`, `urn:xopt:attribute:longitude`,
+`urn:xopt:inventory:fuel`, `urn:xopt:inventory:fertilizer`
+
+
+### 3.5 Fields (`fields.csv`)
+
+Avro record: `FieldParcel` (`org.example.agri.fields`)
+Semantic entity: `urn:xopt:entity:location`
+Data product role: `fieldParcels`
+Quality policy: `dq://fields/master/v1`
+Permitted uses: `periodic-planning`, `rolling-dispatch`
+
+| Field          | Avro Type | Required | Canonical Binding       | Unit | Qty Kind | Planning Use        | Missing-Value Policy        |
+|----------------|-----------|----------|-------------------------|------|----------|---------------------|-----------------------------|
+| `field_id`     | string    | yes      | `location.locationId`   | -    | -        | identity            | -                           |
+| `name`         | string    | no       | `location.name`         | -    | -        | display             | -                           |
+| `area_ha`      | double    | yes      | `location.areaHa`       | ha   | area     | duration-estimation | -                           |
+| `polygon`      | string    | no       | `location.polygon`      | -    | geometry | geospatial          | accept-with-warning         |
+| `centroid_lat` | double    | yes      | `location.lat`          | deg  | angle    | geospatial          | reject-for-planning         |
+| `centroid_lon` | double    | yes      | `location.lon`          | deg  | angle    | geospatial          | reject-for-planning         |
+| `soil_type`    | string    | no       | `location.soilType`     | -    | -        | field-restriction   | -                           |
+
+Note: `centroid_lat`/`centroid_lon` are field-entry proxies (centroid, WGS-84).
+`polygon` is stored as a stringified list of `[lat, lon]` pairs.
+Semantic terms: `urn:xopt:identity:location-id`, `urn:xopt:attribute:display-name`,
+`urn:xopt:attribute:area`, `urn:xopt:attribute:polygon`, `urn:xopt:attribute:latitude`,
+`urn:xopt:attribute:longitude`, `urn:xopt:attribute:soil-type`
+
+
+### 3.6 Orders (`orders.csv`)
+
+Avro record: `ServiceOrder` (`org.example.agri.orders`)
+Semantic entity: `urn:xopt:entity:task`
+Data product role: `serviceOrders`
+Quality policy: `dq://orders/master/v1`
+Permitted uses: `periodic-planning`, `rolling-dispatch`
+
+| Field                   | Avro Type | Required | Canonical Binding      | Unit | Qty Kind  | Planning Use                 | Missing-Value Policy           |
+|-------------------------|-----------|----------|------------------------|------|-----------|------------------------------|--------------------------------|
+| `order_id`              | string    | yes      | `task.taskId`          | -    | -         | identity                     | -                              |
+| `contract_id`           | string    | yes      | `task.orderId`         | -    | -         | commitment                   | -                              |
+| `field_id`              | string    | yes      | `task.locationRef`     | -    | -         | geospatial                   | reject-for-planning            |
+| `operation_type`        | string    | yes      | `task.operationType`   | -    | -         | compatibility-filter         | reject-for-planning            |
+| `area_ha`               | double    | yes      | `task.areaHa`          | ha   | area      | duration-estimation          | reject-for-planning            |
+| `deadline`              | string    | yes      | `task.deadline`        | -    | timestamp | time-window, commitment      | reject-for-planning            |
+| `penalty_per_day_eur`   | double    | yes      | `task.penaltyPerDay`   | EUR  | money     | objective, commitment        | fallback-to-conservative-value |
+| `priority`              | int       | no       | `task.priorityClass`   | -    | -         | objective                    | fallback-to-conservative-value |
+| `status`                | string    | no       | `task.status`          | -    | -         | freeze                       | -                              |
+| `estimated_revenue_eur` | double    | no       | `task.revenueValue`    | EUR  | money     | objective                    | fallback-to-conservative-value |
+
+Valid `operation_type` values: `SPRAYING`, `TILLAGE`, `SEEDING`, `HARVESTING`, `FERTILIZING`
+Valid `status` values: `pending`, `started`, `completed`, `infeasible`
+`priority` range: 1 (low) to 10 (high); default 5
+Semantic terms: `urn:xopt:identity:task-id`, `urn:xopt:relationship:contract`,
+`urn:xopt:relationship:location`, `urn:xopt:attribute:operation-type`,
+`urn:xopt:attribute:service-area`, `urn:xopt:commitment:deadline`,
+`urn:xopt:commitment:lateness-penalty`, `urn:xopt:attribute:priority-class`,
+`urn:xopt:attribute:task-status`, `urn:xopt:attribute:expected-revenue`
+
+
+### 3.7 Weather (`weather.json`)
+
+Avro record: `WeatherWindow` (`org.example.agri.weather`)
+Semantic entity: `urn:xopt:entity:forecast`
+Data product role: `weatherForecasts`
+Quality policy: `dq://weather/forecast/v1`
+Permitted uses: `periodic-planning`, `rolling-dispatch`
+Key fields: `validFromField=valid_from`, `validToField=valid_to`
+
+| Field               | Avro Type | Required | Canonical Binding                  | Unit  | Qty Kind  | Planning Use   | Missing-Value Policy           |
+|---------------------|-----------|----------|------------------------------------|-------|-----------|----------------|--------------------------------|
+| `window_id`         | string    | yes      | `forecast.forecastId`              | -     | -         | identity       | -                              |
+| `valid_from`        | string    | yes      | `forecast.forecastFor.from`        | -     | timestamp | weather-window | -                              |
+| `valid_to`          | string    | yes      | `forecast.forecastFor.to`          | -     | timestamp | weather-window | -                              |
+| `wind_ms`           | double    | yes      | `forecast.value.windSpeed`         | m/s   | speed     | weather-window | fallback-to-conservative-value |
+| `rain_mm_per_h`     | double    | yes      | `forecast.value.precipitationRate` | mm/h  | flow-rate | weather-window | fallback-to-conservative-value |
+| `soil_moisture_pct` | double    | yes      | `forecast.value.soilMoisture`      | %     | ratio     | weather-window | fallback-to-conservative-value |
+| `lat`               | double    | yes      | `forecast.location.lat`            | deg   | angle     | geospatial     | -                              |
+| `lon`               | double    | yes      | `forecast.location.lon`            | deg   | angle     | geospatial     | -                              |
+
+Semantic terms: `urn:xopt:identity:forecast-id`, `urn:xopt:time:forecast-from`,
+`urn:xopt:time:forecast-to`, `urn:xopt:forecast:wind-speed`,
+`urn:xopt:forecast:precipitation-rate`, `urn:xopt:forecast:soil-moisture`,
+`urn:xopt:attribute:latitude`, `urn:xopt:attribute:longitude`
+
+
+### 3.8 Execution Events (`events.jsonl`)
+
+Avro record: `ExecutionEvent` (`org.example.agri.execution`)
+Semantic entity: `urn:xopt:entity:execution-event`
+Data product role: `executionEvents`
+No paired ODCS contract; no quality-policy ref.
+Key fields: `entityKeyField=event_id`, `eventTimeField=observed_at`
+
+| Field          | Avro Type | Required | Canonical Binding    | Planning Use         |
+|----------------|-----------|----------|----------------------|----------------------|
+| `event_id`     | string    | yes      | `event.eventId`      | identity             |
+| `event_type`   | string    | yes      | `event.eventType`    | replanning-trigger   |
+| `observed_at`  | string    | yes      | `event.observedAt`   | temporal             |
+| `entity_ref`   | string    | yes      | `event.entityRef`    | replanning-trigger   |
+| `payload_json` | string    | no       | `event.payload`      | replanning-trigger   |
+
+Valid `event_type` values: `order.created`, `order.cancelled`, `task.started`,
+`asset.unavailable`, `forecast.updated`
+
+---
+
+## 4. Canonical Data Model
+
+Source data is translated once into a solver-neutral canonical representation.
+No solver adapter reads raw source files directly - all input comes through
+`PlanningSnapshot`.
+
+### 4.1 Asset (`src/fl_op/canonical/asset.py`)
+
+Unified abstraction for vehicles, implements, operators, and depots.
+
+```
+Asset
+  asset_id          str        - stable identifier
+  asset_type        str        - source category (TRACTOR, SPRAYER, PLOW, ...)
+  roles             list[str]  - planning roles (mobile-prime-mover, implement, operator)
+  status            str        - "available" | other
+  capabilities      list[Capability]
+  location          GeoLocation | None
+  home_depot_ref    str | None - reference to depot location_id
+  availability      list[TimeInterval]
+  name              str
+  source_ref        str
+  valid_from        datetime | None
+  valid_to          datetime | None
+
+Capability
+  capability_id     str
+  semantic_term     str        - urn:xopt:capability:* or urn:xopt:availability:*
+  value             float | int | str | bool | list | dict | None
+  canonical_unit    str | None
+  confidence        float | None
+  source_ref        str
+
+GeoLocation
+  lat               float      - WGS-84
+  lon               float      - WGS-84
+  location_ref      str | None
+```
+
+Lookup: `asset.capability(semantic_term)` returns first matching `Capability`.
+
+
+### 4.2 Location (`src/fl_op/canonical/location.py`)
+
+Covers field parcels and depots.
+
+```
+Location
+  location_id       str
+  location_type     str        - "field" | "depot" | "loading-station"
+  lat               float      - WGS-84 (centroid for fields)
+  lon               float      - WGS-84
+  name              str
+  area_ha           float | None
+  soil_type         str
+  polygon           list[list[float]]  - [[lat, lon], ...]
+  source_ref        str
+  extra             dict[str, Any]
+```
+
+Depot material inventories are stored as `InventoryPosition` records on the
+snapshot, not on `Location` itself.
+
+
+### 4.3 Task (`src/fl_op/canonical/task.py`)
+
+Unit of work from a service order.
+
+```
+Task
+  task_id                  str
+  order_id                 str
+  operation_type           str
+  location_ref             str        - references Location.location_id
+  area_ha                  float | None
+  service_duration_minutes int | None
+  time_windows             list[TimeInterval]
+  deadline                 datetime | None
+  priority_class           int        - 1-10, default 5
+  mandatory                bool
+  requirements             list[TaskRequirement]
+  material_requirements    list[MaterialRequirement]
+  revenue_value_eur        float
+  penalty_per_day_eur      float
+  status                   str        - "pending" | "started" | "completed" | "infeasible"
+  source_ref               str
+
+TaskRequirement
+  semantic_term     str        - capability term to match
+  operator          str        - gte | lte | eq | in | exists
+  value             object
+
+MaterialRequirement
+  material_type     str
+  quantity          float
+  canonical_unit    str
+```
+
+
+### 4.4 Forecast (`src/fl_op/canonical/forecast.py`)
+
+Weather or other environmental forecast for a location and time interval.
+
+```
+Forecast
+  forecast_id     str
+  forecast_type   str        - "weather"
+  location        dict[str, float] | None  - {lat, lon}
+  issued_at       datetime | None
+  forecast_for    TimeInterval | None
+  value           dict[str, Any]  - {windSpeed, precipitationRate, soilMoisture, ...}
+  confidence      float | None
+  source_ref      str
+```
+
+
+### 4.5 OperationalBundle (`src/fl_op/canonical/bundle.py`)
+
+A schedulable combination of resources - one prime mover + implements + operator.
+Bundle identity is deterministic: `sha256(sorted(assetIds) | sorted(operatorIds) | configVersion)[:16]`.
+
+```
+OperationalBundle
+  bundle_id                   str
+  bundle_type                 str
+  asset_ids                   list[str]
+  operator_ids                list[str]
+  capabilities                list[Capability]   - merged from member assets
+  current_location_ref        str | None
+  availability                list[TimeInterval]
+  bundle_status               str        - "feasible" | other
+  configuration_duration_minutes  int
+  source_snapshot_id          str | None
+```
+
+
+### 4.6 Commitment and InventoryPosition (`src/fl_op/canonical/commitment.py`)
+
+```
+Commitment
+  commitment_id       str
+  contract_id         str
+  task_id             str | None
+  commitment_type     str
+  hardness            CommitmentHardness  - hard | medium | soft
+  value               dict[str, Any]
+  penalty_rule_ref    str | None
+  valid_from          datetime | None
+  valid_to            datetime | None
+
+InventoryPosition
+  inventory_location_ref  str    - references Location.location_id (a depot)
+  material_type           str    - "fuel" | "fertilizer"
+  available_quantity      float
+  canonical_unit          str    - L | kg
+  reserved_quantity       float
+```
+
+
+### 4.7 Shared Value Objects (`src/fl_op/canonical/common.py`)
+
+```
+TimeInterval
+  from              datetime   - closed start
+  to                datetime | None  - open end
+
+GeoPoint
+  lat               float
+  lon               float
+
+VersionDimensions
+  contract_versions               dict[str, str]
+  avro_schema_versions            dict[str, str]
+  mapping_versions                dict[str, str]
+  quality_policy_versions         dict[str, str]
+  optimization_profile_version    str
+  adapter_compatibility_version   str
+  integer_scaling_policy_version  str
+
+QualityFinding
+  quality_finding_id  str
+  rule_id             str
+  severity            QualitySeverity    - info | warning | error | critical
+  entity_ref          str
+  field_ref           str | None
+  detected_at         datetime
+  action_applied      str
+  original_value      Any | None
+  normalized_value    Any | None
+  planning_impact     str
+  source_ref          str
+
+QualitySummary
+  n_findings          int
+  by_severity         dict[str, int]
+  n_entities_excluded int
+  n_imputed           int
+
+RiskSummary
+  n_contract_deadlines_at_risk  int
+  n_weather_restricted_tasks    int
+  total_penalty_exposure_eur    float
+```
+
+
+### 4.8 PlanningSnapshot (`src/fl_op/canonical/snapshot.py`)
+
+Immutable solver input. The only artifact a solver adapter may consume.
+Hash is computed over canonical content; excludes `snapshot_id`, `generated_at`,
+and `solver_payload` (non-canonical bridge for the dict-based solver chain).
+
+```
+PlanningSnapshot
+  snapshot_id         str
+  effective_at        datetime
+  generated_at        datetime
+  planning_mode       PlanningMode   - periodic | rolling
+  planning_horizon    TimeInterval
+  version_dimensions  VersionDimensions
+
+  assets              list[Asset]
+  locations           list[Location]
+  bundles             list[OperationalBundle]
+  tasks               list[Task]
+  inventory           list[InventoryPosition]
+  forecasts           list[Forecast]
+  commitments         list[Commitment]
+  manual_overrides    list[dict]
+
+  quality_findings    list[QualityFinding]
+  quality_summary     QualitySummary
+  snapshot_hash       str
+  lineage_ref         str
+  solver_payload      dict  - excluded from hash; non-canonical bridge
+```
+
+
+### 4.9 Plan and Output Types (`src/fl_op/canonical/plan.py`)
+
+```
+Plan
+  plan_id               str
+  revision_id           str
+  parent_revision_id    str | None
+  origin_plan_id        str
+  planning_mode         PlanningMode
+  snapshot_id           str
+  snapshot_hash         str
+  version_dimensions    VersionDimensions
+  adapter_id            str
+  adapter_version       str
+  solver_version        str
+  generated_at          datetime
+  effective_from        datetime
+  effective_to          datetime | None
+  status                PlanStatus  - draft | approved | published | superseded | rejected
+
+  assignments           list[Assignment]
+  unassigned_tasks      list[UnassignedTask]
+  material_reservations list[MaterialReservation]
+
+  score                 dict[str, Any]
+  quality_summary       QualitySummary
+  risk_summary          RiskSummary
+  lineage_ref           str
+
+Assignment
+  assignment_id               str
+  task_id                     str
+  bundle_id                   str
+  asset_ids                   list[str]
+  operator_ids                list[str]
+  planned_start               datetime
+  planned_finish              datetime
+  route_ref                   str | None
+  material_reservation_refs   list[str]
+  is_frozen                   bool
+  is_pinned                   bool
+  expected_revenue_eur        float
+  expected_cost_eur           float
+  expected_margin_eur         float
+  previous_bundle_id          str | None   - plan-instability tracking
+  previous_start_time         datetime | None
+  change_penalty              int
+  explanation_ref             str
+
+UnassignedTask
+  task_id               str
+  reason_code           ReasonCode
+  details               dict
+  recommended_action    str | None
+  explanation_ref       str
+
+MaterialReservation
+  reservation_id          str
+  task_id                 str
+  material_type           str
+  inventory_location_ref  str
+  quantity                float
+  canonical_unit          str
+  reserved_from           datetime | None
+  reserved_to             datetime | None
+  status                  ReservationStatus  - provisional | confirmed | consumed | released
+```
+
+---
+
+## 5. Enumerations (`src/fl_op/canonical/enums.py`)
+
+| Enum                  | Values                                                                                             |
+|-----------------------|----------------------------------------------------------------------------------------------------|
+| `PlanningMode`        | `periodic`, `rolling`                                                                              |
+| `PlanStatus`          | `draft`, `approved`, `published`, `superseded`, `rejected`                                         |
+| `CommitmentHardness`  | `hard`, `medium`, `soft`                                                                           |
+| `ReservationStatus`   | `provisional`, `confirmed`, `consumed`, `released`                                                 |
+| `QualitySeverity`     | `info`, `warning`, `error`, `critical`                                                             |
+| `ReasonCode`          | `NO_COMPATIBLE_BUNDLE`, `INSUFFICIENT_POWER`, `NO_AVAILABLE_OPERATOR`, `NO_AVAILABLE_ASSET`, `NO_VALID_WEATHER_WINDOW`, `INSUFFICIENT_MATERIAL`, `CONTRACT_WINDOW_INFEASIBLE`, `LOCATION_DATA_INVALID`, `FIELD_GEOMETRY_INVALID`, `QUALITY_POLICY_BLOCK`, `MANUAL_OVERRIDE_CONFLICT`, `OPTIMIZATION_TRADEOFF`, `UNKNOWN` |
+
+---
+
+## 6. x-optimization Extension Definition
+
+The `x-optimization` extension annotates Avro fields and ODCS contracts with
+semantics consumed by the mapping engine.  Pydantic models live in
+`src/fl_op/contracts/xopt.py`.
+
+### 6.1 Record-level metadata (`XOptRecordMeta`)
+
+| Field               | Required | Description                                               |
+|---------------------|----------|-----------------------------------------------------------|
+| `extensionVersion`  | yes      | Schema version of this extension block                    |
+| `semanticEntity`    | yes      | URN identifying the canonical entity type                 |
+| `dataProductRole`   | no       | Data product role label                                   |
+| `assetRole`         | no       | Asset subtype (mobile-prime-mover, implement, operator, depot) |
+| `entityKeyField`    | no       | Source field name that serves as the entity primary key   |
+| `eventTimeField`    | no       | Source field carrying the event observation timestamp     |
+| `validFromField`    | no       | Source field carrying interval start (forecasts)          |
+| `validToField`      | no       | Source field carrying interval end (forecasts)            |
+
+### 6.2 Field-level metadata (`XOptFieldMeta`)
+
+| Field                | Required | Description                                                   |
+|----------------------|----------|---------------------------------------------------------------|
+| `extensionVersion`   | yes      | Schema version                                                |
+| `semanticTerm`       | yes      | URN identifying the field's meaning in the semantic model     |
+| `binding`            | yes      | Dotted path into the canonical entity (e.g. `asset.capabilities.ratedPower`) |
+| `canonicalUnit`      | no       | SI or domain unit of the field value                          |
+| `quantityKind`       | no       | Physical dimension category (see table below)                 |
+| `planningUse`        | no       | list - how the field is consumed by the solver (see table below) |
+| `qualityPolicyRef`   | no       | Override quality-policy URI for this specific field           |
+| `missingValuePolicy` | no       | Action taken when value is missing or unparseable             |
+
+### 6.3 Contract-level metadata (`XOptContractProfile`)
+
+Appears in ODCS `customProperties` as `xOptimization`.
+
+| Field                    | Required | Description                                               |
+|--------------------------|----------|-----------------------------------------------------------|
+| `extensionVersion`       | yes      | Schema version                                            |
+| `semanticModelRef`       | yes      | URN of the semantic model this contract targets           |
+| `dataProductRole`        | no       | Data product role label                                   |
+| `assetRole`              | no       | Asset subtype                                             |
+| `avroSchemaRef`          | no       | Filename of the paired Avro schema                        |
+| `mappingVersion`         | no       | Version of the field-binding mapping                      |
+| `permittedPlanningUses`  | no       | list - planning modes this contract may feed              |
+| `migrationPolicyRef`     | no       | Schema migration policy URI                               |
+| `defaultQualityPolicyRef`| no       | Default quality policy URI for all fields in this contract|
+
+### 6.4 Quantity kinds
+
+| `quantityKind`   | Examples                                     |
+|------------------|----------------------------------------------|
+| `power`          | kW (rated power, required power)             |
+| `volume`         | L (fuel tank, fuel inventory)                |
+| `flow-rate`      | L/h (fuel consumption), mm/h (rainfall)      |
+| `angle`          | deg (latitude, longitude)                    |
+| `speed`          | km/h (travel speed, operating speeds), m/s   |
+| `area`           | ha (field area, service area)                |
+| `length`         | m (working width)                            |
+| `mass`           | kg (fertilizer capacity and inventory)       |
+| `time`           | s (shift times)                              |
+| `timestamp`      | ISO-8601 string (deadline, valid_from, ...)  |
+| `money`          | EUR (penalty, revenue)                       |
+| `ratio`          | % (soil moisture)                            |
+| `geometry`       | polygon vertex list                          |
+| `categorical-set`| string-encoded list (operations, certs)      |
+
+### 6.5 Planning use values
+
+| `planningUse`          | Role in planning                                             |
+|------------------------|--------------------------------------------------------------|
+| `identity`             | Entity primary key                                           |
+| `display`              | Human-readable label only; not used by solver                |
+| `classification`       | Asset type grouping                                          |
+| `capacity`             | Resource capacity constraint                                 |
+| `compatibility-filter` | Match between task requirements and asset capabilities       |
+| `geospatial`           | Coordinates for travel-time and clustering                   |
+| `routing`              | Travel speed for repositioning cost                          |
+| `cost`                 | Operating cost term in the objective                         |
+| `duration-estimation`  | Inputs for service-time estimation                           |
+| `material-availability`| Material stock at depots                                     |
+| `availability`         | Operator shift windows                                       |
+| `assignment`           | Home depot reference for initial position                    |
+| `time-window`          | Hard time constraint on task execution                       |
+| `commitment`           | Contract obligation link                                     |
+| `objective`            | Appears directly in the optimization objective               |
+| `freeze`               | Prevents reassignment of in-progress tasks                   |
+| `weather-window`       | Feasibility gate for weather-sensitive operations            |
+| `field-restriction`    | Restricts which assets may work on a field                   |
+| `temporal`             | Event timestamp alignment                                    |
+| `replanning-trigger`   | Causes incremental re-solve in rolling dispatch              |
+
+### 6.6 Missing-value policies (`MissingValuePolicy`)
+
+| Policy                          | Behavior                                                                   |
+|---------------------------------|----------------------------------------------------------------------------|
+| `reject-for-planning`           | Record excluded from planning; error-severity quality finding raised       |
+| `accept-with-warning`           | Record included; warning-severity quality finding raised                   |
+| `accept-with-penalty`           | Record included; objective penalty applied                                 |
+| `fallback-to-conservative-value`| Field replaced with a domain-safe default; info finding raised             |
+| `impute`                        | Statistical or rule-based imputation applied                               |
+| `quarantine`                    | Record quarantined for manual review; excluded from planning               |
+| `manual-review`                 | Record flagged for human review; excluded until cleared                    |
+
+---
+
+## 7. Optimization Profile Definition
+
+Profile file: `contracts/profiles/agricultural-custom-services.profile.yaml`
+Profile ID: `agricultural-custom-services`
+Profile version: `0.1.0`
+Semantic model: `urn:xopt:model:agricultural-custom-services:0.1.0`
+
+### 7.1 Input Contracts
+
+The profile consumes all seven domain contracts (not execution-events):
+`vehicles`, `implements`, `operators`, `depots`, `fields`, `orders`, `weather`
+
+### 7.2 Planning Modes
+
+| Mode ID    | Adapter            | Description                                          |
+|------------|--------------------|------------------------------------------------------|
+| `periodic` | `ortools-periodic` | Full-horizon re-solve over `periodicHorizonDays`     |
+| `rolling`  | `ortools-rolling`  | Incremental re-solve triggered by execution events   |
+
+### 7.3 Bundle Generation Roles
+
+| Role               | Accepted Asset Roles                                           |
+|--------------------|----------------------------------------------------------------|
+| `primaryAsset`     | `mobile-prime-mover`, `self-propelled-application-asset`       |
+| `relatedEquipment` | `implement`, `trailer`, `material-carrier`                     |
+| `operator`         | `equipment-operator`                                           |
+
+### 7.4 Constraints
+
+| Constraint ID                | Severity | Enforced | Description                                                |
+|------------------------------|----------|----------|------------------------------------------------------------|
+| `compatible-equipment`       | hard     | yes      | Implement must support the task operation type             |
+| `sufficient-power`           | hard     | yes      | Vehicle rated power >= implement required power            |
+| `operator-qualified`         | hard     | no       | Operator must be certified for the operation type          |
+| `asset-available`            | hard     | yes      | Asset must be available during assigned window             |
+| `no-double-booking`          | hard     | yes      | Asset cannot appear in two concurrent assignments          |
+| `required-material-available`| medium   | no       | Depot must have sufficient material for the task           |
+| `respect-contract-time-window`| hard    | yes      | Task must complete before its contract deadline            |
+| `respect-weather-window`     | hard     | no       | Weather conditions must permit the operation               |
+| `respect-field-restrictions` | medium   | no       | Soil type and field geometry must permit asset access      |
+| `respect-manual-overrides`   | hard     | no       | Pinned/frozen assignments must not be changed              |
+| `protect-frozen-tasks`       | hard     | yes      | Tasks with status=started are locked to their assignment   |
+
+`enforced: false` constraints are declared and validated for adapter support
+coverage but are not yet wired into the solver.
+
+### 7.5 Objectives (lexicographic priority order)
+
+1. `maximize-mandatory-contract-fulfillment` - highest priority
+2. `minimize-contractual-penalties`
+3. `maximize-expected-contribution-margin`
+4. `minimize-plan-instability`
+5. `minimize-repositioning-time`
+6. `minimize-empty-distance`
+7. `minimize-idle-time`
+8. `balance-utilization` - lowest priority
+
+Lexicographic ordering means higher-priority objectives are optimized first;
+lower-priority objectives are optimized only within the feasible space of
+higher-priority solutions.
+
+### 7.6 Planning Defaults
+
+| Parameter                      | Value | Unit    |
+|--------------------------------|-------|---------|
+| `periodicHorizonDays`          | 7     | days    |
+| `rollingHorizonHours`          | 48    | hours   |
+| `freezeWindowMinutes`          | 60    | minutes |
+| `maxAssignmentRoutingIterations`| 3    | -       |
+
+### 7.7 Output Contracts
+
+`dispatch-plans` - the plan output is described by the canonical `Plan` type
+(section 4.9).
+
+---
+
+## 8. Semantic URN Namespace Summary
+
+### Entity URNs
+
+| URN                              | Canonical Type         |
+|----------------------------------|------------------------|
+| `urn:xopt:entity:asset`          | `Asset`                |
+| `urn:xopt:entity:location`       | `Location`             |
+| `urn:xopt:entity:task`           | `Task`                 |
+| `urn:xopt:entity:forecast`       | `Forecast`             |
+| `urn:xopt:entity:execution-event`| (event envelope)       |
+
+### Identity terms
+
+| URN                                | Binds to              |
+|------------------------------------|-----------------------|
+| `urn:xopt:identity:asset-id`       | `asset.assetId`       |
+| `urn:xopt:identity:location-id`    | `location.locationId` |
+| `urn:xopt:identity:task-id`        | `task.taskId`         |
+| `urn:xopt:identity:forecast-id`    | `forecast.forecastId` |
+| `urn:xopt:identity:event-id`       | `event.eventId`       |
+
+### Attribute terms
+
+| URN                                     | Binds to               |
+|-----------------------------------------|------------------------|
+| `urn:xopt:attribute:display-name`       | `*.name`               |
+| `urn:xopt:attribute:asset-type`         | `asset.assetType`      |
+| `urn:xopt:attribute:latitude`           | `*.lat`                |
+| `urn:xopt:attribute:longitude`          | `*.lon`                |
+| `urn:xopt:attribute:area`               | `location.areaHa`      |
+| `urn:xopt:attribute:polygon`            | `location.polygon`     |
+| `urn:xopt:attribute:soil-type`          | `location.soilType`    |
+| `urn:xopt:attribute:operation-type`     | `task.operationType`   |
+| `urn:xopt:attribute:service-area`       | `task.areaHa`          |
+| `urn:xopt:attribute:priority-class`     | `task.priorityClass`   |
+| `urn:xopt:attribute:task-status`        | `task.status`          |
+| `urn:xopt:attribute:expected-revenue`   | `task.revenueValue`    |
+| `urn:xopt:attribute:event-type`         | `event.eventType`      |
+| `urn:xopt:attribute:event-payload`      | `event.payload`        |
+
+### Capability terms
+
+| URN                                          | Binds to                                      |
+|----------------------------------------------|-----------------------------------------------|
+| `urn:xopt:capability:rated-power`            | `asset.capabilities.ratedPower`               |
+| `urn:xopt:capability:fuel-tank-volume`       | `asset.capabilities.fuelTankVolume`           |
+| `urn:xopt:capability:fuel-consumption-rate`  | `asset.capabilities.fuelConsumptionRate`      |
+| `urn:xopt:capability:travel-speed`           | `asset.capabilities.travelSpeed`              |
+| `urn:xopt:capability:compatible-operations`  | `asset.capabilities.compatibleOperations`     |
+| `urn:xopt:capability:required-power`         | `asset.capabilities.requiredPower`            |
+| `urn:xopt:capability:working-width`          | `asset.capabilities.workingWidth`             |
+| `urn:xopt:capability:min-operating-speed`    | `asset.capabilities.minOperatingSpeed`        |
+| `urn:xopt:capability:max-operating-speed`    | `asset.capabilities.maxOperatingSpeed`        |
+| `urn:xopt:capability:fertilizer-capacity`    | `asset.capabilities.fertilizerCapacity`       |
+| `urn:xopt:capability:operator-certification` | `asset.capabilities.certifiedOperations`      |
+
+### Availability, commitment, forecast, relationship, inventory, time terms
+
+| URN                                       | Binds to                           |
+|-------------------------------------------|------------------------------------|
+| `urn:xopt:availability:shift-start`       | `asset.availability.shiftStart`    |
+| `urn:xopt:availability:shift-end`         | `asset.availability.shiftEnd`      |
+| `urn:xopt:commitment:deadline`            | `task.deadline`                    |
+| `urn:xopt:commitment:lateness-penalty`    | `task.penaltyPerDay`               |
+| `urn:xopt:relationship:contract`          | `task.orderId`                     |
+| `urn:xopt:relationship:location`          | `task.locationRef`                 |
+| `urn:xopt:relationship:home-depot`        | `asset.homeDepotRef`               |
+| `urn:xopt:relationship:entity-ref`        | `event.entityRef`                  |
+| `urn:xopt:inventory:fuel`                 | `location.inventory.fuel`          |
+| `urn:xopt:inventory:fertilizer`           | `location.inventory.fertilizer`    |
+| `urn:xopt:forecast:wind-speed`            | `forecast.value.windSpeed`         |
+| `urn:xopt:forecast:precipitation-rate`    | `forecast.value.precipitationRate` |
+| `urn:xopt:forecast:soil-moisture`         | `forecast.value.soilMoisture`      |
+| `urn:xopt:time:forecast-from`             | `forecast.forecastFor.from`        |
+| `urn:xopt:time:forecast-to`              | `forecast.forecastFor.to`          |
+| `urn:xopt:time:observed-at`              | `event.observedAt`                 |
