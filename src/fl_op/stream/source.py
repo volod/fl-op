@@ -1,4 +1,4 @@
-"""Python-native event stream source (spec 24 execution events, subset).
+"""Python-native event stream source.
 
 Reads a JSONL file of execution events and validates each against the
 execution-events Avro schema's field set. No broker or JVM is involved; this is
@@ -13,7 +13,7 @@ from typing import Any, Iterator
 
 logger = logging.getLogger(__name__)
 
-# Replanning-trigger event types supported by the rolling demo (subset of spec 19.5).
+# Replanning-trigger event types supported by the rolling demo.
 SUPPORTED_EVENT_TYPES = {
     "task.started",
     "order.created",

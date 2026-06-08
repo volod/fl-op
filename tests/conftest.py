@@ -1,18 +1,17 @@
 """Shared test fixtures: small synthetic dataset (50v/200i/20o/5d)."""
 
 import pathlib
-import tempfile
 
 import pytest
 
 from fl_op.data.generator import run_generate
+from fl_op.io import detect_format, get_codec, locate_source
 
 
 @pytest.fixture(scope="session")
 def dataset_dir(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
     """Generate a small synthetic dataset once per test session."""
     base = tmp_path_factory.mktemp("data")
-    # Temporarily redirect output to tmp
     import os
 
     orig_cwd = os.getcwd()
@@ -27,18 +26,17 @@ def dataset_dir(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
 
 @pytest.fixture(scope="session")
 def small_entities(dataset_dir: pathlib.Path):
-    """Return (vehicles, implements, orders, depots, fields) as dicts from CSV."""
-    import csv
+    """Return (vehicles, implements, orders, depots, fields) as dicts."""
+    codec = get_codec(detect_format(dataset_dir))
 
     def load(name: str):
-        with (dataset_dir / name).open() as fh:
-            return list(csv.DictReader(fh))
+        return codec.read(locate_source(dataset_dir, f"{name}.csv", codec))
 
     return {
-        "vehicles": load("vehicles.csv"),
-        "implements": load("implements.csv"),
-        "orders": load("orders.csv"),
-        "depots": load("depots.csv"),
-        "fields": load("fields.csv"),
-        "operators": load("operators.csv"),
+        "vehicles": load("vehicles"),
+        "implements": load("implements"),
+        "orders": load("orders"),
+        "depots": load("depots"),
+        "fields": load("fields"),
+        "operators": load("operators"),
     }

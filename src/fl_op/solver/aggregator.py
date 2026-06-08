@@ -1,8 +1,4 @@
-"""Result aggregation: KPI computation and schedule report writing.
-
-pool_solve is re-exported from cluster_pool for backward compatibility.
-run_solve is re-exported from solve_pipeline for backward compatibility.
-"""
+"""Result aggregation: KPI computation and schedule report writing."""
 
 import json
 import logging
@@ -10,8 +6,6 @@ import pathlib
 from typing import Any
 
 from fl_op.core.constants import FUEL_COST_EUR_PER_L
-from fl_op.solver.cluster_pool import pool_solve  # noqa: F401 — re-export
-
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +29,7 @@ def _compute_kpis(
 
     infeasibility_reasons: dict[str, int] = {}
     for inf in infeasible_orders:
-        r = inf.get("reason", "unknown")
+        r = inf.get("reason_code", "UNKNOWN")
         infeasibility_reasons[r] = infeasibility_reasons.get(r, 0) + 1
 
     return {
@@ -80,6 +74,6 @@ def _write_report(
         lines.append("")
         lines.append("Infeasible orders (first 20):")
         for inf in infeasible_orders[:20]:
-            lines.append(f"  {inf['order_id']}: {inf['reason']} - {inf['detail']}")
+            lines.append(f"  {inf['order_id']}: {inf['reason_code']} - {inf['detail']}")
 
     path.write_text("\n".join(lines) + "\n")

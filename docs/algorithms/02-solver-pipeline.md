@@ -107,8 +107,8 @@ The haversine distance on the unit sphere surface is:
 Coordinates are passed in radians (as required by sklearn's haversine kernel).
 
 **Why sklearn, not scipy?** scipy 1.14+ removed `scipy.spatial.BallTree` from the
-public API. See ADR-015. `sklearn.neighbors.BallTree` with `metric='haversine'` is the
-supported replacement and preserves identical behaviour.
+public API. `sklearn.neighbors.BallTree` with `metric='haversine'` is the supported
+replacement and preserves identical behaviour.
 
 ### 3.3 Cluster construction
 
@@ -161,7 +161,6 @@ lexicographic tiebreak on `cluster_id` ensures deterministic output across runs.
 (penalty 10 EUR/day each, total 510 EUR) would outrank a cluster of 50 high-urgency
 spraying orders (penalty 500 EUR/day each, total 25,000 EUR) if the key were `len(orders)`.
 The sprayers lose their implement; accumulated daily penalties reach 25,000 EUR/day.
-See ADR-014 for the full analysis.
 
 ### 4.3 Allocation algorithm
 
@@ -256,7 +255,6 @@ The haversine computation is vectorized over all candidates in a single NumPy ca
     dist_km = 2 * R * arcsin(sqrt(a.clip(0, 1)))
 
 No Python loops. The full 5-million-pair evaluation runs in a single C kernel call.
-See ADR-012 for the rationale.
 
 ### 5.4 Parallelism
 
@@ -280,7 +278,7 @@ with ProcessPoolExecutor(
 
 **Why spawn?** The `fork` start method inherits the parent's OR-Tools C++ objects,
 which contain internal state that is not safe to share across processes. `spawn` starts
-a clean Python interpreter. See ADR-009.
+a clean Python interpreter.
 
 **Why `initializer=_pool_initializer`?** The initializer runs once per worker at pool
 creation time, pre-importing OR-Tools and the cluster solver. All tasks dispatched to
@@ -300,7 +298,7 @@ search_params.sat_parameters.num_workers = 1
 ```
 
 Setting this to 1 prevents OR-Tools from spawning additional threads inside an already-
-parallel process pool, avoiding thread contention. See ADR-010.
+parallel process pool, avoiding thread contention.
 
 ### 5.5 Worker return contract
 
@@ -310,10 +308,9 @@ Every cluster worker returns a 2-tuple:
 
 The aggregator asserts the result is a 2-tuple before unpacking. If the worker raises
 an exception (OR-Tools timeout, memory error, unexpected failure), the pool layer
-catches it in `future.result()` and records all orders in that cluster as infeasible
-with reason `worker_crash`. Internal exceptions caught inside `solve_cluster` itself
-use reason `solver_exception`. A pool-level overall timeout records reason
-`solver_timeout`. See ADR-007.
+catches it in `future.result()` and records all orders in that cluster with canonical
+reason code `UNKNOWN`. A pool-level overall timeout records
+`OPTIMIZATION_TRADEOFF`.
 
 ---
 
@@ -375,11 +372,11 @@ Return the top-3 candidates by margin. No OR-Tools call; response in under 5 sec
 
 ```
 generate-data
-    -> depots.csv, vehicles.csv, implements.csv, operators.csv
-    -> fields.csv, orders.csv, contracts.json, weather.json, metadata.json
+    -> depots.<format>, vehicles.<format>, implements.<format>, operators.<format>
+    -> fields.<format>, orders.<format>, contracts.json, weather.json, metadata.json
 
 solve
-    -> load CSVs into Pydantic models
+    -> load codec-detected tabular files into Pydantic models
     -> build compat matrix (Stage 1)
     -> BallTree clustering (Stage 2)
     -> pre-allocation (Stage 3)

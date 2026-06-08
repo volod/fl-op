@@ -1,4 +1,4 @@
-"""Canonical OperationalBundle abstraction (spec 11.4, 18.4)."""
+"""Canonical OperationalBundle abstraction."""
 
 import hashlib
 from typing import Optional
@@ -14,7 +14,7 @@ def compute_bundle_id(
     operator_ids: list[str],
     configuration_version: str,
 ) -> str:
-    """Deterministic bundle identity (spec 18.4).
+    """Deterministic bundle identity.
 
     bundleId = hash(sorted(assetIds) + sorted(operatorIds) + configurationVersion)
     """

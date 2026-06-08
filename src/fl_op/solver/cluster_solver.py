@@ -8,6 +8,7 @@ destroyed inside helper modules; no shared OR-Tools state persists between calls
 import logging
 from typing import Any
 
+from fl_op.canonical.enums import ReasonCode
 from fl_op.solver.cluster.infeasible import mark_all_infeasible
 from fl_op.solver.cluster.solve import solve_cluster_inner
 
@@ -49,7 +50,7 @@ def solve_cluster(
         )
         return mark_all_infeasible(
             cluster_dict,
-            "solver_exception",
+            ReasonCode.UNKNOWN,
             f"unhandled exception: {exc}",
         )
 

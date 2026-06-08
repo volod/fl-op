@@ -34,6 +34,7 @@ import os
 from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 from typing import Any
 
+from fl_op.canonical.enums import ReasonCode
 from fl_op.core.constants import CLUSTER_SOLVE_TIME_LIMIT_S, SOLVER_WORKERS
 from fl_op.models.types import ClusterSpec
 
@@ -130,7 +131,7 @@ def pool_solve(
                         {
                             "order_id": oid,
                             "cluster_id": cluster_id,
-                            "reason": "worker_crash",
+                            "reason_code": ReasonCode.UNKNOWN.value,
                             "detail": str(exc),
                         }
                         for oid in cd.get("order_ids", [])
@@ -149,7 +150,7 @@ def pool_solve(
                         {
                             "order_id": oid,
                             "cluster_id": cluster_id,
-                            "reason": "solver_timeout",
+                            "reason_code": ReasonCode.OPTIMIZATION_TRADEOFF.value,
                             "detail": f"worker did not complete within {overall_timeout}s",
                         }
                         for oid in cd.get("order_ids", [])

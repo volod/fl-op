@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
+from fl_op.canonical.enums import ReasonCode
 from fl_op.core.constants import CLUSTER_SOLVE_TIME_LIMIT_S
 from fl_op.solver.cluster.context import ClusterContext
 from fl_op.solver.cluster.infeasible import mark_all_infeasible, unserved_orders
@@ -62,7 +63,7 @@ def solve_routing_context(
     if solution is None:
         return mark_all_infeasible(
             cluster_dict,
-            "no_solution",
+            ReasonCode.OPTIMIZATION_TRADEOFF,
             "OR-Tools found no feasible solution within time limit",
         )
 

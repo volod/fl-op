@@ -4,14 +4,14 @@ from enum import Enum
 
 
 class PlanningMode(str, Enum):
-    """Planning mode of a snapshot or plan (spec 17.1)."""
+    """Planning mode of a snapshot or plan."""
 
     PERIODIC = "periodic"
     ROLLING = "rolling"
 
 
 class PlanStatus(str, Enum):
-    """Lifecycle status of a plan (spec 22.1)."""
+    """Lifecycle status of a plan."""
 
     DRAFT = "draft"
     APPROVED = "approved"
@@ -21,7 +21,7 @@ class PlanStatus(str, Enum):
 
 
 class CommitmentHardness(str, Enum):
-    """Hardness of a contractual commitment (spec 11.7)."""
+    """Hardness of a contractual commitment."""
 
     HARD = "hard"
     MEDIUM = "medium"
@@ -29,7 +29,7 @@ class CommitmentHardness(str, Enum):
 
 
 class ReservationStatus(str, Enum):
-    """Status of a material reservation (spec 22.4)."""
+    """Status of a material reservation."""
 
     PROVISIONAL = "provisional"
     CONFIRMED = "confirmed"
@@ -38,7 +38,7 @@ class ReservationStatus(str, Enum):
 
 
 class ReasonCode(str, Enum):
-    """Normalized reason codes for unassigned tasks (spec 22.3)."""
+    """Normalized reason codes for unassigned tasks."""
 
     NO_COMPATIBLE_BUNDLE = "NO_COMPATIBLE_BUNDLE"
     INSUFFICIENT_POWER = "INSUFFICIENT_POWER"
@@ -56,7 +56,7 @@ class ReasonCode(str, Enum):
 
 
 class QualitySeverity(str, Enum):
-    """Severity of a quality finding (spec 14.4)."""
+    """Severity of a quality finding."""
 
     INFO = "info"
     WARNING = "warning"

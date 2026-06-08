@@ -19,7 +19,7 @@ def run_snapshot_build(
     mode: str = "periodic",
     effective_at: Optional[str] = None,
 ) -> pathlib.Path:
-    """Build an immutable planning snapshot and write it under .data/snapshot/."""
+    """Build an immutable planning snapshot and write it under DATA_DIR/snapshot/."""
     planning_mode = PlanningMode(mode)
     eff = datetime.fromisoformat(effective_at) if effective_at else None
     snapshot = SnapshotBuilder().build(data_dir, planning_mode, eff)

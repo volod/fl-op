@@ -7,7 +7,7 @@ from fl_op.cli.options import data_option, resolve_data_dir
 
 @click.group("contracts")
 def contracts_group() -> None:
-    """Declarative data-contract operations (Avro + ODCS + x-optimization)."""
+    """Declarative data-contract operations (ODCS single source of truth)."""
 
 
 @contracts_group.command("validate")
@@ -18,10 +18,71 @@ def contracts_group() -> None:
     help="Persist recomputed fingerprints to the registry.",
 )
 def contracts_validate(write: bool) -> None:
-    """Validate all contracts: round-trip, dual fingerprints, binding agreement."""
+    """Validate all contracts: structural fingerprint, ODCS metadata hash, generation readiness."""
     from fl_op.planning.runner import run_contracts_validate
 
     ok = run_contracts_validate(persist=write)
+    if not ok:
+        raise SystemExit(1)
+
+
+@contracts_group.command("generate")
+@click.option(
+    "--format",
+    "fmt",
+    required=True,
+    type=click.Choice(["avro", "proto", "es", "parquet"]),
+    help="Target format to generate.",
+)
+@click.option(
+    "--out-dir",
+    default=None,
+    type=click.Path(file_okay=False, resolve_path=True),
+    help="Output directory (default: contracts/generated/<format>).",
+)
+@click.option(
+    "--contract",
+    default=None,
+    help="Generate only this contract id (default: all).",
+)
+def contracts_generate(fmt: str, out_dir: str | None, contract: str | None) -> None:
+    """Generate physical schemas (Avro / Proto / ES) from ODCS contracts."""
+    import pathlib
+
+    from fl_op.contracts.schema_gen import run_generate
+
+    out = pathlib.Path(out_dir) if out_dir else None
+    ok = run_generate(fmt=fmt, out_dir=out, contract_id=contract)
+    if not ok:
+        raise SystemExit(1)
+
+
+@contracts_group.command("check-generation")
+@click.option(
+    "--format",
+    "fmt",
+    required=True,
+    type=click.Choice(["avro", "proto", "es", "parquet"]),
+    help="Target format to check.",
+)
+@click.option(
+    "--contract",
+    default=None,
+    help="Check only this contract id (default: all).",
+)
+def contracts_check_generation(fmt: str, contract: str | None) -> None:
+    """Check that ODCS contracts have complete hints for the given target format."""
+    import logging
+
+    from fl_op.contracts.schema_gen import run_check_generation
+
+    logger = logging.getLogger(__name__)
+    ok, reports = run_check_generation(fmt=fmt, contract_id=contract)
+    for report in reports:
+        status = "ok" if report.ok else "FAIL"
+        logger.info("[%s] %s [%s]", status, report.contract_id, fmt)
+        for err in report.errors:
+            logger.error("  %s", err)
     if not ok:
         raise SystemExit(1)
 

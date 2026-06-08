@@ -1,7 +1,5 @@
 """Full solve pipeline: load data -> preprocess -> allocate -> greedy -> pool -> write."""
 
-import csv
-import json
 import logging
 import pathlib
 import sys
@@ -11,17 +9,10 @@ from typing import Any
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
 from fl_op.core.paths import DATA_ROOT
 from fl_op.core.telemetry import RunTelemetry
+from fl_op.io import detect_format, get_codec, locate_source
 from fl_op.solver.aggregator import _write_json, _write_report
 
 logger = logging.getLogger(__name__)
-
-
-def _load_csv(data_path: pathlib.Path, name: str) -> list[dict[str, Any]]:
-    p = data_path / name
-    if not p.exists():
-        return []
-    with p.open() as fh:
-        return list(csv.DictReader(fh))
 
 
 def _check_cross_cluster_vehicle_overlap(
@@ -64,14 +55,11 @@ def run_solve(data_dir: str) -> None:
     out_dir = DATA_ROOT / "solve" / ts
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Loading data from %s", data_path)
+    codec = get_codec(detect_format(data_path))
+    logger.info("Loading data from %s (format: %s)", data_path, codec.extension.lstrip("."))
     rows = {
-        "vehicles": _load_csv(data_path, "vehicles.csv"),
-        "implements": _load_csv(data_path, "implements.csv"),
-        "orders": _load_csv(data_path, "orders.csv"),
-        "depots": _load_csv(data_path, "depots.csv"),
-        "fields": _load_csv(data_path, "fields.csv"),
-        "operators": _load_csv(data_path, "operators.csv"),
+        name: codec.read(locate_source(data_path, f"{name}.csv", codec))
+        for name in ("vehicles", "implements", "orders", "depots", "fields", "operators")
     }
 
     logger.info(

@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class MissingValuePolicy(str, Enum):
-    """Action taken when a bound source field is missing or unparseable (spec 14.2)."""
+    """Action taken when a bound source field is missing or unparseable."""
 
     REJECT_FOR_PLANNING = "reject-for-planning"
     ACCEPT_WITH_WARNING = "accept-with-warning"
@@ -26,7 +26,7 @@ class MissingValuePolicy(str, Enum):
 
 
 class XOptFieldMeta(BaseModel):
-    """Field-level x-optimization binding (spec 9.2 / 10.3)."""
+    """Field-level x-optimization binding."""
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -43,7 +43,7 @@ class XOptFieldMeta(BaseModel):
 
 
 class XOptRecordMeta(BaseModel):
-    """Record-level x-optimization metadata (spec 9.3)."""
+    """Record-level x-optimization metadata."""
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -58,7 +58,7 @@ class XOptRecordMeta(BaseModel):
 
 
 class XOptContractProfile(BaseModel):
-    """Root-level ODCS xOptimization contract profile (spec 10.2)."""
+    """Root-level ODCS xOptimization contract profile."""
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 

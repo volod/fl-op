@@ -20,7 +20,6 @@ customProperties:
       extensionVersion: 0.1.0
       semanticModelRef: urn:xopt:model:agricultural-custom-services:0.1.0
       dataProductRole: weatherForecasts
-      avroSchemaRef: weather.avsc
       mappingVersion: 1.0.0
       permittedPlanningUses: [periodic-planning, rolling-dispatch]
       defaultQualityPolicyRef: dq://weather/forecast/v1
@@ -28,6 +27,20 @@ schema:
   - name: weather
     logicalType: object
     physicalType: json
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.weather
+            recordName: WeatherWindow
+            recordDoc: "Weather forecast window mapped to a canonical Forecast. Source dataset: weather.json."
+          proto:
+            package: org.example.agri.weather
+            messageName: WeatherWindow
+            syntax: proto3
+          es:
+            indexName: weather
+            dynamic: strict
     properties:
       - name: window_id
         logicalType: string
@@ -36,7 +49,10 @@ schema:
         description: Stable identifier of the forecast window.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:forecast-id, binding: forecast.forecastId}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:forecast-id, binding: forecast.forecastId, planningUse: [identity]}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
       - name: valid_from
         logicalType: date
         physicalType: string
@@ -44,7 +60,10 @@ schema:
         description: ISO-8601 start of the forecast interval.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:time:forecast-from, binding: forecast.forecastFor.from, quantityKind: timestamp}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:time:forecast-from, binding: forecast.forecastFor.from, quantityKind: timestamp, planningUse: [weather-window]}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
       - name: valid_to
         logicalType: date
         physicalType: string
@@ -52,7 +71,10 @@ schema:
         description: ISO-8601 end of the forecast interval.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:time:forecast-to, binding: forecast.forecastFor.to, quantityKind: timestamp}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:time:forecast-to, binding: forecast.forecastFor.to, quantityKind: timestamp, planningUse: [weather-window]}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
       - name: wind_ms
         logicalType: number
         physicalType: double
@@ -61,6 +83,9 @@ schema:
         customProperties:
           - property: xOptimization
             value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:forecast:wind-speed, binding: forecast.value.windSpeed, canonicalUnit: m/s, quantityKind: speed, planningUse: [weather-window], missingValuePolicy: fallback-to-conservative-value}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
       - name: rain_mm_per_h
         logicalType: number
         physicalType: double
@@ -69,6 +94,9 @@ schema:
         customProperties:
           - property: xOptimization
             value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:forecast:precipitation-rate, binding: forecast.value.precipitationRate, canonicalUnit: mm/h, quantityKind: flow-rate, planningUse: [weather-window], missingValuePolicy: fallback-to-conservative-value}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
       - name: soil_moisture_pct
         logicalType: number
         physicalType: double
@@ -77,6 +105,9 @@ schema:
         customProperties:
           - property: xOptimization
             value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:forecast:soil-moisture, binding: forecast.value.soilMoisture, canonicalUnit: "%", quantityKind: ratio, planningUse: [weather-window], missingValuePolicy: fallback-to-conservative-value}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}
       - name: lat
         logicalType: number
         physicalType: double
@@ -84,7 +115,10 @@ schema:
         description: Forecast location latitude.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:latitude, binding: forecast.location.lat, canonicalUnit: deg, quantityKind: angle}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:latitude, binding: forecast.location.lat, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 7}
       - name: lon
         logicalType: number
         physicalType: double
@@ -92,4 +126,7 @@ schema:
         description: Forecast location longitude.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:longitude, binding: forecast.location.lon, canonicalUnit: deg, quantityKind: angle}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:longitude, binding: forecast.location.lon, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 8}

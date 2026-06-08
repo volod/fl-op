@@ -1,4 +1,4 @@
-"""Canonical Forecast abstraction (spec 11.6)."""
+"""Canonical Forecast abstraction."""
 
 from datetime import datetime
 from typing import Any, Optional
@@ -9,7 +9,7 @@ from fl_op.canonical.common import TimeInterval
 
 
 class Forecast(BaseModel):
-    """A weather (or other) forecast for a location and time interval (spec 11.6)."""
+    """A weather (or other) forecast for a location and time interval."""
 
     model_config = ConfigDict(frozen=True)
 

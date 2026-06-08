@@ -1,9 +1,8 @@
-"""Shared solver chain extracted from the solve pipeline.
+"""Shared solver chain used by CLI pipelines and solver adapters.
 
-The chain consumes dict rows keyed by source column names and runs the existing
-preprocess -> pre-allocate -> greedy -> pool stages without modification. Both
-the legacy CLI pipelines and the canonical solver adapters call it, so the
-working solver internals have a single call site and are never duplicated.
+The chain consumes dict rows keyed by source column names and runs the current
+preprocess -> pre-allocate -> greedy -> pool stages. CLI pipelines and canonical
+solver adapters call this same function, so solver orchestration has one code path.
 """
 
 import logging

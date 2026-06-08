@@ -27,7 +27,7 @@ class GeoPoint(BaseModel):
 
 
 class VersionDimensions(BaseModel):
-    """Governance version dimensions stamped onto snapshots and plans (spec 25.1)."""
+    """Governance version dimensions stamped onto snapshots and plans."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -41,7 +41,7 @@ class VersionDimensions(BaseModel):
 
 
 class QualityFinding(BaseModel):
-    """A single data-quality finding produced during mapping/snapshot build (spec 14.4)."""
+    """A single data-quality finding produced during mapping/snapshot build."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -59,7 +59,7 @@ class QualityFinding(BaseModel):
 
 
 class QualitySummary(BaseModel):
-    """Aggregate quality picture attached to a snapshot or plan (spec 14.5)."""
+    """Aggregate quality picture attached to a snapshot or plan."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -70,7 +70,7 @@ class QualitySummary(BaseModel):
 
 
 class RiskSummary(BaseModel):
-    """Aggregate risk picture attached to a plan (spec 20.7)."""
+    """Aggregate risk picture attached to a plan."""
 
     model_config = ConfigDict(frozen=True)
 

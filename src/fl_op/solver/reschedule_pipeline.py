@@ -1,6 +1,5 @@
 """Reschedule pipeline: re-run solver after in-progress order updates."""
 
-import csv
 import logging
 import pathlib
 import sys
@@ -9,6 +8,7 @@ from typing import Any
 
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
 from fl_op.core.paths import DATA_ROOT
+from fl_op.io import detect_format, get_codec, locate_source
 from fl_op.models.enums import OrderStatus
 from fl_op.solver.aggregator import _write_json, _write_report
 from fl_op.solver.reschedule import _apply_events, _build_plan_diff, _load_json, _write_plan_diff_txt
@@ -16,19 +16,12 @@ from fl_op.solver.reschedule import _apply_events, _build_plan_diff, _load_json,
 logger = logging.getLogger(__name__)
 
 
-def _load_csv(data_path: pathlib.Path, name: str) -> list[dict[str, Any]]:
-    p = data_path / name
-    if not p.exists():
-        return []
-    with p.open() as fh:
-        return list(csv.DictReader(fh))
-
-
 def run_reschedule(data_dir: str, schedule_dir: str, events_path: str | None) -> None:
     """Re-run solver after in-progress updates; write plan_diff and new schedule."""
     from fl_op.solver.chain import run_solver_chain
 
     data_path = pathlib.Path(data_dir)
+    codec = get_codec(detect_format(data_path))
     sched_path = pathlib.Path(schedule_dir)
     ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%S")
     out_dir = DATA_ROOT / "reschedule" / ts
@@ -41,12 +34,12 @@ def run_reschedule(data_dir: str, schedule_dir: str, events_path: str | None) ->
 
     old_schedule: list[dict[str, Any]] = _load_json(schedule_file).get("schedule", [])
 
-    orders_raw = _load_csv(data_path, "orders.csv")
-    vehicles_raw = _load_csv(data_path, "vehicles.csv")
-    implements_raw = _load_csv(data_path, "implements.csv")
-    depots_raw = _load_csv(data_path, "depots.csv")
-    fields_raw = _load_csv(data_path, "fields.csv")
-    operators_raw = _load_csv(data_path, "operators.csv")
+    orders_raw = codec.read(locate_source(data_path, "orders.csv", codec))
+    vehicles_raw = codec.read(locate_source(data_path, "vehicles.csv", codec))
+    implements_raw = codec.read(locate_source(data_path, "implements.csv", codec))
+    depots_raw = codec.read(locate_source(data_path, "depots.csv", codec))
+    fields_raw = codec.read(locate_source(data_path, "fields.csv", codec))
+    operators_raw = codec.read(locate_source(data_path, "operators.csv", codec))
 
     if events_path:
         import json

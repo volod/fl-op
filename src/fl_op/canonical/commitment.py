@@ -1,4 +1,4 @@
-"""Canonical Commitment and InventoryPosition abstractions (spec 11.7)."""
+"""Canonical Commitment and InventoryPosition abstractions."""
 
 from datetime import datetime
 from typing import Any, Optional
@@ -9,7 +9,7 @@ from fl_op.canonical.enums import CommitmentHardness
 
 
 class Commitment(BaseModel):
-    """A contractual obligation attached to a task (spec 11.7)."""
+    """A contractual obligation attached to a task."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -25,7 +25,7 @@ class Commitment(BaseModel):
 
 
 class InventoryPosition(BaseModel):
-    """Available and reserved material at a location (spec 4.1 InventoryPosition)."""
+    """Available and reserved material at a location."""
 
     model_config = ConfigDict(frozen=True)
 

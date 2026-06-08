@@ -21,7 +21,6 @@ customProperties:
       semanticModelRef: urn:xopt:model:agricultural-custom-services:0.1.0
       dataProductRole: assetMaster
       assetRole: mobile-prime-mover
-      avroSchemaRef: vehicles.avsc
       mappingVersion: 1.0.0
       permittedPlanningUses:
         - periodic-planning
@@ -32,6 +31,20 @@ schema:
   - name: vehicles
     logicalType: object
     physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.assets
+            recordName: Vehicle
+            recordDoc: "Mobile prime-mover or self-propelled machine. Source dataset: vehicles.csv."
+          proto:
+            package: org.example.agri.assets
+            messageName: Vehicle
+            syntax: proto3
+          es:
+            indexName: vehicles
+            dynamic: strict
     properties:
       - name: vehicle_id
         logicalType: string
@@ -40,7 +53,10 @@ schema:
         description: Stable identifier of the vehicle.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:asset-id, binding: asset.assetId}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:asset-id, binding: asset.assetId, planningUse: [identity]}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
       - name: vehicle_type
         logicalType: string
         physicalType: string
@@ -48,7 +64,10 @@ schema:
         description: Source vehicle category.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:asset-type, binding: asset.assetType}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:asset-type, binding: asset.assetType, planningUse: [classification]}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
       - name: rated_power_kw
         logicalType: number
         physicalType: double
@@ -65,6 +84,10 @@ schema:
               planningUse: [capacity, compatibility-filter]
               qualityPolicyRef: dq://assets/rated-power/v1
               missingValuePolicy: reject-for-planning
+          - property: fieldGeneration
+            value:
+              avro: {aliases: [engine_power_kw]}
+              proto: {fieldNumber: 3}
       - name: fuel_tank_l
         logicalType: number
         physicalType: double
@@ -72,7 +95,10 @@ schema:
         description: Usable fuel tank volume.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:capability:fuel-tank-volume, binding: asset.capabilities.fuelTankVolume, canonicalUnit: L, quantityKind: volume, missingValuePolicy: accept-with-warning}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:capability:fuel-tank-volume, binding: asset.capabilities.fuelTankVolume, canonicalUnit: L, quantityKind: volume, planningUse: [capacity], missingValuePolicy: accept-with-warning}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
       - name: fuel_consumption_l_per_h
         logicalType: number
         physicalType: double
@@ -80,7 +106,10 @@ schema:
         description: Average fuel consumption at working load.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:capability:fuel-consumption-rate, binding: asset.capabilities.fuelConsumptionRate, canonicalUnit: L/h, quantityKind: flow-rate, missingValuePolicy: accept-with-warning}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:capability:fuel-consumption-rate, binding: asset.capabilities.fuelConsumptionRate, canonicalUnit: L/h, quantityKind: flow-rate, planningUse: [cost], missingValuePolicy: accept-with-warning}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
       - name: current_lat
         logicalType: number
         physicalType: double
@@ -88,7 +117,10 @@ schema:
         description: Current latitude at planning horizon start.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:latitude, binding: asset.location.lat, canonicalUnit: deg, quantityKind: angle, missingValuePolicy: reject-for-planning}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:latitude, binding: asset.location.lat, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial], missingValuePolicy: reject-for-planning}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}
       - name: current_lon
         logicalType: number
         physicalType: double
@@ -96,7 +128,10 @@ schema:
         description: Current longitude at planning horizon start.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:longitude, binding: asset.location.lon, canonicalUnit: deg, quantityKind: angle, missingValuePolicy: reject-for-planning}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:longitude, binding: asset.location.lon, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial], missingValuePolicy: reject-for-planning}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 7}
       - name: depot_id
         logicalType: string
         physicalType: string
@@ -104,7 +139,10 @@ schema:
         description: Home depot reference.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:relationship:home-depot, binding: asset.homeDepotRef}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:relationship:home-depot, binding: asset.homeDepotRef, planningUse: [assignment]}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 8}
       - name: travel_speed_kmh
         logicalType: number
         physicalType: double
@@ -112,4 +150,8 @@ schema:
         description: Average field travel speed.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:capability:travel-speed, binding: asset.capabilities.travelSpeed, canonicalUnit: km/h, quantityKind: speed, missingValuePolicy: fallback-to-conservative-value}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:capability:travel-speed, binding: asset.capabilities.travelSpeed, canonicalUnit: km/h, quantityKind: speed, planningUse: [routing], missingValuePolicy: fallback-to-conservative-value}
+          - property: fieldGeneration
+            value:
+              avro: {default: 15.0}
+              proto: {fieldNumber: 9}

@@ -1,4 +1,4 @@
-"""Canonical unit normalization (spec 14.1 step 4, 15.3 convertUnit).
+"""Canonical unit normalization.
 
 Source values are normalized to the canonical unit declared in the binding. The
 demo's synthetic data is already produced in canonical units, so most conversions

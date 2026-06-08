@@ -6,12 +6,15 @@ import pathlib
 from datetime import datetime, timezone
 from typing import Any
 
+from fl_op.canonical.enums import PlanningMode
+from fl_op.contracts.registry import FileRegistry
+from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
 from fl_op.core.paths import DATA_ROOT
-from fl_op.planning.artifacts import run_timestamp
+from fl_op.planning.artifacts import model_json, run_timestamp, write_json
 from fl_op.planning.contracts import run_contracts_validate
 from fl_op.planning.demo_summary import print_demo_summary
 from fl_op.planning.plans import run_plan_periodic, run_plan_rolling
-from fl_op.planning.snapshots import run_snapshot_build
+from fl_op.snapshot.builder import SnapshotBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -62,16 +65,31 @@ def run_demo(data_dir: str) -> None:
         raise SystemExit("Contract validation failed; aborting demo.")
 
     logger.info("[2/5] Building immutable periodic planning snapshot")
-    run_snapshot_build(data_dir, "periodic")
+    registry = FileRegistry()
+    effective_at = datetime.now(tz=timezone.utc)
+    snapshot = SnapshotBuilder(registry).build(data_dir, PlanningMode.PERIODIC, effective_at)
+    snap_out = DATA_ROOT / "snapshot" / run_timestamp()
+    write_json(
+        {"schema_version": ARTIFACT_SCHEMA_VERSION, **model_json(snapshot)},
+        snap_out / "snapshot.json",
+    )
+    logger.info(
+        "Snapshot %s (hash %s) -> %s",
+        snapshot.snapshot_id,
+        snapshot.snapshot_hash[:12],
+        snap_out,
+    )
 
     logger.info("[3/5] Periodic (batch) optimization via OR-Tools adapter")
-    periodic_dir = run_plan_periodic(data_dir)
+    periodic_dir = run_plan_periodic(data_dir, snapshot=snapshot)
 
     logger.info("[4/5] Synthesizing an execution-event stream")
     events_path = generate_demo_events(data_dir, periodic_dir)
 
     logger.info("[5/5] Rolling (stream) dispatch with freeze window and revisions")
-    rolling_dir = run_plan_rolling(data_dir, str(events_path))
+    rolling_dir = run_plan_rolling(
+        data_dir, str(events_path), effective_at=effective_at.isoformat()
+    )
 
     logger.info("Artifacts:")
     logger.info("  periodic plan:    %s", periodic_dir)

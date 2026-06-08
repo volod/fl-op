@@ -1,4 +1,4 @@
-"""Canonical Asset and Capability abstractions (spec 11.1, 11.2)."""
+"""Canonical Asset and Capability abstractions."""
 
 from datetime import datetime
 from typing import Any, Optional, Union
@@ -9,7 +9,7 @@ from fl_op.canonical.common import TimeInterval
 
 
 class Capability(BaseModel):
-    """A measurable or categorical ability of an asset (spec 11.2)."""
+    """A measurable or categorical ability of an asset."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -22,7 +22,7 @@ class Capability(BaseModel):
 
 
 class Asset(BaseModel):
-    """A physical or logical resource that may participate in task execution (spec 11.1).
+    """A physical or logical resource that may participate in task execution.
 
     Source vocabulary (vehicle, implement, operator, depot) is mapped onto this
     single abstraction with distinct `roles`.
@@ -55,7 +55,7 @@ class Asset(BaseModel):
 
 
 class GeoLocation(BaseModel):
-    """An asset's current location reference (spec 11.1 locationRef)."""
+    """An asset's current location reference."""
 
     model_config = ConfigDict(frozen=True)
 

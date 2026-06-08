@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: venv setenv quickstart analyse data demo contracts clean
+.PHONY: venv setenv quickstart analyse data demo contracts avro-gen proto-gen es-gen parquet-gen contracts-gen check-gen clean
 
 PYTHON := .venv/bin/python
 FL_OP := .venv/bin/fl-op
@@ -14,6 +14,7 @@ ORDERS ?= 250
 DEPOTS ?= 50
 SEED ?=
 DATA_DIR ?= .data
+FORMAT ?= avro
 
 SEED_ARG := $(if $(SEED),--seed $(SEED),)
 QUICKSTART_SEED_ARG := $(if $(SEED),--seed $(SEED),--seed 42)
@@ -26,8 +27,8 @@ setenv:
 	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env from .env.example"; else echo ".env already exists, skipping"; fi
 
 quickstart: venv
-	@echo "Generating dataset (--vehicles $(VEHICLES) --implements $(IMPLEMENTS) --orders $(ORDERS) --depots $(DEPOTS) $(QUICKSTART_SEED_ARG))..."
-	$(FL_OP) generate-data --vehicles $(VEHICLES) --implements $(IMPLEMENTS) --orders $(ORDERS) --depots $(DEPOTS) $(QUICKSTART_SEED_ARG)
+	@echo "Generating dataset (--vehicles $(VEHICLES) --implements $(IMPLEMENTS) --orders $(ORDERS) --depots $(DEPOTS) $(QUICKSTART_SEED_ARG) --format $(FORMAT))..."
+	$(FL_OP) generate-data --vehicles $(VEHICLES) --implements $(IMPLEMENTS) --orders $(ORDERS) --depots $(DEPOTS) $(QUICKSTART_SEED_ARG) --format $(FORMAT)
 	@echo "Running solver on latest dataset..."
 	$(FL_OP) solve --data latest
 	@echo "Dataset parameters: vehicles=$(VEHICLES), implements=$(IMPLEMENTS), orders=$(ORDERS), depots=$(DEPOTS), $(QUICKSTART_SEED_ARG)"
@@ -38,14 +39,34 @@ quickstart: venv
 analyse: venv
 	$(FL_OP) analyse --schedule latest
 
-# Validate the declarative data-contract suite (Avro + ODCS + dual fingerprints).
+# Validate the declarative data-contract suite (ODCS + generated schemas + dual fingerprints).
 contracts: venv
 	$(FL_OP) contracts validate
 
+avro-gen: venv  ## Generate Avro schemas from ODCS contracts
+	$(FL_OP) contracts generate --format avro
+
+proto-gen: venv  ## Generate and compile Protobuf schemas from ODCS contracts
+	$(FL_OP) contracts generate --format proto
+
+es-gen: venv  ## Generate Elasticsearch mappings from ODCS contracts
+	$(FL_OP) contracts generate --format es
+
+parquet-gen: venv  ## Generate Parquet schema descriptors from ODCS contracts
+	$(FL_OP) contracts generate --format parquet
+
+contracts-gen: avro-gen proto-gen es-gen parquet-gen  ## Generate all physical schema formats
+
+check-gen: venv  ## Check ODCS contracts have complete generation hints for all formats
+	$(FL_OP) contracts check-generation --format avro
+	$(FL_OP) contracts check-generation --format proto
+	$(FL_OP) contracts check-generation --format es
+	$(FL_OP) contracts check-generation --format parquet
+
 # Full declarative demo: contracts -> snapshot -> periodic (batch) -> rolling (stream).
 demo: venv
-	@echo "Generating demo dataset ($(QUICKSTART_SEED_ARG))..."
-	$(FL_OP) generate-data --vehicles $(VEHICLES) --implements $(IMPLEMENTS) --orders $(ORDERS) --depots $(DEPOTS) $(QUICKSTART_SEED_ARG)
+	@echo "Generating demo dataset ($(QUICKSTART_SEED_ARG) --format $(FORMAT))..."
+	$(FL_OP) generate-data --vehicles $(VEHICLES) --implements $(IMPLEMENTS) --orders $(ORDERS) --depots $(DEPOTS) $(QUICKSTART_SEED_ARG) --format $(FORMAT)
 	$(FL_OP) demo --data latest
 	@echo "Demo complete. See $(DATA_DIR)/plan-periodic/ and $(DATA_DIR)/plan-rolling/ for results."
 
@@ -55,8 +76,8 @@ demo: venv
 #   make data VEHICLES=3000 IMPLEMENTS=20000 ORDERS=2500 DEPOTS=50
 # Expect 60+ seconds generation time and several minutes for solver.
 data: venv
-	@echo "[manual benchmark] Generating full dataset ($(VEHICLES)v / $(IMPLEMENTS)i / $(ORDERS)o / $(DEPOTS)d)..."
-	$(FL_OP) generate-data --vehicles $(VEHICLES) --implements $(IMPLEMENTS) --orders $(ORDERS) --depots $(DEPOTS) $(SEED_ARG)
+	@echo "[manual benchmark] Generating full dataset ($(VEHICLES)v / $(IMPLEMENTS)i / $(ORDERS)o / $(DEPOTS)d --format $(FORMAT))..."
+	$(FL_OP) generate-data --vehicles $(VEHICLES) --implements $(IMPLEMENTS) --orders $(ORDERS) --depots $(DEPOTS) $(SEED_ARG) --format $(FORMAT)
 	@echo "[manual benchmark] Solving full dataset..."
 	$(FL_OP) solve --data latest
 

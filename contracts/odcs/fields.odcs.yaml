@@ -20,7 +20,6 @@ customProperties:
       extensionVersion: 0.1.0
       semanticModelRef: urn:xopt:model:agricultural-custom-services:0.1.0
       dataProductRole: fieldParcels
-      avroSchemaRef: fields.avsc
       mappingVersion: 1.0.0
       permittedPlanningUses: [periodic-planning, rolling-dispatch]
       defaultQualityPolicyRef: dq://fields/master/v1
@@ -28,6 +27,20 @@ schema:
   - name: fields
     logicalType: object
     physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.fields
+            recordName: FieldParcel
+            recordDoc: "Agricultural field parcel, mapped to a canonical Location. Source dataset: fields.csv."
+          proto:
+            package: org.example.agri.fields
+            messageName: FieldParcel
+            syntax: proto3
+          es:
+            indexName: fields
+            dynamic: strict
     properties:
       - name: field_id
         logicalType: string
@@ -36,7 +49,10 @@ schema:
         description: Stable identifier of the field parcel.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:location-id, binding: location.locationId}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:location-id, binding: location.locationId, planningUse: [identity]}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
       - name: name
         logicalType: string
         physicalType: string
@@ -44,7 +60,11 @@ schema:
         description: Human-readable field name.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:display-name, binding: location.name}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:display-name, binding: location.name, planningUse: [display]}
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 2}
       - name: area_ha
         logicalType: number
         physicalType: double
@@ -52,7 +72,10 @@ schema:
         description: Field area.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:area, binding: location.areaHa, canonicalUnit: ha, quantityKind: area}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:area, binding: location.areaHa, canonicalUnit: ha, quantityKind: area, planningUse: [duration-estimation]}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
       - name: polygon
         logicalType: array
         physicalType: string
@@ -60,7 +83,11 @@ schema:
         description: Field polygon vertices (stringified list of [lat, lon]).
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:polygon, binding: location.polygon, quantityKind: geometry, missingValuePolicy: accept-with-warning}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:polygon, binding: location.polygon, quantityKind: geometry, planningUse: [geospatial], missingValuePolicy: accept-with-warning}
+          - property: fieldGeneration
+            value:
+              avro: {default: "[]"}
+              proto: {fieldNumber: 4}
       - name: centroid_lat
         logicalType: number
         physicalType: double
@@ -68,7 +95,10 @@ schema:
         description: Field-entry latitude proxy (centroid).
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:latitude, binding: location.lat, canonicalUnit: deg, quantityKind: angle, missingValuePolicy: reject-for-planning}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:latitude, binding: location.lat, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial], missingValuePolicy: reject-for-planning}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
       - name: centroid_lon
         logicalType: number
         physicalType: double
@@ -76,7 +106,10 @@ schema:
         description: Field-entry longitude proxy (centroid).
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:longitude, binding: location.lon, canonicalUnit: deg, quantityKind: angle, missingValuePolicy: reject-for-planning}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:longitude, binding: location.lon, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial], missingValuePolicy: reject-for-planning}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}
       - name: soil_type
         logicalType: string
         physicalType: string
@@ -84,4 +117,8 @@ schema:
         description: Soil classification.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:soil-type, binding: location.soilType}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:soil-type, binding: location.soilType, planningUse: [field-restriction]}
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 7}

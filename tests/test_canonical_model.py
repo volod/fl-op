@@ -1,4 +1,4 @@
-"""Canonical model construction, immutability, and bundle identity (spec 11, 18.4)."""
+"""Canonical model construction, immutability, and bundle identity."""
 
 from datetime import datetime, timezone
 

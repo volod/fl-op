@@ -49,7 +49,7 @@ def test_assignment_bundle_ids_are_deterministically_reproducible(periodic_plan)
 
     # The snapshot materializes a bounded sample of bundles for inspection, but
     # every assignment's bundle id must be reproducible from its assets so any
-    # consumer can recompute and cross-reference it (spec 18.4).
+    # Consumers can recompute and cross-reference the assignment bundle id.
     assert snapshot.bundles, "snapshot should materialize operational bundles"
     for a in plan.assignments:
         assert a.bundle_id == compute_bundle_id(a.asset_ids, [], MAPPING_VERSION)

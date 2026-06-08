@@ -1,7 +1,7 @@
-"""Immutable PlanningSnapshot abstraction (spec 17.1).
+"""Immutable PlanningSnapshot abstraction.
 
 A snapshot is the single artifact a solver adapter is allowed to consume; no
-adapter reads raw source data (spec 4.3). The snapshot carries both the
+adapter reads raw source data. The snapshot carries both the
 canonical objects (used for hashing, quality, explanation) and a non-canonical
 `solver_payload` bridge: the dict-shaped rows the existing OR-Tools solver chain
 already expects. The bridge is excluded from the reproducible snapshot hash.
@@ -27,12 +27,12 @@ from fl_op.canonical.location import Location
 from fl_op.canonical.task import Task
 
 # Keys excluded from the reproducible snapshot hash: per-run identifiers and the
-# non-canonical solver bridge payload (spec 17.3).
+# non-canonical solver bridge payload.
 HASH_EXCLUDED_FIELDS = ("snapshot_id", "generated_at", "solver_payload")
 
 
 class PlanningSnapshot(BaseModel):
-    """Immutable solver-ready state (spec 17.1)."""
+    """Immutable solver-ready state."""
 
     model_config = ConfigDict(frozen=True)
 

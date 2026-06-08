@@ -1,7 +1,7 @@
 """Solver adapters: compile snapshots into solver inputs and normalize results.
 
 Adapters are the only components that invoke a solver, and they consume only
-immutable planning snapshots (spec 4.3, 21).
+immutable planning snapshots.
 """
 
 from fl_op.adapters.registry import get_adapter

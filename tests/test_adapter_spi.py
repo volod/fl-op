@@ -1,7 +1,7 @@
-"""Adapter SPI conformance, manifest, profile validation, reason-code coverage (spec 21)."""
+"""Adapter SPI conformance, manifest, and profile validation."""
 
+from fl_op.adapters.base import infeasible_to_unassigned
 from fl_op.adapters.ortools_periodic import OrToolsPeriodicAdapter
-from fl_op.adapters.reason_codes import to_reason_code
 from fl_op.adapters.registry import get_adapter
 from fl_op.adapters.spi import SolverAdapter
 from fl_op.canonical.enums import ReasonCode
@@ -36,15 +36,17 @@ def test_profile_validation_passes_for_enforced_constraints() -> None:
     assert report.ok, report.unsupported_constraints
 
 
-def test_reason_code_mapping_covers_all_legacy_reasons() -> None:
-    legacy = [
-        "no_compatible_vehicle_implement_pair",
-        "prize_collecting_unserved",
-        "solver_timeout",
-        "worker_crash",
-        "unknown",
-    ]
-    for r in legacy:
-        assert isinstance(to_reason_code(r), ReasonCode)
-    assert to_reason_code("no_compatible_vehicle_implement_pair") == ReasonCode.NO_COMPATIBLE_BUNDLE
-    assert to_reason_code("anything-else") == ReasonCode.UNKNOWN
+def test_infeasible_records_use_canonical_reason_codes() -> None:
+    task = infeasible_to_unassigned(
+        {
+            "order_id": "o1",
+            "cluster_id": "c1",
+            "reason_code": ReasonCode.NO_COMPATIBLE_BUNDLE.value,
+            "detail": "no feasible vehicle/implement pair",
+        }
+    )
+    assert task.reason_code == ReasonCode.NO_COMPATIBLE_BUNDLE
+    assert task.details == {
+        "detail": "no feasible vehicle/implement pair",
+        "cluster_id": "c1",
+    }

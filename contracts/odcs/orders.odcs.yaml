@@ -20,7 +20,6 @@ customProperties:
       extensionVersion: 0.1.0
       semanticModelRef: urn:xopt:model:agricultural-custom-services:0.1.0
       dataProductRole: serviceOrders
-      avroSchemaRef: orders.avsc
       mappingVersion: 1.0.0
       permittedPlanningUses: [periodic-planning, rolling-dispatch]
       defaultQualityPolicyRef: dq://orders/master/v1
@@ -28,6 +27,20 @@ schema:
   - name: orders
     logicalType: object
     physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.orders
+            recordName: ServiceOrder
+            recordDoc: "Farmer field-service order, mapped to a canonical Task. Source dataset: orders.csv."
+          proto:
+            package: org.example.agri.orders
+            messageName: ServiceOrder
+            syntax: proto3
+          es:
+            indexName: orders
+            dynamic: strict
     properties:
       - name: order_id
         logicalType: string
@@ -36,7 +49,10 @@ schema:
         description: Stable identifier of the order/task.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:task-id, binding: task.taskId}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:task-id, binding: task.taskId, planningUse: [identity]}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
       - name: contract_id
         logicalType: string
         physicalType: string
@@ -44,7 +60,10 @@ schema:
         description: Owning contract reference.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:relationship:contract, binding: task.orderId}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:relationship:contract, binding: task.orderId, planningUse: [commitment]}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
       - name: field_id
         logicalType: string
         physicalType: string
@@ -52,7 +71,10 @@ schema:
         description: Field where the operation is performed.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:relationship:location, binding: task.locationRef, missingValuePolicy: reject-for-planning}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:relationship:location, binding: task.locationRef, planningUse: [geospatial], missingValuePolicy: reject-for-planning}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
       - name: operation_type
         logicalType: string
         physicalType: string
@@ -61,6 +83,9 @@ schema:
         customProperties:
           - property: xOptimization
             value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:operation-type, binding: task.operationType, planningUse: [compatibility-filter], missingValuePolicy: reject-for-planning}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
       - name: area_ha
         logicalType: number
         physicalType: double
@@ -69,6 +94,9 @@ schema:
         customProperties:
           - property: xOptimization
             value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:service-area, binding: task.areaHa, canonicalUnit: ha, quantityKind: area, planningUse: [duration-estimation], missingValuePolicy: reject-for-planning}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
       - name: deadline
         logicalType: date
         physicalType: string
@@ -77,6 +105,9 @@ schema:
         customProperties:
           - property: xOptimization
             value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:commitment:deadline, binding: task.deadline, quantityKind: timestamp, planningUse: [time-window, commitment], missingValuePolicy: reject-for-planning}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}
       - name: penalty_per_day_eur
         logicalType: number
         physicalType: double
@@ -85,6 +116,9 @@ schema:
         customProperties:
           - property: xOptimization
             value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:commitment:lateness-penalty, binding: task.penaltyPerDay, canonicalUnit: EUR, quantityKind: money, planningUse: [objective, commitment], missingValuePolicy: fallback-to-conservative-value}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 7}
       - name: priority
         logicalType: integer
         physicalType: int
@@ -93,6 +127,10 @@ schema:
         customProperties:
           - property: xOptimization
             value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:priority-class, binding: task.priorityClass, planningUse: [objective], missingValuePolicy: fallback-to-conservative-value}
+          - property: fieldGeneration
+            value:
+              avro: {default: 5}
+              proto: {fieldNumber: 8}
       - name: status
         logicalType: string
         physicalType: string
@@ -101,6 +139,10 @@ schema:
         customProperties:
           - property: xOptimization
             value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:task-status, binding: task.status, planningUse: [freeze]}
+          - property: fieldGeneration
+            value:
+              avro: {default: pending}
+              proto: {fieldNumber: 9}
       - name: estimated_revenue_eur
         logicalType: number
         physicalType: double
@@ -109,3 +151,7 @@ schema:
         customProperties:
           - property: xOptimization
             value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:expected-revenue, binding: task.revenueValue, canonicalUnit: EUR, quantityKind: money, planningUse: [objective], missingValuePolicy: fallback-to-conservative-value}
+          - property: fieldGeneration
+            value:
+              avro: {default: 0.0}
+              proto: {fieldNumber: 10}

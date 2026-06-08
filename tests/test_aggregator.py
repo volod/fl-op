@@ -9,7 +9,8 @@ import json
 
 import pytest
 
-from fl_op.solver.aggregator import _compute_kpis, _write_json, _write_report, pool_solve
+from fl_op.solver.aggregator import _compute_kpis, _write_json, _write_report
+from fl_op.solver.cluster_pool import pool_solve
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +35,7 @@ class TestComputeKpis:
             {"order_id": "o0", "estimated_margin_eur": 1000.0,
              "estimated_fuel_l": 50.0, "estimated_fertilizer_kg": 20.0},
         ]
-        infeasible = [{"order_id": "o1", "reason": "no_solution"}]
+        infeasible = [{"order_id": "o1", "reason_code": "OPTIMIZATION_TRADEOFF"}]
         orders = [
             {"order_id": "o0", "estimated_revenue_eur": "1000", "area_ha": "10"},
             {"order_id": "o1", "estimated_revenue_eur": "500", "area_ha": "5"},
@@ -66,13 +67,13 @@ class TestComputeKpis:
 
     def test_infeasibility_reasons_counted(self):
         infeasible = [
-            {"order_id": "o0", "reason": "solver_timeout"},
-            {"order_id": "o1", "reason": "solver_timeout"},
-            {"order_id": "o2", "reason": "no_solution"},
+            {"order_id": "o0", "reason_code": "OPTIMIZATION_TRADEOFF"},
+            {"order_id": "o1", "reason_code": "OPTIMIZATION_TRADEOFF"},
+            {"order_id": "o2", "reason_code": "UNKNOWN"},
         ]
         kpis = _compute_kpis([], infeasible, [], {})
-        assert kpis["infeasibility_reasons"]["solver_timeout"] == 2
-        assert kpis["infeasibility_reasons"]["no_solution"] == 1
+        assert kpis["infeasibility_reasons"]["OPTIMIZATION_TRADEOFF"] == 2
+        assert kpis["infeasibility_reasons"]["UNKNOWN"] == 1
 
     def test_improvement_equals_total_minus_baseline(self):
         dispatch = [
@@ -152,19 +153,19 @@ class TestWriteReport:
 
     def test_infeasibility_reasons_in_report(self, tmp_path):
         path = tmp_path / "report.txt"
-        kpis = self._kpis(reasons={"no_solution": 2, "solver_timeout": 1})
+        kpis = self._kpis(reasons={"OPTIMIZATION_TRADEOFF": 2, "UNKNOWN": 1})
         _write_report([], [], kpis, path)
         text = path.read_text()
-        assert "no_solution: 2" in text
-        assert "solver_timeout: 1" in text
+        assert "OPTIMIZATION_TRADEOFF: 2" in text
+        assert "UNKNOWN: 1" in text
 
     def test_infeasible_orders_section_written(self, tmp_path):
         path = tmp_path / "report.txt"
-        infeasible = [{"order_id": "o99", "reason": "worker_crash", "detail": "err"}]
+        infeasible = [{"order_id": "o99", "reason_code": "UNKNOWN", "detail": "err"}]
         _write_report([], infeasible, self._kpis(infeasible=1), path)
         text = path.read_text()
         assert "o99" in text
-        assert "worker_crash" in text
+        assert "UNKNOWN" in text
 
     def test_report_file_created(self, tmp_path):
         path = tmp_path / "report.txt"

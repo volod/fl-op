@@ -1,9 +1,12 @@
-"""File-based contract and schema registry (spec 6: schema-registry, contract-registry).
+"""File-based contract and schema registry.
 
 Backed by contracts/registry.yaml. Provides lookup of contract definitions and a
-metadata-loss guard: registering a schema whose recomputed optimizationMetadataHash
-diverges from a previously stored value raises, satisfying spec 9.4 ("schema
-registration SHALL fail if metadata is lost").
+metadata-integrity guard: a recomputed optimizationMetadataHash must match the
+stored value unless the caller explicitly persists new fingerprints.
+
+Fingerprint semantics:
+  avroParsingFingerprint   - computed from generated Avro (structural)
+  optimizationMetadataHash - computed from ODCS (semantic)
 """
 
 import logging
@@ -13,6 +16,7 @@ from typing import Any, Optional
 import yaml
 
 from fl_op.contracts.avro_loader import AvroContractSchema, load_avro_schema
+from fl_op.contracts.fingerprint import avro_parsing_fingerprint, odcs_metadata_hash
 from fl_op.contracts.odcs_loader import OdcsContract, load_odcs_contract
 from fl_op.contracts.profile import OptimizationProfile, load_profile
 from fl_op.core.paths import CONTRACTS_ROOT
@@ -21,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class MetadataLossError(RuntimeError):
-    """Raised when a schema re-registration would drop or alter x-opt metadata."""
+    """Raised when stored and computed optimization metadata hashes diverge."""
 
 
 class ContractEntry:
@@ -78,25 +82,43 @@ class FileRegistry:
             raise KeyError(f"Unknown profile id: {profile_id}")
         return load_profile(self.root / profiles[profile_id]["path"])
 
+    # -- fingerprint computation --------------------------------------------------
+
+    def compute_fingerprints(self, contract_id: str) -> dict[str, str]:
+        """Compute both fingerprints for a contract.
+
+        avroParsingFingerprint   - from generated Avro schema (structural)
+        optimizationMetadataHash - from ODCS document (semantic)
+        """
+        fps: dict[str, str] = {}
+        entry = self.get_entry(contract_id)
+
+        if entry.avro_ref:
+            avro = self.get_avro(contract_id)
+            fps["avroParsingFingerprint"] = avro.avro_parsing_fingerprint
+
+        odcs = self.get_odcs(contract_id)
+        if odcs is not None:
+            fps["optimizationMetadataHash"] = odcs_metadata_hash(odcs.doc)
+
+        return fps
+
     # -- metadata-loss guard ------------------------------------------------------
 
     def verify_no_metadata_loss(self, contract_id: str) -> dict[str, str]:
         """Recompute fingerprints and compare against stored values.
 
         Returns the freshly computed fingerprints. Raises MetadataLossError if a
-        stored optimizationMetadataHash exists and differs (metadata was dropped
-        or altered without a versioned migration).
+        stored optimizationMetadataHash exists and differs.
         """
-        entry = self.get_entry(contract_id)
-        if not entry.avro_ref:
-            return {}
-        computed = self.get_avro(contract_id).fingerprints
-        stored = entry.stored_fingerprints
+        computed = self.compute_fingerprints(contract_id)
+        stored = self.get_entry(contract_id).stored_fingerprints
         prior = stored.get("optimizationMetadataHash")
-        if prior and prior != computed["optimizationMetadataHash"]:
+        current = computed.get("optimizationMetadataHash")
+        if prior and current and prior != current:
             raise MetadataLossError(
                 f"Contract {contract_id}: optimizationMetadataHash changed from "
-                f"{prior} to {computed['optimizationMetadataHash']} without migration"
+                f"{prior} to {current}; rerun validation with --write after reviewing the change"
             )
         return computed
 

@@ -1,4 +1,4 @@
-"""Canonical Location abstraction (spec 4.1 Location).
+"""Canonical Location abstraction.
 
 Field parcels and depots are both mapped onto Location. Depot material balances
 are represented separately as InventoryPosition records on the snapshot.

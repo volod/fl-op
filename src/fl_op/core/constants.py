@@ -93,20 +93,36 @@ SCORE_WEIGHT_REPOSITION: float = float(os.environ.get("SCORE_WEIGHT_REPOSITION",
 ARTIFACT_SCHEMA_VERSION: str = "1.0"
 
 # ---------------------------------------------------------------------------
+# Physical data format
+# ---------------------------------------------------------------------------
+
+# Default format for dataset files written by generate-data and read by the pipeline.
+DEFAULT_DATA_FORMAT: str = "avro"
+
+# All supported physical formats for dataset I/O (not schema generation).
+SUPPORTED_DATA_FORMATS: frozenset[str] = frozenset({"csv", "avro", "parquet"})
+
+# ---------------------------------------------------------------------------
 # x-optimization extension namespace
 # ---------------------------------------------------------------------------
 
-# Canonical extension namespace key embedded in Avro/ODCS metadata (spec 8.1).
+# Canonical extension namespace key embedded in ODCS metadata.
 XOPT_NAMESPACE: str = "x-optimization"
 
-# ODCS custom-property name (camelCase per ODCS convention, spec 8.3).
+# ODCS custom-property name for optimization semantics (camelCase per ODCS convention).
 XOPT_ODCS_PROPERTY: str = "xOptimization"
 
+# ODCS custom-property name for schema-level generation hints (namespace, record name, etc.).
+SCHEMA_GEN_PROPERTY: str = "schemaGeneration"
+
+# ODCS custom-property name for field-level generation hints (aliases, defaults, proto field numbers).
+FIELD_GEN_PROPERTY: str = "fieldGeneration"
+
 # Version of the optimization extension itself, independent of Avro/ODCS/
-# mapping/profile/adapter versions (spec 8.4).
+# mapping/profile/adapter versions.
 XOPT_EXTENSION_VERSION: str = "0.1.0"
 
-# apiVersion stamped on OptimizationProfile documents (spec 15.4).
+# apiVersion stamped on OptimizationProfile documents.
 XOPT_API_VERSION: str = "x-optimization/v0.1.0"
 
 # Semantic-model URN for the agricultural custom-services domain.
@@ -118,7 +134,7 @@ URN_RELATIONSHIP_PREFIX: str = "urn:xopt:relationship:"
 URN_ENTITY_PREFIX: str = "urn:xopt:entity:"
 
 # ---------------------------------------------------------------------------
-# Planning horizons and rolling-dispatch windows (spec 19.3, 20.1, 31)
+# Planning horizons and rolling-dispatch windows
 # ---------------------------------------------------------------------------
 
 # Periodic (batch) planning horizon length.
@@ -130,16 +146,16 @@ ROLLING_HORIZON_HOURS: int = int(os.environ.get("ROLLING_HORIZON_HOURS", "48"))
 # Tasks whose planned start falls within this window are frozen (not replanned).
 FREEZE_WINDOW_MINUTES: int = int(os.environ.get("FREEZE_WINDOW_MINUTES", "60"))
 
-# Maximum CP-SAT/routing feedback iterations before stopping (spec 20.6).
+# Maximum CP-SAT/routing feedback iterations before stopping.
 MAX_ASSIGNMENT_ROUTING_ITERATIONS: int = int(
     os.environ.get("MAX_ASSIGNMENT_ROUTING_ITERATIONS", "3")
 )
 
-# Score penalty applied per assignment changed after the freeze window (spec 19.9).
+# Score penalty applied per assignment changed after the freeze window.
 DEFAULT_CHANGE_PENALTY: int = int(os.environ.get("DEFAULT_CHANGE_PENALTY", "1000"))
 
 # ---------------------------------------------------------------------------
-# Integer scaling units for solver quantities (spec 20.3)
+# Integer scaling units for solver quantities
 # ---------------------------------------------------------------------------
 
 # Versioned so a change to any scale factor forces a profile/adapter bump.

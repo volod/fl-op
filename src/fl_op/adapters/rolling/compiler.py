@@ -41,7 +41,7 @@ def compile_rolling_state(
 ) -> RollingSolveResult:
     """Freeze/carry forward unaffected work and re-solve the remaining tasks.
 
-    To minimize avoidable disruption (spec 19.9), only tasks actually affected
+    To minimize avoidable disruption, only tasks actually affected
     by events since the last plan are re-optimized:
       - started or freeze-window tasks are frozen (preserved verbatim);
       - non-frozen prior assignments whose task and assets still exist are
@@ -120,9 +120,15 @@ def _resolve_tasks(
     if not tasks_to_resolve:
         return None
 
-    # Implements and operators held by preserved work are exclusive, so exclude
-    # them from the re-solve to avoid double-booking. Vehicles are reused
-    # sequentially across the horizon, so they are left available.
+    # Held resources are excluded from the incremental re-solve. The filtered
+    # solver input does not include the preserved assignments as time-window
+    # constraints, so leaving a held vehicle available could double-book it.
+    held_vehicles = {
+        aid
+        for assignment in held_assignments
+        for aid in assignment.asset_ids
+        if aid.startswith("vehicle")
+    }
     held_implements = {
         aid
         for assignment in held_assignments
@@ -134,6 +140,11 @@ def _resolve_tasks(
     payload = dict(solver_payload)
     payload["orders"] = [
         o for o in payload.get("orders", []) if o["order_id"] in tasks_to_resolve
+    ]
+    payload["vehicles"] = [
+        v
+        for v in payload.get("vehicles", [])
+        if v["vehicle_id"] not in held_vehicles
     ]
     payload["implements"] = [
         im

@@ -1,4 +1,4 @@
-"""Missing-value policy application producing explicit quality findings (spec 14.2, 14.5).
+"""Missing-value policy application producing explicit quality findings.
 
 No value is ever silently imputed: every fallback, imputation, or rejection emits
 a QualityFinding so the snapshot and explanation service can surface it.

@@ -7,10 +7,10 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
-import csv
-
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
 from fl_op.core.paths import DATA_ROOT
+from fl_op.canonical.enums import ReasonCode
+from fl_op.io import detect_format, get_codec, locate_source
 from fl_op.models.compat_matrix import build_compat_matrix
 from fl_op.solver.query import (
     TimeWindow,
@@ -24,14 +24,6 @@ logger = logging.getLogger(__name__)
 _TOP_CANDIDATES = 3
 
 
-def _load_csv(data_path: pathlib.Path, name: str) -> list[dict[str, Any]]:
-    p = data_path / name
-    if not p.exists():
-        return []
-    with p.open() as fh:
-        return list(csv.DictReader(fh))
-
-
 def run_query(data_dir: str, schedule_dir: str, order_path: str) -> None:
     """Estimate feasibility and top vehicle assignments for a new order.
 
@@ -43,6 +35,7 @@ def run_query(data_dir: str, schedule_dir: str, order_path: str) -> None:
     from fl_op.solver.preprocessing import filter_feasible_vehicle_implement_pairs
 
     data_path = pathlib.Path(data_dir)
+    codec = get_codec(detect_format(data_path))
     sched_path = pathlib.Path(schedule_dir)
     ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%S")
     out_dir = DATA_ROOT / "query-contract" / ts
@@ -51,9 +44,9 @@ def run_query(data_dir: str, schedule_dir: str, order_path: str) -> None:
     with open(order_path) as fh:
         new_order = json.load(fh)
 
-    vehicles_raw = _load_csv(data_path, "vehicles.csv")
-    implements_raw = _load_csv(data_path, "implements.csv")
-    fields_raw = _load_csv(data_path, "fields.csv")
+    vehicles_raw = codec.read(locate_source(data_path, "vehicles.csv", codec))
+    implements_raw = codec.read(locate_source(data_path, "implements.csv", codec))
+    fields_raw = codec.read(locate_source(data_path, "fields.csv", codec))
 
     schedule_file = sched_path / "schedule.json"
     dispatch_packages: list[dict[str, Any]] = []
@@ -79,7 +72,7 @@ def run_query(data_dir: str, schedule_dir: str, order_path: str) -> None:
             "schema_version": ARTIFACT_SCHEMA_VERSION,
             "order_id": new_order.get("order_id"),
             "feasible": False,
-            "reason": "no_compatible_vehicle_implement_pair",
+            "reason_code": ReasonCode.NO_COMPATIBLE_BUNDLE.value,
             "candidates": [],
         }
     else:

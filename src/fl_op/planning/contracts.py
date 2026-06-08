@@ -15,17 +15,16 @@ def run_contracts_validate(persist: bool = False) -> bool:
 
     logger.info("Contract validation: %s", "OK" if report.ok else "FAILED")
     logger.info(
-        "%-18s %8s  rt  odcs  parsingFP        metaHash", "contract", "bindings"
+        "%-18s %8s  gen   parsingFP        metaHash", "contract", "bindings"
     )
     for c in report.contracts:
         logger.info(
-            "%-18s %8d  %s   %s   %s  %s",
+            "%-18s %8d  %s   %s  %s",
             c.contract_id,
             c.n_bindings,
-            "ok" if c.roundtrip_preserved else "NO",
-            "ok" if c.odcs_matches_avro else "NO",
-            c.avro_parsing_fingerprint[:12],
-            c.optimization_metadata_hash[:12],
+            "ok" if c.generation_ready else "NO",
+            c.avro_parsing_fingerprint[:12] if c.avro_parsing_fingerprint else "n/a         ",
+            c.optimization_metadata_hash[:12] if c.optimization_metadata_hash else "n/a         ",
         )
         for err in c.errors:
             logger.error("  %s: %s", c.contract_id, err)
@@ -36,8 +35,12 @@ def run_contracts_validate(persist: bool = False) -> bool:
     if persist and report.ok:
         fps = {
             c.contract_id: {
-                "avroParsingFingerprint": c.avro_parsing_fingerprint,
-                "optimizationMetadataHash": c.optimization_metadata_hash,
+                k: v
+                for k, v in {
+                    "avroParsingFingerprint": c.avro_parsing_fingerprint,
+                    "optimizationMetadataHash": c.optimization_metadata_hash,
+                }.items()
+                if v
             }
             for c in report.contracts
         }

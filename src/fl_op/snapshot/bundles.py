@@ -1,4 +1,4 @@
-"""Operational-bundle generation for the snapshot (spec 18.1 static filtering).
+"""Operational-bundle generation for the snapshot.
 
 Reuses the existing NumPy compatibility matrix to enumerate feasible
 (prime-mover, implement) pairs and materializes them as canonical

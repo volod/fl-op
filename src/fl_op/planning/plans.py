@@ -7,6 +7,7 @@ from typing import Optional
 
 from fl_op.adapters.ortools_periodic import OrToolsPeriodicAdapter
 from fl_op.canonical.enums import PlanningMode
+from fl_op.canonical.snapshot import PlanningSnapshot
 from fl_op.contracts.registry import FileRegistry
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
 from fl_op.core.paths import DATA_ROOT
@@ -16,10 +17,14 @@ from fl_op.snapshot.builder import SnapshotBuilder
 logger = logging.getLogger(__name__)
 
 
-def run_plan_periodic(data_dir: str) -> pathlib.Path:
-    """Build a periodic snapshot, solve via the periodic adapter, write the Plan."""
+def run_plan_periodic(
+    data_dir: str,
+    snapshot: Optional[PlanningSnapshot] = None,
+) -> pathlib.Path:
+    """Solve a periodic plan. Builds a snapshot from data_dir unless one is provided."""
     registry = FileRegistry()
-    snapshot = SnapshotBuilder(registry).build(data_dir, PlanningMode.PERIODIC)
+    if snapshot is None:
+        snapshot = SnapshotBuilder(registry).build(data_dir, PlanningMode.PERIODIC)
     profile = registry.get_profile("agricultural-custom-services")
     plan = OrToolsPeriodicAdapter().plan(snapshot, profile)
 

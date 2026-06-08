@@ -1,4 +1,4 @@
-"""Reproducible snapshot hashing (spec 17.3).
+"""Reproducible snapshot hashing.
 
 The hash covers the canonical content only: per-run identifiers, generation
 timestamp, and the non-canonical solver bridge payload are excluded. Rebuilding

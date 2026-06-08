@@ -2,7 +2,7 @@ extensionVersion: 0.1.0
 semanticModelRef: urn:xopt:model:agricultural-custom-services:0.1.0
 contracts:
   vehicles:
-    avro: avro/vehicles.avsc
+    avro: generated/avro/vehicles.avsc
     odcs: odcs/vehicles.odcs.yaml
     sourceFile: vehicles.csv
     sourceFormat: csv
@@ -10,9 +10,9 @@ contracts:
     assetRole: mobile-prime-mover
     fingerprints:
       avroParsingFingerprint: 01efad05ee8a13117dc7ef9e03696f063acde782e3f8ddd61ebb56a3d335f421
-      optimizationMetadataHash: cc4c0332789a1e674135e274d44361333250ae51cdaef5b5d2023e6d0f17feff
+      optimizationMetadataHash: 733f95509ac28aaa52a5c52104faf0bdbca97f91e685bea1d9a1e586fca07cf8
   implements:
-    avro: avro/implements.avsc
+    avro: generated/avro/implements.avsc
     odcs: odcs/implements.odcs.yaml
     sourceFile: implements.csv
     sourceFormat: csv
@@ -20,9 +20,9 @@ contracts:
     assetRole: implement
     fingerprints:
       avroParsingFingerprint: 5f840a05b595ceed0345e14af4cef069285961bc0f532143aeb44f70cd1e4efc
-      optimizationMetadataHash: 89c6a05fda95ac962bb4701735d660f2a41026f7cbaad2c4525ae734beaea994
+      optimizationMetadataHash: 8ca80b29bcfc51cb8bf4aa65697de3b1c0ced50ade8e0f8ce9cb493d87c30ffc
   operators:
-    avro: avro/operators.avsc
+    avro: generated/avro/operators.avsc
     odcs: odcs/operators.odcs.yaml
     sourceFile: operators.csv
     sourceFormat: csv
@@ -30,9 +30,9 @@ contracts:
     assetRole: operator
     fingerprints:
       avroParsingFingerprint: c063eb2e4b5e1f058c3e893baf5bc7846fba4f589c0bdc0621d4f0232f123e63
-      optimizationMetadataHash: fe1b347f8db6532aa6774d4b201da4cc98b64b69666989a0e76825eae2b3d12f
+      optimizationMetadataHash: ccdf124d7a4c49a1105ecfb077d50a05903361ea2ed16aec70eb934fbcb84ea4
   depots:
-    avro: avro/depots.avsc
+    avro: generated/avro/depots.avsc
     odcs: odcs/depots.odcs.yaml
     sourceFile: depots.csv
     sourceFormat: csv
@@ -40,43 +40,43 @@ contracts:
     assetRole: depot
     fingerprints:
       avroParsingFingerprint: fd656c426f3fbeadf7248d27dad6e804b24546783c3054bceeaeedb21c30b9b4
-      optimizationMetadataHash: 08613f5c86ea34049f6fda23e4953e05ef0d2ba09e7253043b094c4cb2859a29
+      optimizationMetadataHash: b61172590052297ec27137e2e9243042b2248ac1becb0666f3a0208b1a5a2352
   fields:
-    avro: avro/fields.avsc
+    avro: generated/avro/fields.avsc
     odcs: odcs/fields.odcs.yaml
     sourceFile: fields.csv
     sourceFormat: csv
     canonicalEntity: location
     fingerprints:
       avroParsingFingerprint: 2a4685bf3217a9da146dd25dd5aae3775bd4fe805883416bbd1fff6896dcf746
-      optimizationMetadataHash: 7a275d663b78087db1416a97b5846350bba8385b8d1342f23049d030ef600c54
+      optimizationMetadataHash: cdfd27ea713e78d2407f52d19bb83cdf8e1afdc1ac83097a7180f0336eee219f
   orders:
-    avro: avro/orders.avsc
+    avro: generated/avro/orders.avsc
     odcs: odcs/orders.odcs.yaml
     sourceFile: orders.csv
     sourceFormat: csv
     canonicalEntity: task
     fingerprints:
-      avroParsingFingerprint: d46ed76f638061731aa477ac5c4ba96a92dad2d060a0049c0cd5fbdb260592c5
-      optimizationMetadataHash: 8f5e224abfcdd48589ef4cc3ee65f2840ffc2df26ef9174d53ed0b2ea627b598
+      avroParsingFingerprint: 2fd8be6ff927640833bf932dd15f8370fd4ea2c8dc8968af290f4253fff44ced
+      optimizationMetadataHash: 146d32bf847dc13676c008520bce3693a9fc904502094ece85f02aa65e01f16f
   weather:
-    avro: avro/weather.avsc
+    avro: generated/avro/weather.avsc
     odcs: odcs/weather.odcs.yaml
     sourceFile: weather.json
     sourceFormat: json
     canonicalEntity: forecast
     fingerprints:
-      avroParsingFingerprint: 91b4da11a7206bdcedaf5d2316561a3e12bf4f24e2fbf4168a4ecb0ff8313079
-      optimizationMetadataHash: e2ff111f895d0031ebcfe2f68a09c12aa108278c9f55902f6d4e5b7812ea8d1a
+      avroParsingFingerprint: 05057d4e059617c578c0e3b2a35010246c56fda747a97405909491563448ac6c
+      optimizationMetadataHash: f2bae955f671493e43ddfcb9bd21cd85fb7081762b3d3ca88c71110d89822573
   execution-events:
-    avro: avro/execution-events.avsc
-    odcs: null
+    avro: generated/avro/execution-events.avsc
+    odcs: odcs/execution-events.odcs.yaml
     sourceFile: events.jsonl
     sourceFormat: jsonl
     canonicalEntity: execution-event
     fingerprints:
-      avroParsingFingerprint: 03e42cca84d375f2bcc8a9189c5df168ead8ac9d15138b4d8ea17bbd9bff600c
-      optimizationMetadataHash: f197ea62178253ab60ea52a2fe572f5af7fccf9dccb560d1b1d1debc38a19832
+      avroParsingFingerprint: ca78597cda1433a55cb6efddd2ee21b820aec9a6645052f87f5a8a20224655b2
+      optimizationMetadataHash: fda6b2efa7a78a44ab9ad99fbf60986095974e1c89de6c90fc80acf1e0a18077
 profiles:
   agricultural-custom-services:
     path: profiles/agricultural-custom-services.profile.yaml

@@ -1,4 +1,4 @@
-"""Solver-neutral canonical planning model (spec 4.1, 11).
+"""Solver-neutral canonical planning model.
 
 Source-system vocabulary (vehicle, implement, order) is mapped into these stable
 abstractions so that no optimization logic depends on source field names.

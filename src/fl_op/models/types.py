@@ -51,7 +51,7 @@ class DispatchPackage(TypedDict):
 class InfeasibleOrder(TypedDict):
     order_id: str
     cluster_id: str
-    # machine-readable reason tag, e.g. "no_compatible_vehicle", "solver_timeout"
-    reason: str
+    # canonical ReasonCode value, e.g. "NO_COMPATIBLE_BUNDLE"
+    reason_code: str
     # human-readable description
     detail: str

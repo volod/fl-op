@@ -1,4 +1,4 @@
-"""OR-Tools periodic-planning adapter (spec 20).
+"""OR-Tools periodic-planning adapter.
 
 Wraps the existing solve chain unchanged: it consumes a snapshot's solver payload
 and emits a canonical periodic Plan with assignments and normalized unassigned

@@ -1,4 +1,4 @@
-"""Canonical plan-output contract (spec 22)."""
+"""Canonical plan-output contract."""
 
 from datetime import datetime
 from typing import Any, Optional
@@ -14,7 +14,7 @@ from fl_op.canonical.enums import PlanningMode, PlanStatus, ReasonCode, Reservat
 
 
 class Assignment(BaseModel):
-    """A task assigned to a bundle in a plan (spec 22.2)."""
+    """A task assigned to a bundle in a plan."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -32,7 +32,7 @@ class Assignment(BaseModel):
     expected_revenue_eur: float = 0.0
     expected_cost_eur: float = 0.0
     expected_margin_eur: float = 0.0
-    # Plan-instability tracking (spec 19.9).
+    # Plan-instability tracking.
     previous_bundle_id: Optional[str] = None
     previous_start_time: Optional[datetime] = None
     change_penalty: int = 0
@@ -40,7 +40,7 @@ class Assignment(BaseModel):
 
 
 class UnassignedTask(BaseModel):
-    """A task that could not be assigned, with a normalized reason (spec 22.3)."""
+    """A task that could not be assigned, with a normalized reason."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -52,7 +52,7 @@ class UnassignedTask(BaseModel):
 
 
 class MaterialReservation(BaseModel):
-    """A material reservation produced by a plan (spec 22.4)."""
+    """A material reservation produced by a plan."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -68,10 +68,10 @@ class MaterialReservation(BaseModel):
 
 
 class Plan(BaseModel):
-    """A normalized dispatch plan / revision envelope (spec 22.1).
+    """A normalized dispatch plan / revision envelope.
 
     A rolling-plan update creates a new immutable revision; published revisions
-    are never mutated (spec 22.5).
+    are never mutated.
     """
 
     model_config = ConfigDict(frozen=True)

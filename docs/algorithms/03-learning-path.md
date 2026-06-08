@@ -209,12 +209,12 @@ Time windows are enforced via a time dimension with `CumulVar` bounds.
         routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
     )
     search_params.time_limit.seconds = CLUSTER_SOLVE_TIME_LIMIT_S
-    search_params.sat_parameters.num_workers = 1  # see ADR-010
+    search_params.sat_parameters.num_workers = 1
 
 **Why num_workers=1?**: OR-Tools 9.15+ uses CP-SAT as the internal sub-solver for
 routing. The parallelism knob moved from `search_params.num_search_workers` to
 `search_params.sat_parameters.num_workers`. Setting it to 1 prevents thread contention
-when many cluster workers run in parallel across CPU cores. See ADR-010.
+when many cluster workers run in parallel across CPU cores.
 
 ---
 
@@ -264,7 +264,7 @@ https://docs.python.org/3/library/multiprocessing.html
 **Fork vs spawn**: `fork` copies the parent process, including all C++ state allocated
 by OR-Tools. `spawn` starts a clean interpreter. For OR-Tools specifically, `fork` can
 cause silent crashes or deadlocks because C++ global state (thread handles, mutexes)
-is duplicated in an inconsistent state. See ADR-009.
+is duplicated in an inconsistent state.
 
 ### Task isolation with maxtasksperchild=1
 
@@ -368,6 +368,5 @@ For a reader with a math background who wants to understand fl-op end-to-end in 
 | 4 | NumPy broadcasting | VanderPlas Ch. 2 |
 | 4 | fl-op source code | src/fl_op/solver/ top-to-bottom |
 
-After completing this path, the ADRs in `docs/adr/` will read as engineering records
-of specific decisions within a well-understood design space, rather than as opaque
-choices.
+After completing this path, read [`../current-implementation.md`](../current-implementation.md)
+and the source modules under `src/fl_op/solver/` to connect the math to the running code.

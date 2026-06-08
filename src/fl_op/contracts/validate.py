@@ -1,9 +1,10 @@
-"""Contract-suite validation orchestration (spec 29.1).
+"""Contract-suite validation orchestration.
 
 Validates every registered contract:
-  - Avro schema parses and round-trips with x-optimization metadata preserved;
-  - dual fingerprints are computed;
-  - ODCS bindings match the Avro bindings field-for-field;
+  - Generated Avro schema parses cleanly (structural integrity);
+  - avroParsingFingerprint matches registry;
+  - ODCS xOptimization metadata is complete (generation_ready check for Avro);
+  - optimizationMetadataHash computed from ODCS matches registry;
   - the metadata-loss guard passes;
   - the optimization profile loads and its enforced constraints are known.
 
@@ -15,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from fl_op.contracts.registry import FileRegistry, MetadataLossError
+from fl_op.contracts.schema_gen import check_generation
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +28,12 @@ class ContractReport:
     n_bindings: int
     avro_parsing_fingerprint: str
     optimization_metadata_hash: str
-    roundtrip_preserved: bool
-    odcs_matches_avro: bool
+    generation_ready: bool
     errors: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
-        return self.roundtrip_preserved and self.odcs_matches_avro and not self.errors
+        return self.generation_ready and not self.errors
 
 
 @dataclass
@@ -47,40 +48,36 @@ class SuiteReport:
         return all(c.ok for c in self.contracts) and self.profile_ok
 
 
-def _roundtrip_preserved(registry: FileRegistry, contract_id: str) -> bool:
-    """True if every x-optimization block survives a fastavro parse round-trip."""
-    from fl_op.contracts.fingerprint import collect_xopt_blocks
-
-    avro = registry.get_avro(contract_id)
-    before = collect_xopt_blocks(avro.schema_json)
-    after = collect_xopt_blocks(avro.roundtrip_metadata())
-    return before == after
-
-
 def validate_contract(registry: FileRegistry, contract_id: str) -> ContractReport:
-    avro = registry.get_avro(contract_id)
-    fps = avro.fingerprints
     errors: list[str] = []
+    avro_fp = ""
+    meta_hash = ""
+    avro_name = contract_id
+    n_bindings = 0
+    generation_ready = True
 
-    try:
-        roundtrip_ok = _roundtrip_preserved(registry, contract_id)
-    except Exception as exc:  # noqa: BLE001 - surface any parse failure as an error
-        roundtrip_ok = False
-        errors.append(f"roundtrip failed: {exc}")
+    entry = registry.get_entry(contract_id)
+
+    if entry.avro_ref:
+        try:
+            avro = registry.get_avro(contract_id)
+            avro_name = avro.name
+            n_bindings = len(avro.fields)
+            avro_fp = avro.avro_parsing_fingerprint
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Avro load failed: {exc}")
 
     odcs = registry.get_odcs(contract_id)
-    if odcs is None:
-        odcs_ok = True
-    else:
-        avro_map = {b.source_field: b.binding for b in avro.bindings}
-        odcs_map = odcs.binding_map()
-        odcs_ok = avro_map == odcs_map
-        if not odcs_ok:
-            mismatched = {
-                k for k in set(avro_map) | set(odcs_map)
-                if avro_map.get(k) != odcs_map.get(k)
-            }
-            errors.append(f"ODCS/Avro binding mismatch on: {sorted(mismatched)}")
+    if odcs is not None:
+        from fl_op.contracts.fingerprint import odcs_metadata_hash
+        meta_hash = odcs_metadata_hash(odcs.doc)
+        n_bindings = len(odcs.bindings)
+
+        gen_report = check_generation(odcs.doc, contract_id, "avro")
+        if not gen_report.ok:
+            generation_ready = False
+            for err in gen_report.errors:
+                errors.append(f"generation check: {err}")
 
     try:
         registry.verify_no_metadata_loss(contract_id)
@@ -89,12 +86,11 @@ def validate_contract(registry: FileRegistry, contract_id: str) -> ContractRepor
 
     return ContractReport(
         contract_id=contract_id,
-        avro_name=avro.name,
-        n_bindings=len(avro.bindings),
-        avro_parsing_fingerprint=fps["avroParsingFingerprint"],
-        optimization_metadata_hash=fps["optimizationMetadataHash"],
-        roundtrip_preserved=roundtrip_ok,
-        odcs_matches_avro=odcs_ok,
+        avro_name=avro_name,
+        n_bindings=n_bindings,
+        avro_parsing_fingerprint=avro_fp,
+        optimization_metadata_hash=meta_hash,
+        generation_ready=generation_ready,
         errors=errors,
     )
 
@@ -112,7 +108,6 @@ def validate_suite(
 
     try:
         profile = registry.get_profile(profile_id)
-        # Every input contract referenced by the profile must be registered.
         known = set(registry.list_contracts())
         missing = [c for c in profile.inputContracts if c not in known]
         if missing:

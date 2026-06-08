@@ -1,4 +1,4 @@
-"""OR-Tools rolling-dispatch adapter (spec 19), Python-native (no Timefold/JVM).
+"""OR-Tools rolling-dispatch adapter.
 
 The adapter owns the SPI surface. Rolling-specific compile and normalization
 logic lives in ``fl_op.adapters.rolling`` helper modules.

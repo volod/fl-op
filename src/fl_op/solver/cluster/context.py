@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from fl_op.canonical.enums import ReasonCode
 from fl_op.solver.cluster.infeasible import mark_all_infeasible
 
 
@@ -46,20 +47,20 @@ def prepare_cluster_context(
     cluster_orders = [order_map[oid] for oid in order_ids if oid in order_map]
     if not cluster_orders:
         return None, mark_all_infeasible(
-            cluster_dict, "no_order_data", "orders not found in dataset"
+            cluster_dict, ReasonCode.UNKNOWN, "orders not found in dataset"
         )
 
     depot = depot_map.get(depot_id)
     if depot is None:
         return None, mark_all_infeasible(
-            cluster_dict, "no_depot_data", f"depot {depot_id} not found"
+            cluster_dict, ReasonCode.LOCATION_DATA_INVALID, f"depot {depot_id} not found"
         )
 
     routing_vehicles = _routing_vehicles(allocated, vehicle_map, implement_map)
     if not routing_vehicles:
         return None, mark_all_infeasible(
             cluster_dict,
-            "no_allocated_vehicles",
+            ReasonCode.NO_COMPATIBLE_BUNDLE,
             "allocation pre-pass found no feasible pairs",
         )
 

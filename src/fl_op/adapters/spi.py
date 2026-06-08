@@ -1,4 +1,4 @@
-"""Solver-adapter service-provider interface (spec 21).
+"""Solver-adapter service-provider interface.
 
 Every adapter compiles an immutable snapshot into a solver input, solves, and
 normalizes the result into a canonical Plan. Capability validation ensures a
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class AdapterManifest(BaseModel):
-    """Published capabilities of a solver adapter (spec 21.1)."""
+    """Published capabilities of a solver adapter."""
 
     adapter_id: str
     adapter_version: str
@@ -31,7 +31,7 @@ class AdapterManifest(BaseModel):
 
 
 class ValidationReport(BaseModel):
-    """Result of validating a profile against an adapter's capabilities (spec 21.2)."""
+    """Result of validating a profile against an adapter's capabilities."""
 
     ok: bool
     unsupported_constraints: list[str] = Field(default_factory=list)
@@ -45,7 +45,7 @@ class AdapterHealth(BaseModel):
 
 @runtime_checkable
 class SolverAdapter(Protocol):
-    """The adapter contract every solver integration implements (spec 21)."""
+    """The adapter contract every solver integration implements."""
 
     @property
     def manifest(self) -> AdapterManifest: ...

@@ -1,6 +1,6 @@
 """Synthetic fleet dataset generator entry point.
 
-Orchestrates entity generators and writes CSVs + JSONs to
+Orchestrates entity generators and writes datasets to
 $DATA_DIR/generate-data/<ISO-timestamp>/.
 
 Sampling: NumPy-vectorised. Geographic placement: scipy BallTree haversine.
@@ -13,13 +13,16 @@ from typing import Any
 
 import numpy as np
 
-from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
+from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION, DEFAULT_DATA_FORMAT
 from fl_op.core.paths import DATA_ROOT
 from fl_op.data.field_order_entities import _generate_fields, _generate_orders_and_contracts, _generate_weather
 from fl_op.data.fleet_entities import _generate_depots, _generate_implements, _generate_operators, _generate_vehicles
-from fl_op.data.io import _load_csv_or_empty, _merge_real_into_synthetic, _write_csv, _write_json
+from fl_op.data.io import _load_csv_or_empty, _merge_real_into_synthetic, _write_json
+from fl_op.io import get_codec
 
 logger = logging.getLogger(__name__)
+
+_TABULAR_DATASETS = ["depots", "vehicles", "implements", "operators", "fields", "orders"]
 
 
 def run_generate(
@@ -29,10 +32,13 @@ def run_generate(
     n_depots: int,
     seed: int | None,
     data_path: str | None,
+    fmt: str = DEFAULT_DATA_FORMAT,
 ) -> None:
     """Generate synthetic (or augmented real) fleet dataset.
 
     Output directory: $DATA_DIR/generate-data/<ISO-timestamp>/
+    Tabular datasets are written in the requested format (avro, csv, parquet).
+    JSON datasets (contracts, weather) are always written as JSON.
     """
     rng = np.random.default_rng(seed)
     now = datetime.now(tz=timezone.utc)
@@ -40,7 +46,9 @@ def run_generate(
 
     out_dir = DATA_ROOT / "generate-data" / ts
     out_dir.mkdir(parents=True, exist_ok=True)
-    logger.info("Writing dataset to %s", out_dir)
+    logger.info("Writing dataset to %s (format: %s)", out_dir, fmt)
+
+    codec = get_codec(fmt)
 
     depots = _generate_depots(rng, n_depots)
     vehicles = _generate_vehicles(rng, n_vehicles, depots)
@@ -67,12 +75,12 @@ def run_generate(
         if real_orders:
             orders = _merge_real_into_synthetic(real_orders, orders, "order_id")
 
-    _write_csv(depots, out_dir / "depots.csv")
-    _write_csv(vehicles, out_dir / "vehicles.csv")
-    _write_csv(implements, out_dir / "implements.csv")
-    _write_csv(operators, out_dir / "operators.csv")
-    _write_csv(fields, out_dir / "fields.csv")
-    _write_csv(orders, out_dir / "orders.csv")
+    for name, records in zip(
+        _TABULAR_DATASETS,
+        [depots, vehicles, implements, operators, fields, orders],
+    ):
+        codec.write(records, out_dir / f"{name}{codec.extension}")
+
     _write_json(contracts, out_dir / "contracts.json")
     _write_json(weather, out_dir / "weather.json")
 
@@ -81,6 +89,7 @@ def run_generate(
         "run_metadata": {
             "timestamp": ts,
             "seed": seed,
+            "data_format": fmt,
             "n_vehicles": len(vehicles),
             "n_implements": len(implements),
             "n_orders": len(orders),

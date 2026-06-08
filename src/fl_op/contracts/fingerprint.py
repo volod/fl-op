@@ -1,21 +1,18 @@
-"""Dual fingerprints for Avro schemas (spec 9.5).
+"""Dual fingerprints for the contract layer.
 
 Two independent hashes are maintained so that a change to optimization semantics
 is detectable even when the Avro serialization structure is unchanged, and vice
 versa:
 
-  avroParsingFingerprint  - identifies serialization-relevant structure. Computed
-                            over the Avro Parsing Canonical Form, which by
-                            definition excludes docs, defaults, aliases, and any
-                            unknown properties such as `x-optimization`.
+  avroParsingFingerprint   - identifies serialization-relevant structure. Computed
+                             over the Avro Parsing Canonical Form, which by
+                             definition excludes docs, defaults, aliases, and any
+                             unknown properties. Source: generated Avro schema.
 
-  optimizationMetadataHash - identifies the normalized `x-optimization` metadata.
-                            Computed directly from the raw schema JSON so that it
-                            is independent of any Avro-library preservation
-                            behavior.
-
-Verified against fastavro: `to_parsing_canonical_form` strips `x-optimization`,
-so mutating a binding's `canonicalUnit` changes only the metadata hash.
+  optimizationMetadataHash - identifies the normalized xOptimization metadata.
+                             Computed directly from the ODCS document so that it
+                             is independent of any Avro-library preservation
+                             behavior. Source: ODCS contract.
 """
 
 import hashlib
@@ -24,7 +21,7 @@ from typing import Any
 
 import fastavro
 
-from fl_op.core.constants import XOPT_NAMESPACE
+from fl_op.core.constants import XOPT_ODCS_PROPERTY
 
 
 def _sha256_hex(payload: str) -> str:
@@ -37,22 +34,34 @@ def avro_parsing_fingerprint(schema_json: dict[str, Any]) -> str:
     return _sha256_hex(canonical)
 
 
-def collect_xopt_blocks(schema_json: dict[str, Any]) -> dict[str, Any]:
-    """Collect every x-optimization block from a record schema, keyed by location.
+def _find_odcs_property(custom_properties: Any, name: str) -> Any:
+    if not isinstance(custom_properties, list):
+        return None
+    for item in custom_properties:
+        if isinstance(item, dict) and item.get("property") == name:
+            return item.get("value")
+    return None
 
-    Keys are "record" for the record-level block and "field:<name>" for each
+
+def _collect_odcs_xopt_blocks(odcs_doc: dict[str, Any]) -> dict[str, Any]:
+    """Collect every xOptimization block from an ODCS document, keyed by location.
+
+    Keys are "contract" for the root-level block and "field:<name>" for each
     field-level block. Returns only blocks that are present.
     """
     blocks: dict[str, Any] = {}
-    record_block = schema_json.get(XOPT_NAMESPACE)
-    if isinstance(record_block, dict):
-        blocks["record"] = record_block
-    for field in schema_json.get("fields", []):
-        if not isinstance(field, dict):
+    root_xopt = _find_odcs_property(odcs_doc.get("customProperties"), XOPT_ODCS_PROPERTY)
+    if isinstance(root_xopt, dict):
+        blocks["contract"] = root_xopt
+    for schema_obj in odcs_doc.get("schema", []):
+        if not isinstance(schema_obj, dict):
             continue
-        field_block = field.get(XOPT_NAMESPACE)
-        if isinstance(field_block, dict):
-            blocks[f"field:{field['name']}"] = field_block
+        for prop in schema_obj.get("properties", []):
+            if not isinstance(prop, dict):
+                continue
+            field_xopt = _find_odcs_property(prop.get("customProperties"), XOPT_ODCS_PROPERTY)
+            if isinstance(field_xopt, dict):
+                blocks[f"field:{prop['name']}"] = field_xopt
     return blocks
 
 
@@ -65,17 +74,9 @@ def _normalize(value: Any) -> Any:
     return value
 
 
-def optimization_metadata_hash(schema_json: dict[str, Any]) -> str:
-    """SHA-256 over the normalized x-optimization metadata of the schema."""
-    blocks = collect_xopt_blocks(schema_json)
+def odcs_metadata_hash(odcs_doc: dict[str, Any]) -> str:
+    """SHA-256 over the normalized xOptimization metadata of an ODCS document."""
+    blocks = _collect_odcs_xopt_blocks(odcs_doc)
     normalized = _normalize(blocks)
     canonical = json.dumps(normalized, separators=(",", ":"), sort_keys=True)
     return _sha256_hex(canonical)
-
-
-def both_fingerprints(schema_json: dict[str, Any]) -> dict[str, str]:
-    """Return both fingerprints as a dict ready to store in the registry."""
-    return {
-        "avroParsingFingerprint": avro_parsing_fingerprint(schema_json),
-        "optimizationMetadataHash": optimization_metadata_hash(schema_json),
-    }

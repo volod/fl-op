@@ -51,7 +51,7 @@ def build_schedule_stats(artifacts: SolveArtifacts) -> ScheduleStats:
     operator_counts = Counter(d.get("operator_id", "unknown") for d in schedule)
     cluster_counts = Counter(d.get("cluster_id", "unknown") for d in schedule)
     infeasible_reasons = Counter(
-        item.get("reason", "unknown") for item in infeasible
+        item.get("reason_code", "UNKNOWN") for item in infeasible
     )
 
     margin_by_cluster: dict[str, float] = defaultdict(float)
@@ -112,4 +112,3 @@ def _parse_dt(value: str | None) -> datetime | None:
 
 def _average(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
-

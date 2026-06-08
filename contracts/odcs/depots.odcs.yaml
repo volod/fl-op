@@ -20,7 +20,7 @@ customProperties:
       extensionVersion: 0.1.0
       semanticModelRef: urn:xopt:model:agricultural-custom-services:0.1.0
       dataProductRole: depots
-      avroSchemaRef: depots.avsc
+      assetRole: depot
       mappingVersion: 1.0.0
       permittedPlanningUses: [periodic-planning, rolling-dispatch]
       defaultQualityPolicyRef: dq://depots/master/v1
@@ -28,6 +28,20 @@ schema:
   - name: depots
     logicalType: object
     physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.depots
+            recordName: Depot
+            recordDoc: "Depot / loading station providing location and material inventory. Source dataset: depots.csv."
+          proto:
+            package: org.example.agri.depots
+            messageName: Depot
+            syntax: proto3
+          es:
+            indexName: depots
+            dynamic: strict
     properties:
       - name: depot_id
         logicalType: string
@@ -36,7 +50,10 @@ schema:
         description: Stable identifier of the depot.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:location-id, binding: location.locationId}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:identity:location-id, binding: location.locationId, planningUse: [identity]}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
       - name: name
         logicalType: string
         physicalType: string
@@ -44,7 +61,11 @@ schema:
         description: Human-readable depot name.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:display-name, binding: location.name}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:display-name, binding: location.name, planningUse: [display]}
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 2}
       - name: lat
         logicalType: number
         physicalType: double
@@ -52,7 +73,10 @@ schema:
         description: Depot latitude.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:latitude, binding: location.lat, canonicalUnit: deg, quantityKind: angle, missingValuePolicy: reject-for-planning}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:latitude, binding: location.lat, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial], missingValuePolicy: reject-for-planning}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
       - name: lon
         logicalType: number
         physicalType: double
@@ -60,7 +84,10 @@ schema:
         description: Depot longitude.
         customProperties:
           - property: xOptimization
-            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:longitude, binding: location.lon, canonicalUnit: deg, quantityKind: angle, missingValuePolicy: reject-for-planning}
+            value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:attribute:longitude, binding: location.lon, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial], missingValuePolicy: reject-for-planning}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
       - name: fuel_available_l
         logicalType: number
         physicalType: double
@@ -69,6 +96,9 @@ schema:
         customProperties:
           - property: xOptimization
             value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:inventory:fuel, binding: location.inventory.fuel, canonicalUnit: L, quantityKind: volume, planningUse: [material-availability], missingValuePolicy: fallback-to-conservative-value}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
       - name: fertilizer_available_kg
         logicalType: number
         physicalType: double
@@ -77,3 +107,6 @@ schema:
         customProperties:
           - property: xOptimization
             value: {extensionVersion: 0.1.0, semanticTerm: urn:xopt:inventory:fertilizer, binding: location.inventory.fertilizer, canonicalUnit: kg, quantityKind: mass, planningUse: [material-availability], missingValuePolicy: fallback-to-conservative-value}
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}

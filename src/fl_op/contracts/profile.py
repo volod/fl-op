@@ -1,4 +1,4 @@
-"""OptimizationProfile loader and validator (spec 15, 16).
+"""OptimizationProfile loader and validator.
 
 The profile is a declarative document describing input contracts, bundle
 generation roles, constraints, and a lexicographic objective hierarchy. It is

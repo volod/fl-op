@@ -4,9 +4,9 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from fl_op.adapters.reason_codes import to_reason_code
 from fl_op.adapters.spi import AdapterManifest, ValidationReport
 from fl_op.canonical.bundle import compute_bundle_id
+from fl_op.canonical.enums import ReasonCode
 from fl_op.canonical.plan import Assignment, UnassignedTask
 from fl_op.core.constants import MAPPING_VERSION
 
@@ -23,7 +23,7 @@ def _parse_ts(value: str) -> datetime:
 
 
 def dispatch_to_assignment(dp: dict[str, Any]) -> Assignment:
-    """Convert a legacy DispatchPackage dict into a canonical Assignment."""
+    """Convert a solver dispatch package into a canonical Assignment."""
     vehicle_id = dp.get("vehicle_id", "")
     implement_id = dp.get("implement_id", "")
     operator_id = dp.get("operator_id", "")
@@ -42,13 +42,15 @@ def dispatch_to_assignment(dp: dict[str, Any]) -> Assignment:
 
 
 def infeasible_to_unassigned(inf: dict[str, Any]) -> UnassignedTask:
-    """Convert a legacy InfeasibleOrder dict into a canonical UnassignedTask."""
-    reason = inf.get("reason", "unknown")
+    """Convert a solver infeasibility record into a canonical UnassignedTask."""
+    reason_code = ReasonCode(inf.get("reason_code", ReasonCode.UNKNOWN.value))
     return UnassignedTask(
         task_id=inf.get("order_id", ""),
-        reason_code=to_reason_code(reason),
-        details={"legacy_reason": reason, "detail": inf.get("detail", ""),
-                 "cluster_id": inf.get("cluster_id", "")},
+        reason_code=reason_code,
+        details={
+            "detail": inf.get("detail", ""),
+            "cluster_id": inf.get("cluster_id", ""),
+        },
         explanation_ref=f"explain://unassigned/{inf.get('order_id', '')}",
     )
 
@@ -57,7 +59,7 @@ def validate_profile_against_features(
     profile: "OptimizationProfile",
     supported_constraints: set[str],
 ) -> ValidationReport:
-    """A profile may only run if every enforced constraint is supported (spec 21.2)."""
+    """A profile may only run if every enforced constraint is supported."""
     unsupported = [
         c.id for c in profile.constraints
         if c.enforced and c.id not in supported_constraints

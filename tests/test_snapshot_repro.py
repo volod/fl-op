@@ -1,13 +1,13 @@
-"""Snapshot reproducibility, hash exclusions, and the golden-row solver bridge (spec 17.3, 4.3)."""
+"""Snapshot reproducibility, hash exclusions, and solver-payload projection."""
 
 import ast
-import csv
 import pathlib
 from datetime import datetime, timezone
 
 import pytest
 
 from fl_op.canonical.enums import PlanningMode
+from fl_op.io import detect_format, get_codec, locate_source
 from fl_op.snapshot import SnapshotBuilder
 
 _EFFECTIVE = datetime(2026, 6, 5, tzinfo=timezone.utc)
@@ -59,26 +59,20 @@ def _norm(name: str, row: dict, drop_unbound: bool = True) -> dict:
     return out
 
 
-def test_golden_rows_match_csv(builder: SnapshotBuilder, dataset_dir: pathlib.Path) -> None:
-    """Reconstructed solver rows must equal CSV-loaded rows on every bound field."""
+def test_golden_rows_match_source(builder: SnapshotBuilder, dataset_dir: pathlib.Path) -> None:
+    """Reconstructed solver rows must equal source-loaded rows on every bound field."""
     snap = builder.build(dataset_dir, PlanningMode.PERIODIC, effective_at=_EFFECTIVE)
 
-    datasets = {
-        "vehicles": "vehicles.csv",
-        "implements": "implements.csv",
-        "orders": "orders.csv",
-        "fields": "fields.csv",
-        "depots": "depots.csv",
-        "operators": "operators.csv",
-    }
-    for dataset, csvname in datasets.items():
-        with (dataset_dir / csvname).open() as fh:
-            csv_rows = {
-                list(r.values())[0]: _norm(dataset, r) for r in csv.DictReader(fh)
-            }
+    codec = get_codec(detect_format(dataset_dir))
+    dataset_names = ("vehicles", "implements", "orders", "fields", "depots", "operators")
+    for dataset in dataset_names:
+        source_rows = {
+            list(r.values())[0]: _norm(dataset, r)
+            for r in codec.read(locate_source(dataset_dir, f"{dataset}.csv", codec))
+        }
         for prow in snap.solver_payload[dataset]:
             rid = list(prow.values())[0]
-            crow = csv_rows[rid]
+            crow = source_rows[rid]
             pnorm = _norm(dataset, {k: ("" if v is None else v) for k, v in prow.items()})
             for key, pval in pnorm.items():
                 assert pval == crow.get(key), f"{dataset}/{rid}/{key}: {pval!r} != {crow.get(key)!r}"

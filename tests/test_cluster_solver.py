@@ -10,7 +10,7 @@ from fl_op.solver.cluster_solver import solve_cluster
 
 
 # ---------------------------------------------------------------------------
-# Minimal data builders (raw dicts, matching CSV-loaded format)
+# Minimal data builders (raw dicts, matching codec-loaded source rows)
 # ---------------------------------------------------------------------------
 
 
@@ -109,7 +109,7 @@ class TestReturnTypeContract:
 
 
 class TestEarlyInfeasibilityPaths:
-    def test_no_allocated_vehicles_marks_infeasible(self):
+    def test_no_allocated_resources_marks_infeasible(self):
         cd = _cluster(order_ids=["o0"], allocated={})
         orders = [_order("o0")]
         dispatch, infeasible = solve_cluster(
@@ -119,7 +119,7 @@ class TestEarlyInfeasibilityPaths:
         assert dispatch == []
         assert len(infeasible) == 1
         assert infeasible[0]["order_id"] == "o0"
-        assert infeasible[0]["reason"] == "no_allocated_vehicles"
+        assert infeasible[0]["reason_code"] == "NO_COMPATIBLE_BUNDLE"
 
     def test_missing_depot_marks_infeasible(self):
         cd = _cluster(depot_id="ghost", order_ids=["o0"], allocated={"v0": ["i0"]})
@@ -130,7 +130,7 @@ class TestEarlyInfeasibilityPaths:
             {}, {"v0": 0}, {"i0": 0},
         )
         assert dispatch == []
-        assert any(i["reason"] == "no_depot_data" for i in infeasible)
+        assert any(i["reason_code"] == "LOCATION_DATA_INVALID" for i in infeasible)
 
     def test_order_not_in_data_marks_infeasible(self):
         cd = _cluster(order_ids=["o_missing"], allocated={"v0": ["i0"]})
@@ -141,7 +141,7 @@ class TestEarlyInfeasibilityPaths:
             {}, {"v0": 0}, {"i0": 0},
         )
         assert dispatch == []
-        assert any(i["reason"] == "no_order_data" for i in infeasible)
+        assert any(i["reason_code"] == "UNKNOWN" for i in infeasible)
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +157,7 @@ class TestInfeasibleSchema:
         for item in infeasible:
             assert "order_id" in item, "infeasible item missing order_id"
             assert "cluster_id" in item, "infeasible item missing cluster_id"
-            assert "reason" in item, "infeasible item missing reason"
+            assert "reason_code" in item, "infeasible item missing reason_code"
             assert "detail" in item, "infeasible item missing detail"
 
     def test_infeasible_cluster_id_matches(self):
@@ -226,4 +226,4 @@ class TestSolverIntegration:
 
         assert {d["order_id"] for d in dispatch} == {"o_ok"}
         assert {i["order_id"] for i in infeasible} == {"o_late"}
-        assert infeasible[0]["reason"] == "prize_collecting_unserved"
+        assert infeasible[0]["reason_code"] == "OPTIMIZATION_TRADEOFF"

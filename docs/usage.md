@@ -2,8 +2,8 @@
 
 Detailed command-by-command walkthrough for the fl-op CLI. For a high-level
 overview and Quick Start, see the top-level [`README.md`](../README.md). For the
-declarative data-contract architecture, see
-[`docs/design/data-contract-platform.md`](design/data-contract-platform.md).
+current pipeline architecture, see
+[`docs/current-implementation.md`](current-implementation.md).
 
 All commands accept `--data latest` / `--schedule latest` to pick up the most
 recent run automatically. Every run writes to `.data/<method>/<timestamp>/` and
@@ -40,10 +40,14 @@ For large-scale runs, pass the desired counts explicitly:
 Output written to `.data/generate-data/<timestamp>/`:
 
 ```
-depots.csv         implements.csv    operators.csv
-fields.csv         orders.csv        vehicles.csv
+depots.avro        implements.avro   operators.avro
+fields.avro        orders.avro       vehicles.avro
 contracts.json     weather.json      metadata.json
 ```
+
+The default format is avro. Pass `--format csv` or `--format parquet` to
+generate a different format. The format is recorded in `metadata.json` and
+auto-detected by downstream commands (`solve`, `snapshot build`, etc.).
 
 To load real fleet data instead of synthetic:
 
@@ -82,7 +86,7 @@ Improvement:  -39040.54 EUR
 Total fuel:   6905.8 L
 
 Infeasibility reasons:
-  no_allocated_vehicles: 3
+  NO_COMPATIBLE_BUNDLE: 3
 ```
 
 Output written to `.data/solve/<timestamp>/`:
@@ -124,7 +128,7 @@ infeasible_orders.json # orders that could not be assigned with reason codes
   "solver_improvement_eur": -39040.54,
   "total_fuel_l": 6905.79,
   "total_fertilizer_kg": 1240.50,
-  "infeasibility_reasons": {"no_allocated_vehicles": 3}
+  "infeasibility_reasons": {"NO_COMPATIBLE_BUNDLE": 3}
 }
 ```
 
@@ -228,17 +232,28 @@ Response in under 5 seconds at production scale. No solver call involved.
 
 ## Declarative data-contract layer (batch + stream)
 
-On top of the solver, fl-op provides a solver-neutral data-contract platform: a
-declarative Avro + ODCS contract with `x-optimization` bindings maps governed
-source fields into stable canonical abstractions (`Asset`, `Capability`, `Task`,
+On top of the solver, fl-op provides a solver-neutral data-contract platform.
+ODCS contracts are the single source of truth for all semantic metadata (field
+bindings, canonical units, planning use, quality policies). Avro, Protobuf, and
+Elasticsearch schemas are generated from ODCS and carry no embedded semantic
+blocks. The mapping engine reads ODCS bindings to translate governed source
+fields into stable canonical abstractions (`Asset`, `Capability`, `Task`,
 `OperationalBundle`, ...), builds an immutable, reproducibly-hashed planning
 snapshot, and optimizes it in both batch (periodic) and stream (rolling) mode.
-See [`docs/design/data-contract-platform.md`](design/data-contract-platform.md).
+See [`docs/current-implementation.md`](current-implementation.md).
 
 ```bash
-# Validate the contract suite: metadata round-trip, dual fingerprints,
-# and field-for-field ODCS/Avro binding agreement.
+# Check ODCS contracts have complete generation hints for a given format.
+.venv/bin/fl-op contracts check-generation --format avro   # or proto, es, parquet
+# or: make check-gen
+
+# Generate physical schemas from ODCS contracts (output to contracts/generated/).
+.venv/bin/fl-op contracts generate --format avro            # or proto, es, parquet
+# or: make contracts-gen   (generates all four formats)
+
+# Validate the contract suite: dual fingerprints, generation-ready check.
 .venv/bin/fl-op contracts validate
+# or: make contracts
 
 # Build an immutable, reproducibly-hashed planning snapshot from source data.
 .venv/bin/fl-op snapshot build --data latest --mode periodic
@@ -255,10 +270,10 @@ See [`docs/design/data-contract-platform.md`](design/data-contract-platform.md).
 ```
 
 Why this matters: the source word (`tractor`, `sprayer`, `operator`) is
-irrelevant - the solver reasons about capabilities and roles. Every solver
+irrelevant -- the solver reasons about capabilities and roles. Every solver
 decision traces back through the snapshot hash to source records, schema
 versions, and quality findings. The rolling adapter is Python-native OR-Tools
-(no JVM); the spec's Timefold mapping is honored conceptually (ADR-019).
+and uses the same solver chain as periodic planning.
 
 Artifacts land under `.data/snapshot/`, `.data/plan-periodic/`, and
 `.data/plan-rolling/<ts>/revisions/<n>/`.
@@ -290,7 +305,7 @@ make data VEHICLES=3000 IMPLEMENTS=20000 ORDERS=2500 DEPOTS=50
 ## Output directory layout
 
 ```
-.data/
+$DATA_DIR/                       # default: .data/ -- override via DATA_DIR env var
   generate-data/<timestamp>/     # dataset for one generate-data run
   solve/<timestamp>/             # schedule.json, schedule_kpis.json,
                                  # schedule_report.txt, infeasible_orders.json

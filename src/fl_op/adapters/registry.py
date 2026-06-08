@@ -1,4 +1,4 @@
-"""Adapter lookup by id (spec 21, optimization-orchestrator adapter selection)."""
+"""Adapter lookup by id."""
 
 from typing import TYPE_CHECKING
 

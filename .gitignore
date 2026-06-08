@@ -3,6 +3,9 @@
 .env
 .env.example.local
 
+# Generated physical schemas (derived from ODCS contracts -- do not edit directly)
+contracts/generated/
+
 # numpy memmap files
 *.npy
 

@@ -1,12 +1,11 @@
-"""Planning-snapshot builder (spec 17.2).
+"""Planning-snapshot builder.
 
 Loads governed source datasets, maps them into canonical objects, generates
 operational bundles, projects the solver-payload bridge, and emits an immutable,
-reproducibly-hashed PlanningSnapshot. No adapter ever reads raw source data; it
-reads only the snapshot (spec 4.3).
+reproducibly-hashed PlanningSnapshot. Adapters consume only the snapshot, never
+raw source data.
 """
 
-import csv
 import json
 import logging
 import pathlib
@@ -29,6 +28,7 @@ from fl_op.core.constants import (
     ROLLING_HORIZON_HOURS,
 )
 from fl_op.contracts.registry import FileRegistry
+from fl_op.io import detect_format, get_codec, locate_source
 from fl_op.mapping.engine import MappingEngine, MappingResult
 from fl_op.snapshot.bundles import generate_bundles
 from fl_op.snapshot.hashing import compute_snapshot_hash
@@ -40,20 +40,22 @@ logger = logging.getLogger(__name__)
 _MAPPED_CONTRACTS = ["vehicles", "implements", "operators", "depots", "fields", "orders", "weather"]
 
 
-def _load_source(data_dir: pathlib.Path, source_file: str, fmt: str) -> list[dict[str, Any]]:
-    path = data_dir / source_file
-    if not path.exists():
-        return []
-    if fmt == "csv":
-        with path.open() as fh:
-            return list(csv.DictReader(fh))
-    if fmt in ("json", "jsonl"):
+def _load_source(
+    data_dir: pathlib.Path,
+    source_file: str,
+    registry_format: str,
+    codec: Any,
+) -> list[dict[str, Any]]:
+    if registry_format in ("json", "jsonl"):
+        path = data_dir / source_file
+        if not path.exists():
+            return []
         text = path.read_text()
-        if fmt == "jsonl":
+        if registry_format == "jsonl":
             return [json.loads(line) for line in text.splitlines() if line.strip()]
         data = json.loads(text)
         return data if isinstance(data, list) else data.get("windows", [])
-    return []
+    return codec.read(locate_source(data_dir, source_file, codec))
 
 
 class SnapshotBuilder:
@@ -85,10 +87,11 @@ class SnapshotBuilder:
     def load_sources(self, data_dir: str | pathlib.Path) -> dict[str, list[dict[str, Any]]]:
         """Load every mapped contract's source rows from a data directory."""
         data_path = pathlib.Path(data_dir)
+        codec = get_codec(detect_format(data_path))
         sources: dict[str, list[dict[str, Any]]] = {}
         for cid in _MAPPED_CONTRACTS:
             entry = self.registry.get_entry(cid)
-            sources[cid] = _load_source(data_path, entry.source_file or "", entry.source_format)
+            sources[cid] = _load_source(data_path, entry.source_file or "", entry.source_format, codec)
         return sources
 
     def build(

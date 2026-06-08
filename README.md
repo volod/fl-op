@@ -24,17 +24,20 @@ Pydantic v2, fastavro, uv.
 make venv
 
 # 2. Run the batch solver pipeline at smoke-test scale (~5 seconds)
-#    generate-data -> solve -> analyse -> console statistics
+#    generate-data (avro) -> solve -> analyse -> console statistics
 make quickstart
 
 # 3. Run the full declarative demo: contracts -> snapshot -> batch + stream
 make demo
+
+# Use a different dataset format (avro default, also csv or parquet):
+make quickstart FORMAT=parquet
 ```
 
 `make demo` generates a dataset and then runs the end-to-end story: validate the
-Avro + ODCS data contracts, build an immutable planning snapshot, produce a
-periodic (batch) plan, synthesize an execution-event stream, and produce rolling
-(stream) dispatch revisions. Artifacts land under `.data/`.
+ODCS data contracts, build an immutable planning snapshot, produce a periodic
+(batch) plan, synthesize an execution-event stream, and produce rolling (stream)
+dispatch revisions. Artifacts land under `$DATA_DIR` (default: `.data/`).
 
 ---
 
@@ -47,7 +50,9 @@ periodic (batch) plan, synthesize an execution-event stream, and produce rolling
 | `fl-op analyse` | Pretty-print statistics for a completed solver run. |
 | `fl-op reschedule` | Re-run the solver after in-progress field events. |
 | `fl-op query-contract` | Fast feasibility + margin estimate for a new order (no solver). |
-| `fl-op contracts validate` | Validate Avro + ODCS contracts: round-trip, dual fingerprints, binding agreement. |
+| `fl-op contracts check-generation` | Validate ODCS contracts have complete generation hints (`--format avro\|proto\|es\|parquet`). |
+| `fl-op contracts generate` | Generate physical schemas from ODCS contracts (`--format avro\|proto\|es\|parquet`). |
+| `fl-op contracts validate` | Validate ODCS contracts: dual fingerprints and generation-ready check. |
 | `fl-op snapshot build` | Map source data into canonical objects and build a reproducible snapshot. |
 | `fl-op plan periodic` | Periodic (batch) OR-Tools plan from an immutable snapshot. |
 | `fl-op plan rolling` | Rolling (stream) dispatch producing immutable plan revisions. |
@@ -63,16 +68,15 @@ example inputs and outputs.
 
 - **Usage guide**: [`docs/usage.md`](docs/usage.md)
   — command-by-command walkthrough, sample inputs/outputs, benchmarks, and the
-  `.data/` output layout.
-- **Data-contract platform**: [`docs/design/data-contract-platform.md`](docs/design/data-contract-platform.md)
-  — declarative Avro/ODCS contracts, source-to-canonical mapping, immutable
-  snapshots, and the batch + stream adapters.
-- **System design**: [`docs/design/main-design.md`](docs/design/main-design.md)
-  — full architecture, layer contracts, test requirements, failure modes.
+  `$DATA_DIR/` output layout.
+- **Current implementation**: [`docs/current-implementation.md`](docs/current-implementation.md)
+  — contracts, snapshots, solver chain, rolling dispatch, and run-log analysis.
+- **Data and optimization reference**: [`docs/reference/data-and-optimization-reference.md`](docs/reference/data-and-optimization-reference.md)
+  — source contracts, canonical entities, x-optimization metadata, and semantic URNs.
 - **Algorithms**: [`docs/algorithms/`](docs/algorithms/)
   — problem formulation, solver pipeline, and a learning path for the math.
-- **Architecture decisions**: [`docs/adr/README.md`](docs/adr/README.md)
-  — 20 ADRs explaining every significant technical choice.
+- **Future improvements**: [`docs/future-improvements.md`](docs/future-improvements.md)
+  — targeted improvements for solver quality, snapshot scale, contracts, and rolling dispatch.
 
 ---
 
@@ -82,9 +86,11 @@ example inputs and outputs.
 make venv          # create .venv and install all dependencies
 make quickstart    # generate-data + solve + analyse at smoke-test scale
 make demo          # contracts -> snapshot -> periodic (batch) + rolling (stream)
-make contracts     # validate the Avro + ODCS contract suite
+make check-gen     # validate ODCS generation hints for all formats
+make contracts-gen # generate Avro, Protobuf, ES, and Parquet schemas from ODCS
+make contracts     # validate the ODCS contract suite
 make data          # default benchmark (manual, ~10 min)
-uv run pytest      # run test suite (139 tests, < 120 s)
+uv run pytest      # run test suite (< 120 s)
 ```
 
 Tests require no external services. The smoke test (`tests/test_smoke.py`)
