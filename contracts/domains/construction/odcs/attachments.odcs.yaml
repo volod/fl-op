@@ -1,0 +1,76 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: attachments
+version: 1.0.0
+status: active
+name: Construction Attachments Asset Master
+domain: construction-earthworks
+tenant: fleet-ops
+description:
+  purpose: Stable characteristics of machine attachments (related equipment).
+  usage: Compatibility filtering, productivity estimation.
+  # Canonical projection lives in mappings/attachments.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: attachments.csv
+schema:
+  - name: attachments
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.construction.assets
+            recordName: Attachment
+            recordDoc: "Machine attachment (bucket, breaker, auger). Source dataset: attachments.csv."
+          proto:
+            package: org.example.construction.assets
+            messageName: Attachment
+            syntax: proto3
+          es:
+            indexName: attachments
+            dynamic: strict
+    properties:
+      - name: attachment_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the attachment.
+      - name: attachment_class
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Source attachment class (bucket, breaker, auger).
+      - name: supported_operations
+        logicalType: array
+        physicalType: string
+        required: true
+        description: Operation types this attachment can perform (stringified list).
+      - name: draw_power_kw
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Continuous power draw demanded from the machine.
+      - name: cut_width_m
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Effective working width used for productivity estimation.
+      - name: min_speed_kmh
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Minimum operating speed.
+      - name: max_speed_kmh
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Maximum operating speed.
+      - name: yard_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Home yard reference.

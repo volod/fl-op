@@ -75,7 +75,9 @@ def compile_rolling_state(
 
     preserved = frozen_ids | {a.task_id for a in carried_forward}
     tasks_to_resolve = {t.task_id for t in snapshot.tasks if t.task_id not in preserved}
-    chain_result = _resolve_tasks(snapshot.solver_payload, tasks_to_resolve, [
+    from fl_op.solver.inputs import build_solver_inputs
+
+    chain_result = _resolve_tasks(build_solver_inputs(snapshot), tasks_to_resolve, [
         *frozen_assignments,
         *carried_forward,
     ])
@@ -113,7 +115,7 @@ def _carried_forward_assignments(
 
 
 def _resolve_tasks(
-    solver_payload: dict[str, Any],
+    solver_rows: dict[str, Any],
     tasks_to_resolve: set[str],
     held_assignments: list[Assignment],
 ):
@@ -137,23 +139,30 @@ def _resolve_tasks(
     }
     held_operators = {op for assignment in held_assignments for op in assignment.operator_ids}
 
-    payload = dict(solver_payload)
-    payload["orders"] = [
-        o for o in payload.get("orders", []) if o["order_id"] in tasks_to_resolve
+    from fl_op.solver.inputs import (
+        SECTION_OPERATORS,
+        SECTION_PRIME_MOVERS,
+        SECTION_RELATED,
+        SECTION_TASKS,
+    )
+
+    payload = dict(solver_rows)
+    payload[SECTION_TASKS] = [
+        o for o in payload.get(SECTION_TASKS, []) if o["task_id"] in tasks_to_resolve
     ]
-    payload["vehicles"] = [
+    payload[SECTION_PRIME_MOVERS] = [
         v
-        for v in payload.get("vehicles", [])
-        if v["vehicle_id"] not in held_vehicles
+        for v in payload.get(SECTION_PRIME_MOVERS, [])
+        if v["asset_id"] not in held_vehicles
     ]
-    payload["implements"] = [
+    payload[SECTION_RELATED] = [
         im
-        for im in payload.get("implements", [])
-        if im["implement_id"] not in held_implements
+        for im in payload.get(SECTION_RELATED, [])
+        if im["asset_id"] not in held_implements
     ]
-    payload["operators"] = [
+    payload[SECTION_OPERATORS] = [
         op
-        for op in payload.get("operators", [])
-        if op["operator_id"] not in held_operators
+        for op in payload.get(SECTION_OPERATORS, [])
+        if op["asset_id"] not in held_operators
     ]
     return run_solver_chain(payload)

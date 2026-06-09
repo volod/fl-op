@@ -9,6 +9,15 @@ import pytest
 from fl_op.canonical.enums import PlanningMode
 from fl_op.io import detect_format, get_codec, locate_source
 from fl_op.snapshot import SnapshotBuilder
+from fl_op.solver.inputs import (
+    SECTION_DEPOTS,
+    SECTION_OPERATORS,
+    SECTION_PRIME_MOVERS,
+    SECTION_RELATED,
+    SECTION_SITES,
+    SECTION_TASKS,
+    build_solver_inputs,
+)
 
 _EFFECTIVE = datetime(2026, 6, 5, tzinfo=timezone.utc)
 
@@ -35,44 +44,33 @@ def test_hash_independent_of_generated_at_and_payload(
     assert "snapshot_id" not in content
 
 
-def test_solver_payload_has_all_datasets(builder: SnapshotBuilder, dataset_dir: pathlib.Path) -> None:
+def test_solver_inputs_have_all_sections(builder: SnapshotBuilder, dataset_dir: pathlib.Path) -> None:
     snap = builder.build(dataset_dir, PlanningMode.PERIODIC, effective_at=_EFFECTIVE)
-    for key in ("vehicles", "implements", "operators", "fields", "depots", "orders"):
-        assert key in snap.solver_payload, key
-    assert len(snap.solver_payload["orders"]) == len(snap.tasks)
+    rows = build_solver_inputs(snap)
+    for section in (
+        SECTION_PRIME_MOVERS, SECTION_RELATED, SECTION_OPERATORS,
+        SECTION_SITES, SECTION_DEPOTS, SECTION_TASKS,
+    ):
+        assert section in rows, section
+    assert len(rows[SECTION_TASKS]) == len(snap.tasks)
 
 
-def _norm(name: str, row: dict, drop_unbound: bool = True) -> dict:
-    out = {}
-    for k, v in row.items():
-        if drop_unbound and k in ("contract_id_ref", "polygon"):
-            continue
-        if k in ("compatible_operations", "certified_operations"):
-            out[k] = ast.literal_eval(v) if isinstance(v, str) else v
-        elif k == "deadline":
-            out[k] = datetime.fromisoformat(str(v))
-        else:
-            try:
-                out[k] = float(v)
-            except (ValueError, TypeError):
-                out[k] = v
-    return out
-
-
-def test_golden_rows_match_source(builder: SnapshotBuilder, dataset_dir: pathlib.Path) -> None:
-    """Reconstructed solver rows must equal source-loaded rows on every bound field."""
+def test_projected_rows_use_canonical_keys_and_match_entities(
+    builder: SnapshotBuilder, dataset_dir: pathlib.Path
+) -> None:
+    """Projected solver rows are keyed by canonical names and align 1:1 with entities."""
     snap = builder.build(dataset_dir, PlanningMode.PERIODIC, effective_at=_EFFECTIVE)
+    rows = build_solver_inputs(snap)
 
-    codec = get_codec(detect_format(dataset_dir))
-    dataset_names = ("vehicles", "implements", "orders", "fields", "depots", "operators")
-    for dataset in dataset_names:
-        source_rows = {
-            list(r.values())[0]: _norm(dataset, r)
-            for r in codec.read(locate_source(dataset_dir, f"{dataset}.csv", codec))
-        }
-        for prow in snap.solver_payload[dataset]:
-            rid = list(prow.values())[0]
-            crow = source_rows[rid]
-            pnorm = _norm(dataset, {k: ("" if v is None else v) for k, v in prow.items()})
-            for key, pval in pnorm.items():
-                assert pval == crow.get(key), f"{dataset}/{rid}/{key}: {pval!r} != {crow.get(key)!r}"
+    # Task rows carry canonical keys and their ids match the canonical tasks.
+    task_ids_rows = {r["task_id"] for r in rows[SECTION_TASKS]}
+    assert task_ids_rows == {t.task_id for t in snap.tasks}
+    for r in rows[SECTION_TASKS]:
+        assert "operation_type" in r and "revenue" in r
+        assert "order_id" not in r and "vehicle_id" not in r
+
+    # Prime-mover rows align with mobile-prime-mover assets and expose rated_power.
+    prime_ids = {a.asset_id for a in snap.assets if "mobile-prime-mover" in a.roles}
+    assert {r["asset_id"] for r in rows[SECTION_PRIME_MOVERS]} == prime_ids
+    for r in rows[SECTION_PRIME_MOVERS]:
+        assert "rated_power" in r

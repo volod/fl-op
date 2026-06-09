@@ -1,0 +1,47 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+# Projects the construction physical 'sites' schema onto the canonical Location
+# entity (work-site role).
+metadata:
+  domain: construction
+  sourceContract: sites
+  canonicalEntity: location
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: workSites
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+
+fieldMappings:
+  - sourceField: site_id
+    binding: location.locationId
+    semanticTerm: urn:xopt:identity:location-id
+    planningUse: [identity]
+  - sourceField: label
+    binding: location.name
+    semanticTerm: urn:xopt:attribute:display-name
+    planningUse: [display]
+  - sourceField: plot_ha
+    binding: location.areaHa
+    semanticTerm: urn:xopt:attribute:area
+    canonicalUnit: ha
+    quantityKind: area
+    planningUse: [duration-estimation]
+  - sourceField: entry_lat
+    binding: location.lat
+    semanticTerm: urn:xopt:attribute:latitude
+    canonicalUnit: deg
+    quantityKind: angle
+    planningUse: [geospatial]
+    missingValuePolicy: reject-for-planning
+  - sourceField: entry_lon
+    binding: location.lon
+    semanticTerm: urn:xopt:attribute:longitude
+    canonicalUnit: deg
+    quantityKind: angle
+    planningUse: [geospatial]
+    missingValuePolicy: reject-for-planning
+  - sourceField: ground_class
+    binding: location.soilType
+    semanticTerm: urn:xopt:attribute:soil-type
+    planningUse: [field-restriction]

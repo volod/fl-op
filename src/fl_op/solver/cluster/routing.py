@@ -67,7 +67,7 @@ def solve_routing_context(
             "OR-Tools found no feasible solution within time limit",
         )
 
-    dispatch_packages, served_order_ids = _extract_dispatch_packages(
+    dispatch_packages, served_task_ids = _extract_dispatch_packages(
         solution,
         routing,
         manager,
@@ -83,9 +83,9 @@ def solve_routing_context(
         now_epoch,
     )
     return dispatch_packages, unserved_orders(
-        context.order_ids,
+        context.task_ids,
         context.cluster_id,
-        served_order_ids,
+        served_task_ids,
     )
 
 
@@ -108,7 +108,7 @@ def _add_time_dimension(
     vehicle_transit_cb_indices: list[int] = []
     for routing_vehicle in context.routing_vehicles:
         service_s_by_node = [0] + [
-            _estimate_operation_seconds(order, routing_vehicle["implement"])
+            _estimate_operation_seconds(order, routing_vehicle["related"])
             for order in context.cluster_orders
         ]
 

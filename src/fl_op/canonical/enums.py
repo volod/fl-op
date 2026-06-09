@@ -10,6 +10,15 @@ class PlanningMode(str, Enum):
     ROLLING = "rolling"
 
 
+class TaskStatus(str, Enum):
+    """Lifecycle status of a canonical task (domain-neutral)."""
+
+    PENDING = "pending"
+    STARTED = "started"
+    COMPLETED = "completed"
+    INFEASIBLE = "infeasible"
+
+
 class PlanStatus(str, Enum):
     """Lifecycle status of a plan."""
 

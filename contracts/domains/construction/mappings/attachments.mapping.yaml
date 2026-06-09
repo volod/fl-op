@@ -1,0 +1,62 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+# Projects the construction physical 'attachments' schema onto the canonical Asset
+# entity (related-equipment role), reusing the agricultural 'implements' bindings.
+metadata:
+  domain: construction
+  sourceContract: attachments
+  canonicalEntity: asset
+  assetRole: implement
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: assetMaster
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+
+fieldMappings:
+  - sourceField: attachment_id
+    binding: asset.assetId
+    semanticTerm: urn:xopt:identity:asset-id
+    planningUse: [identity]
+  - sourceField: attachment_class
+    binding: asset.assetType
+    semanticTerm: urn:xopt:attribute:asset-type
+    planningUse: [classification]
+  - sourceField: supported_operations
+    binding: asset.capabilities.compatibleOperations
+    semanticTerm: urn:xopt:capability:compatible-operations
+    quantityKind: categorical-set
+    planningUse: [compatibility-filter]
+    missingValuePolicy: reject-for-planning
+  - sourceField: draw_power_kw
+    binding: asset.capabilities.requiredPower
+    semanticTerm: urn:xopt:capability:required-power
+    canonicalUnit: kW
+    quantityKind: power
+    planningUse: [compatibility-filter]
+    missingValuePolicy: reject-for-planning
+  - sourceField: cut_width_m
+    binding: asset.capabilities.workingWidth
+    semanticTerm: urn:xopt:capability:working-width
+    canonicalUnit: m
+    quantityKind: length
+    planningUse: [duration-estimation]
+    missingValuePolicy: reject-for-planning
+  - sourceField: min_speed_kmh
+    binding: asset.capabilities.minOperatingSpeed
+    semanticTerm: urn:xopt:capability:min-operating-speed
+    canonicalUnit: km/h
+    quantityKind: speed
+    planningUse: [duration-estimation]
+    missingValuePolicy: accept-with-warning
+  - sourceField: max_speed_kmh
+    binding: asset.capabilities.maxOperatingSpeed
+    semanticTerm: urn:xopt:capability:max-operating-speed
+    canonicalUnit: km/h
+    quantityKind: speed
+    planningUse: [duration-estimation]
+    missingValuePolicy: accept-with-warning
+  - sourceField: yard_id
+    binding: asset.homeDepotRef
+    semanticTerm: urn:xopt:relationship:home-depot
+    planningUse: [assignment]

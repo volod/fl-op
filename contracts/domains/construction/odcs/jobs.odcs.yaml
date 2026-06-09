@@ -1,0 +1,86 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: jobs
+version: 1.0.0
+status: active
+name: Construction Jobs
+domain: construction-earthworks
+tenant: fleet-ops
+description:
+  purpose: Earthworks jobs mapped to canonical planning Tasks.
+  usage: Task generation, time windows, contract commitments, objective terms.
+  # Canonical projection lives in mappings/jobs.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: jobs.csv
+schema:
+  - name: jobs
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.construction.jobs
+            recordName: Job
+            recordDoc: "Earthworks job mapped to a canonical Task. Source dataset: jobs.csv."
+          proto:
+            package: org.example.construction.jobs
+            messageName: Job
+            syntax: proto3
+          es:
+            indexName: jobs
+            dynamic: strict
+    properties:
+      - name: job_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the job/task.
+      - name: contract_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Owning contract reference.
+      - name: site_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Work site where the job is performed.
+      - name: work_type
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Earthworks operation (excavation, grading, breaking).
+      - name: plot_ha
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Job service area.
+      - name: deadline
+        logicalType: timestamp
+        physicalType: string
+        required: true
+        description: ISO-8601 deadline; hard time-window end.
+      - name: penalty_per_day_eur
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Penalty per calendar day the deadline is missed.
+      - name: priority
+        logicalType: integer
+        physicalType: int
+        required: false
+        description: Priority class 1-10.
+      - name: status
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Lifecycle status.
+      - name: revenue_eur
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Estimated revenue if completed on time.

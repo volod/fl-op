@@ -1,0 +1,87 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: machines
+version: 1.0.0
+status: active
+name: Construction Machines Asset Master
+domain: construction-earthworks
+tenant: fleet-ops
+description:
+  purpose: Stable characteristics of self-propelled construction machines (prime movers).
+  usage: Bundle generation, compatibility filtering, repositioning cost.
+  # Canonical projection lives in mappings/machines.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: machines.csv
+schema:
+  - name: machines
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.construction.assets
+            recordName: Machine
+            recordDoc: "Self-propelled construction machine (prime mover). Source dataset: machines.csv."
+          proto:
+            package: org.example.construction.assets
+            messageName: Machine
+            syntax: proto3
+          es:
+            indexName: machines
+            dynamic: strict
+    properties:
+      - name: machine_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the machine.
+      - name: machine_class
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Source machine class (excavator, wheel-loader, dozer).
+      - name: engine_power_kw
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Nominal rated continuous engine power.
+      - name: tank_litres
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Usable diesel tank volume.
+      - name: burn_l_per_h
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Average diesel consumption at working load.
+      - name: current_lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Current latitude at planning horizon start.
+      - name: current_lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Current longitude at planning horizon start.
+      - name: yard_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Home yard reference.
+      - name: transit_speed_kmh
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Average transit speed between sites.
+      # Extra real-data field, retained for analysis; not mapped to the canonical model.
+      - name: telematics_hours
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Lifetime engine hours from telematics (analytical, not used by the optimizer).

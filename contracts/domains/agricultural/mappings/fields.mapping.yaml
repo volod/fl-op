@@ -1,0 +1,53 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+# Projects the agricultural physical 'fields' schema onto the canonical Location
+# entity (work-site role).
+metadata:
+  domain: agricultural
+  sourceContract: fields
+  canonicalEntity: location
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: fieldParcels
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+
+fieldMappings:
+  - sourceField: field_id
+    binding: location.locationId
+    semanticTerm: urn:xopt:identity:location-id
+    planningUse: [identity]
+  - sourceField: name
+    binding: location.name
+    semanticTerm: urn:xopt:attribute:display-name
+    planningUse: [display]
+  - sourceField: area_ha
+    binding: location.areaHa
+    semanticTerm: urn:xopt:attribute:area
+    canonicalUnit: ha
+    quantityKind: area
+    planningUse: [duration-estimation]
+  - sourceField: polygon
+    binding: location.polygon
+    semanticTerm: urn:xopt:attribute:polygon
+    quantityKind: geometry
+    planningUse: [geospatial]
+    missingValuePolicy: accept-with-warning
+  - sourceField: centroid_lat
+    binding: location.lat
+    semanticTerm: urn:xopt:attribute:latitude
+    canonicalUnit: deg
+    quantityKind: angle
+    planningUse: [geospatial]
+    missingValuePolicy: reject-for-planning
+  - sourceField: centroid_lon
+    binding: location.lon
+    semanticTerm: urn:xopt:attribute:longitude
+    canonicalUnit: deg
+    quantityKind: angle
+    planningUse: [geospatial]
+    missingValuePolicy: reject-for-planning
+  - sourceField: soil_type
+    binding: location.soilType
+    semanticTerm: urn:xopt:attribute:soil-type
+    planningUse: [field-restriction]

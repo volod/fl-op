@@ -32,13 +32,13 @@ class TestComputeKpis:
 
     def test_dispatched_and_infeasible_counts(self):
         dispatch = [
-            {"order_id": "o0", "estimated_margin_eur": 1000.0,
+            {"task_id": "o0", "estimated_margin_eur": 1000.0,
              "estimated_fuel_l": 50.0, "estimated_fertilizer_kg": 20.0},
         ]
-        infeasible = [{"order_id": "o1", "reason_code": "OPTIMIZATION_TRADEOFF"}]
+        infeasible = [{"task_id": "o1", "reason_code": "OPTIMIZATION_TRADEOFF"}]
         orders = [
-            {"order_id": "o0", "estimated_revenue_eur": "1000", "area_ha": "10"},
-            {"order_id": "o1", "estimated_revenue_eur": "500", "area_ha": "5"},
+            {"task_id": "o0", "revenue": "1000", "area": "10"},
+            {"task_id": "o1", "revenue": "500", "area": "5"},
         ]
         kpis = _compute_kpis(dispatch, infeasible, orders, {"o0": (0, 0)})
         assert kpis["n_dispatched"] == 1
@@ -46,9 +46,9 @@ class TestComputeKpis:
 
     def test_total_margin_summed_from_dispatch(self):
         dispatch = [
-            {"order_id": "o0", "estimated_margin_eur": 300.0,
+            {"task_id": "o0", "estimated_margin_eur": 300.0,
              "estimated_fuel_l": 10.0, "estimated_fertilizer_kg": 0.0},
-            {"order_id": "o1", "estimated_margin_eur": 700.0,
+            {"task_id": "o1", "estimated_margin_eur": 700.0,
              "estimated_fuel_l": 20.0, "estimated_fertilizer_kg": 0.0},
         ]
         kpis = _compute_kpis(dispatch, [], [], {})
@@ -56,9 +56,9 @@ class TestComputeKpis:
 
     def test_fuel_and_fertilizer_summed(self):
         dispatch = [
-            {"order_id": "o0", "estimated_margin_eur": 0,
+            {"task_id": "o0", "estimated_margin_eur": 0,
              "estimated_fuel_l": 30.0, "estimated_fertilizer_kg": 10.0},
-            {"order_id": "o1", "estimated_margin_eur": 0,
+            {"task_id": "o1", "estimated_margin_eur": 0,
              "estimated_fuel_l": 20.0, "estimated_fertilizer_kg": 5.0},
         ]
         kpis = _compute_kpis(dispatch, [], [], {})
@@ -67,9 +67,9 @@ class TestComputeKpis:
 
     def test_infeasibility_reasons_counted(self):
         infeasible = [
-            {"order_id": "o0", "reason_code": "OPTIMIZATION_TRADEOFF"},
-            {"order_id": "o1", "reason_code": "OPTIMIZATION_TRADEOFF"},
-            {"order_id": "o2", "reason_code": "UNKNOWN"},
+            {"task_id": "o0", "reason_code": "OPTIMIZATION_TRADEOFF"},
+            {"task_id": "o1", "reason_code": "OPTIMIZATION_TRADEOFF"},
+            {"task_id": "o2", "reason_code": "UNKNOWN"},
         ]
         kpis = _compute_kpis([], infeasible, [], {})
         assert kpis["infeasibility_reasons"]["OPTIMIZATION_TRADEOFF"] == 2
@@ -77,10 +77,10 @@ class TestComputeKpis:
 
     def test_improvement_equals_total_minus_baseline(self):
         dispatch = [
-            {"order_id": "o0", "estimated_margin_eur": 800.0,
+            {"task_id": "o0", "estimated_margin_eur": 800.0,
              "estimated_fuel_l": 0, "estimated_fertilizer_kg": 0},
         ]
-        orders = [{"order_id": "o0", "estimated_revenue_eur": "600", "area_ha": "0"}]
+        orders = [{"task_id": "o0", "revenue": "600", "area": "0"}]
         # greedy baseline: 600 EUR revenue - 0 fuel cost = 600
         kpis = _compute_kpis(dispatch, [], orders, {"o0": (0, 0)})
         assert kpis["solver_improvement_eur"] == pytest.approx(
@@ -161,7 +161,7 @@ class TestWriteReport:
 
     def test_infeasible_orders_section_written(self, tmp_path):
         path = tmp_path / "report.txt"
-        infeasible = [{"order_id": "o99", "reason_code": "UNKNOWN", "detail": "err"}]
+        infeasible = [{"task_id": "o99", "reason_code": "UNKNOWN", "detail": "err"}]
         _write_report([], infeasible, self._kpis(infeasible=1), path)
         text = path.read_text()
         assert "o99" in text

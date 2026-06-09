@@ -61,14 +61,29 @@ def test_snapshot_is_frozen_and_excludes_bridge_from_content() -> None:
         planning_mode=PlanningMode.PERIODIC,
         planning_horizon=TimeInterval(**{"from": _ts()}),
         version_dimensions=VersionDimensions(optimization_profile_version="0.1.0"),
-        solver_payload={"vehicles": [{"vehicle_id": "v1"}]},
         snapshot_hash="abc",
     )
     with pytest.raises(ValidationError):
         snap.snapshot_id = "snap-2"
 
     content = snap.canonical_content()
+    # The snapshot is purely canonical: no non-canonical solver-payload bridge.
     assert "solver_payload" not in content
     assert "snapshot_id" not in content
     assert "generated_at" not in content
     assert "snapshot_hash" not in content
+
+
+def test_canonical_model_loads_with_required_identity_fields() -> None:
+    from fl_op.contracts.canonical_model import load_canonical_model
+
+    model = load_canonical_model()
+    assert model.model_ref == "urn:xopt:model:canonical:0.1.0"
+    assert set(model.entities()) >= {"asset", "location", "task", "forecast"}
+    # Every entity declares at least one required identity binding, and every
+    # declared field references a known semantic term.
+    for entity in model.entities():
+        assert model.required_bindings(entity), f"{entity} has no required field"
+        for fld in model.fields_for(entity):
+            assert model.has_term(fld.semantic_term), fld.semantic_term
+    assert "asset.assetId" in model.required_bindings("asset")

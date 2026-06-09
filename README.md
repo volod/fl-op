@@ -71,8 +71,12 @@ example inputs and outputs.
   `$DATA_DIR/` output layout.
 - **Current implementation**: [`docs/current-implementation.md`](docs/current-implementation.md)
   — contracts, snapshots, solver chain, rolling dispatch, and run-log analysis.
-- **Data and optimization reference**: [`docs/reference/data-and-optimization-reference.md`](docs/reference/data-and-optimization-reference.md)
-  — source contracts, canonical entities, x-optimization metadata, and semantic URNs.
+- **Canonical optimization model**: [`docs/reference/canonical-model.md`](docs/reference/canonical-model.md)
+  — the three-layer architecture and the domain-neutral entity / capability /
+  semantic-term contract the engine consumes.
+- **Domain mapping packs**: [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md)
+  — how a physical domain (agricultural, construction) projects onto the canonical
+  model, extra (analytical) fields, and how to add a new domain.
 - **Algorithms**: [`docs/algorithms/`](docs/algorithms/)
   — problem formulation, solver pipeline, and a learning path for the math.
 - **Future improvements**: [`docs/future-improvements.md`](docs/future-improvements.md)
@@ -88,7 +92,9 @@ make quickstart    # generate-data + solve + analyse at smoke-test scale
 make demo          # contracts -> snapshot -> periodic (batch) + rolling (stream)
 make check-gen     # validate ODCS generation hints for all formats
 make contracts-gen # generate Avro, Protobuf, ES, and Parquet schemas from ODCS
-make contracts     # validate the ODCS contract suite
+make contracts     # validate the full suite (canonical model + per-domain mappings)
+make canonical-validate    # validate only the canonical optimization model
+make validate-construction # prove the construction pack maps onto the canonical model
 make data          # default benchmark (manual, ~10 min)
 uv run pytest      # run test suite (< 120 s)
 ```

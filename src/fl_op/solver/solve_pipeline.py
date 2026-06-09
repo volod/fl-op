@@ -9,7 +9,6 @@ from typing import Any
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
 from fl_op.core.paths import DATA_ROOT
 from fl_op.core.telemetry import RunTelemetry
-from fl_op.io import detect_format, get_codec, locate_source
 from fl_op.solver.aggregator import _write_json, _write_report
 
 logger = logging.getLogger(__name__)
@@ -24,13 +23,13 @@ def _check_cross_cluster_vehicle_overlap(
     """
     vehicle_windows: dict[str, list[tuple[float, float, str, str]]] = {}
     for dp in all_dispatch:
-        vid = dp["vehicle_id"]
+        vid = dp["prime_asset_id"]
         try:
             s = datetime.fromisoformat(dp["scheduled_start"]).timestamp()
             e = datetime.fromisoformat(dp["scheduled_end"]).timestamp()
         except (ValueError, TypeError, KeyError):
             continue
-        vehicle_windows.setdefault(vid, []).append((s, e, dp["cluster_id"], dp["order_id"]))
+        vehicle_windows.setdefault(vid, []).append((s, e, dp["cluster_id"], dp["task_id"]))
 
     for vid, windows in vehicle_windows.items():
         windows.sort()
@@ -55,21 +54,28 @@ def run_solve(data_dir: str) -> None:
     out_dir = DATA_ROOT / "solve" / ts
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    codec = get_codec(detect_format(data_path))
-    logger.info("Loading data from %s (format: %s)", data_path, codec.extension.lstrip("."))
-    rows = {
-        name: codec.read(locate_source(data_path, f"{name}.csv", codec))
-        for name in ("vehicles", "implements", "orders", "depots", "fields", "operators")
-    }
-
-    logger.info(
-        "Loaded: %d vehicles, %d implements, %d orders, %d depots, %d fields",
-        len(rows["vehicles"]), len(rows["implements"]), len(rows["orders"]),
-        len(rows["depots"]), len(rows["fields"]),
+    from fl_op.snapshot.builder import SnapshotBuilder
+    from fl_op.solver.inputs import (
+        SECTION_DEPOTS,
+        SECTION_PRIME_MOVERS,
+        SECTION_RELATED,
+        SECTION_SITES,
+        SECTION_TASKS,
+        build_solver_inputs,
     )
 
-    if not rows["orders"]:
-        logger.error("No orders found in %s. Check the data directory.", data_path)
+    logger.info("Building canonical snapshot from %s", data_path)
+    snapshot = SnapshotBuilder().build(data_path)
+    rows = build_solver_inputs(snapshot)
+
+    logger.info(
+        "Loaded: %d prime movers, %d related, %d tasks, %d depots, %d sites",
+        len(rows[SECTION_PRIME_MOVERS]), len(rows[SECTION_RELATED]), len(rows[SECTION_TASKS]),
+        len(rows[SECTION_DEPOTS]), len(rows[SECTION_SITES]),
+    )
+
+    if not rows[SECTION_TASKS]:
+        logger.error("No tasks found in %s. Check the data directory.", data_path)
         sys.exit(1)
     telemetry.mark_phase("load_data")
 
@@ -85,9 +91,9 @@ def run_solve(data_dir: str) -> None:
         "timestamp": ts,
         "data_dir": str(data_path),
         "n_clusters": result.n_clusters,
-        "n_vehicles": len(rows["vehicles"]),
-        "n_implements": len(rows["implements"]),
-        "n_orders": len(rows["orders"]),
+        "n_vehicles": len(rows[SECTION_PRIME_MOVERS]),
+        "n_implements": len(rows[SECTION_RELATED]),
+        "n_orders": len(rows[SECTION_TASKS]),
     }
     run_telemetry = telemetry.snapshot()
 

@@ -1,0 +1,91 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: operators
+version: 1.0.0
+status: active
+name: Operators Master
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: Operator identity, shift availability, and certifications.
+  usage: Operator assignment and certification compatibility.
+  # Canonical projection lives in mappings/operators.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: operators.csv
+schema:
+  - name: operators
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.operators
+            recordName: Operator
+            recordDoc: "Equipment operator mapped to a canonical operator Asset. Source dataset: operators.csv."
+          proto:
+            package: org.example.agri.operators
+            messageName: Operator
+            syntax: proto3
+          es:
+            indexName: operators
+            dynamic: strict
+    properties:
+      - name: operator_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the operator.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
+      - name: name
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Operator display name.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 2}
+      - name: shift_start_s
+        logicalType: integer
+        physicalType: int
+        required: true
+        description: Shift start, seconds since midnight.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
+      - name: shift_end_s
+        logicalType: integer
+        physicalType: int
+        required: true
+        description: Shift end, seconds since midnight.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
+      - name: certified_operations
+        logicalType: array
+        physicalType: string
+        required: true
+        description: Operation types the operator is certified for (stringified list).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
+      - name: depot_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Home depot reference.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}

@@ -1,0 +1,82 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: execution-events
+version: 1.0.0
+status: active
+name: Execution Events
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: Operational event envelope consumed by the rolling-dispatch stream driver.
+  usage: Triggers incremental re-solve in rolling dispatch mode.
+  # Canonical projection lives in mappings/execution-events.mapping.yaml.
+servers:
+  - server: stream
+    type: local
+    format: jsonl
+    path: events.jsonl
+schema:
+  - name: execution-events
+    logicalType: object
+    physicalType: jsonl
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.execution
+            recordName: ExecutionEvent
+            recordDoc: "Operational event envelope consumed by the rolling-dispatch stream driver. Source dataset: events.jsonl."
+          proto:
+            package: org.example.agri.execution
+            messageName: ExecutionEvent
+            syntax: proto3
+          es:
+            indexName: execution-events
+            dynamic: strict
+    properties:
+      - name: event_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the event.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
+      - name: event_type
+        logicalType: string
+        physicalType: string
+        required: true
+        description: "Event type: order.created, order.cancelled, task.started, asset.unavailable, forecast.updated."
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
+      - name: observed_at
+        logicalType: timestamp
+        physicalType: string
+        required: true
+        description: ISO-8601 time the physical condition was observed.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
+      - name: entity_ref
+        logicalType: string
+        physicalType: string
+        required: true
+        description: "Identifier of the entity the event refers to (order_id, vehicle_id, ...)."
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
+      - name: payload_json
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Event-specific payload encoded as a JSON string.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: "{}"}
+              proto: {fieldNumber: 5}

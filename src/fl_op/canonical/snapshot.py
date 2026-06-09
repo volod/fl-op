@@ -1,10 +1,9 @@
 """Immutable PlanningSnapshot abstraction.
 
 A snapshot is the single artifact a solver adapter is allowed to consume; no
-adapter reads raw source data. The snapshot carries both the
-canonical objects (used for hashing, quality, explanation) and a non-canonical
-`solver_payload` bridge: the dict-shaped rows the existing OR-Tools solver chain
-already expects. The bridge is excluded from the reproducible snapshot hash.
+adapter reads raw source data. The snapshot is purely canonical: adapters project
+it into their solver's working rows on demand (see solver/inputs.py), so the
+snapshot itself carries no non-canonical bridge payload.
 """
 
 from datetime import datetime
@@ -26,9 +25,8 @@ from fl_op.canonical.forecast import Forecast
 from fl_op.canonical.location import Location
 from fl_op.canonical.task import Task
 
-# Keys excluded from the reproducible snapshot hash: per-run identifiers and the
-# non-canonical solver bridge payload.
-HASH_EXCLUDED_FIELDS = ("snapshot_id", "generated_at", "solver_payload")
+# Keys excluded from the reproducible snapshot hash: per-run identifiers only.
+HASH_EXCLUDED_FIELDS = ("snapshot_id", "generated_at")
 
 
 class PlanningSnapshot(BaseModel):
@@ -56,10 +54,6 @@ class PlanningSnapshot(BaseModel):
     quality_summary: QualitySummary = Field(default_factory=QualitySummary)
     snapshot_hash: str = ""
     lineage_ref: str = ""
-
-    # Non-canonical bridge to the existing dict-based solver chain. Excluded from
-    # the snapshot hash; never treated as the semantic source of truth.
-    solver_payload: dict[str, Any] = Field(default_factory=dict, repr=False)
 
     def canonical_content(self) -> dict[str, Any]:
         """Return the hashable canonical content (excludes per-run + bridge fields)."""

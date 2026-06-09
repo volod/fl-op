@@ -5,8 +5,8 @@ from typing import Any
 import numpy as np
 
 from fl_op.core.constants import EARTH_RADIUS_KM
+from fl_op.data.agri_enums import ImplementType, OperationType, VehicleType
 from fl_op.data.geo import _REGION_CENTER_LAT, _REGION_CENTER_LON, _REGION_RADIUS_KM, _random_points_in_circle
-from fl_op.models.enums import ImplementType, OperationType, VehicleType
 
 _VEHICLE_POWER_MEAN_KW = 150.0
 _VEHICLE_POWER_SIGMA_LOG = 0.3
@@ -87,6 +87,11 @@ def _generate_vehicles(
                 "current_lon": round(float(depot_lons[didx] + jitter_lon[i]), 6),
                 "depot_id": depot_ids[didx],
                 "travel_speed_kmh": round(float(speeds[i]), 1),
+                # Extra real-data fields retained for analysis, not used by the
+                # optimizer (no canonical mapping). Derived deterministically so
+                # they do not perturb the optimization fields' values.
+                "manufacture_year": 2010 + (i % 15),
+                "telematics_unit_id": f"TEL-{i:05d}",
             }
         )
     return vehicles

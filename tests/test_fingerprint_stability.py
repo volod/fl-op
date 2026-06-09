@@ -4,7 +4,7 @@ import copy
 
 import pytest
 
-from fl_op.contracts.fingerprint import avro_parsing_fingerprint, odcs_metadata_hash
+from fl_op.contracts.fingerprint import avro_parsing_fingerprint, mapping_metadata_hash
 from fl_op.contracts.registry import FileRegistry, MetadataLossError
 
 _AVRO_SCHEMA = {
@@ -17,49 +17,30 @@ _AVRO_SCHEMA = {
     ],
 }
 
-_ODCS_DOC = {
-    "id": "test",
-    "customProperties": [
+_MAPPING_DOC = {
+    "metadata": {
+        "domain": "test",
+        "sourceContract": "vehicles",
+        "canonicalEntity": "asset",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+    },
+    "fieldMappings": [
         {
-            "property": "xOptimization",
-            "value": {
-                "extensionVersion": "0.1.0",
-                "semanticModelRef": "urn:xopt:model:test:0.1.0",
-                "dataProductRole": "assetMaster",
-            },
-        }
-    ],
-    "schema": [
-        {
-            "name": "test",
-            "properties": [
-                {
-                    "name": "p",
-                    "physicalType": "double",
-                    "customProperties": [
-                        {
-                            "property": "xOptimization",
-                            "value": {
-                                "extensionVersion": "0.1.0",
-                                "semanticTerm": "urn:xopt:capability:rated-power",
-                                "binding": "asset.capabilities.ratedPower",
-                                "canonicalUnit": "kW",
-                            },
-                        }
-                    ],
-                }
-            ],
+            "sourceField": "rated_power_kw",
+            "binding": "asset.capabilities.ratedPower",
+            "semanticTerm": "urn:xopt:capability:rated-power",
+            "canonicalUnit": "kW",
         }
     ],
 }
 
 
 def test_semantic_change_moves_only_metadata_hash() -> None:
-    base_doc = copy.deepcopy(_ODCS_DOC)
-    mutated_doc = copy.deepcopy(_ODCS_DOC)
-    mutated_doc["schema"][0]["properties"][0]["customProperties"][0]["value"]["canonicalUnit"] = "W"
+    base_doc = copy.deepcopy(_MAPPING_DOC)
+    mutated_doc = copy.deepcopy(_MAPPING_DOC)
+    mutated_doc["fieldMappings"][0]["canonicalUnit"] = "W"
 
-    assert odcs_metadata_hash(base_doc) != odcs_metadata_hash(mutated_doc)
+    assert mapping_metadata_hash(base_doc) != mapping_metadata_hash(mutated_doc)
 
 
 def test_structural_change_moves_only_parsing_fingerprint() -> None:
@@ -71,16 +52,16 @@ def test_structural_change_moves_only_parsing_fingerprint() -> None:
 
 
 def test_metadata_hash_ignores_key_order() -> None:
-    base_doc = copy.deepcopy(_ODCS_DOC)
-    reordered_doc = copy.deepcopy(_ODCS_DOC)
-    block = reordered_doc["schema"][0]["properties"][0]["customProperties"][0]["value"]
-    reordered_doc["schema"][0]["properties"][0]["customProperties"][0]["value"] = {
-        "canonicalUnit": block["canonicalUnit"],
-        "binding": block["binding"],
-        "semanticTerm": block["semanticTerm"],
-        "extensionVersion": block["extensionVersion"],
+    base_doc = copy.deepcopy(_MAPPING_DOC)
+    reordered_doc = copy.deepcopy(_MAPPING_DOC)
+    fm = reordered_doc["fieldMappings"][0]
+    reordered_doc["fieldMappings"][0] = {
+        "canonicalUnit": fm["canonicalUnit"],
+        "binding": fm["binding"],
+        "sourceField": fm["sourceField"],
+        "semanticTerm": fm["semanticTerm"],
     }
-    assert odcs_metadata_hash(base_doc) == odcs_metadata_hash(reordered_doc)
+    assert mapping_metadata_hash(base_doc) == mapping_metadata_hash(reordered_doc)
 
 
 def test_metadata_loss_guard_raises_on_divergent_stored_hash() -> None:

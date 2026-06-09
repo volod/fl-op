@@ -111,8 +111,8 @@ Research Society*, 53(5), 512-522.
 
 This paper introduces the heterogeneous fleet extension. The key idea: vehicles differ
 in cost per km and capacity, so the optimal assignment of vehicle type to route is part
-of the problem, not given in advance. In fl-op, the analogous choice is which (vehicle,
-implement) pair to send to which order.
+of the problem, not given in advance. In fl-op, the analogous choice is which (prime
+mover, related equipment) pair to send to which task.
 
 ### VRP with Profits
 
@@ -121,7 +121,7 @@ with Profits." *Transportation Science*, 39(2), 188-205.
 
 VRP with profits adds the decision of which customers to serve (not all customers need to
 be visited). The Orienteering Problem is the simplest variant: maximize total collected
-profit subject to a travel time budget. fl-op's order selection problem is this variant
+profit subject to a travel time budget. fl-op's task selection problem is this variant
 extended with multi-resource constraints.
 
 ---
@@ -131,7 +131,8 @@ extended with multi-resource constraints.
 ### Construction Heuristics
 
 The fl-op greedy warm-start is a construction heuristic: it builds an initial solution
-by greedily assigning the highest-margin (vehicle, implement, order) triple at each step.
+by greedily assigning the highest-margin (prime mover, related equipment, task) triple
+at each step.
 
 **Reading**: Christofides, N. (1976). *Worst-Case Analysis of a New Heuristic for the
 Travelling Salesman Problem*. Carnegie Mellon University report.

@@ -19,10 +19,10 @@ def _compute_kpis(
     total_fuel = sum(d.get("estimated_fuel_l", 0) for d in dispatch_packages)
     total_fertilizer = sum(d.get("estimated_fertilizer_kg", 0) for d in dispatch_packages)
 
-    order_map = {o["order_id"]: o for o in orders}
+    order_map = {o["task_id"]: o for o in orders}
     greedy_baseline = sum(
-        float(order_map[oid].get("estimated_revenue_eur", 0))
-        - float(order_map[oid].get("area_ha", 0)) * FUEL_COST_EUR_PER_L
+        float(order_map[oid].get("revenue", 0))
+        - float(order_map[oid].get("area", 0)) * FUEL_COST_EUR_PER_L
         for oid in greedy_assignment
         if oid in order_map
     )
@@ -74,6 +74,6 @@ def _write_report(
         lines.append("")
         lines.append("Infeasible orders (first 20):")
         for inf in infeasible_orders[:20]:
-            lines.append(f"  {inf['order_id']}: {inf['reason_code']} - {inf['detail']}")
+            lines.append(f"  {inf['task_id']}: {inf['reason_code']} - {inf['detail']}")
 
     path.write_text("\n".join(lines) + "\n")

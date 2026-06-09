@@ -1,0 +1,55 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: canonical-execution-event
+version: 0.1.0
+status: active
+name: Canonical Execution Event
+domain: canonical
+tenant: optimization
+description:
+  purpose: Minimal optimization contract for an operational event envelope.
+  usage: Triggers incremental re-solve in rolling-dispatch mode.
+customProperties:
+  - property: canonicalEntity
+    value:
+      entity: execution-event
+      canonicalModelRef: urn:xopt:model:canonical:0.1.0
+schema:
+  - name: execution-event
+    logicalType: object
+    properties:
+      - name: eventId
+        logicalType: string
+        required: true
+        description: Stable canonical identifier of the event.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: event.eventId, semanticTerm: urn:xopt:identity:event-id, planningUse: [identity]}
+      - name: eventType
+        logicalType: string
+        required: true
+        description: Event type driving the replanning trigger.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: event.eventType, semanticTerm: urn:xopt:attribute:event-type, planningUse: [replanning-trigger]}
+      - name: observedAt
+        logicalType: string
+        required: true
+        description: Time the physical condition was observed (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: event.observedAt, semanticTerm: urn:xopt:time:observed-at, quantityKind: timestamp, planningUse: [temporal]}
+      - name: entityRef
+        logicalType: string
+        required: true
+        description: Identifier of the entity the event refers to.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: event.entityRef, semanticTerm: urn:xopt:relationship:entity-ref, planningUse: [replanning-trigger]}
+      - name: payload
+        logicalType: string
+        required: false
+        description: Event-specific payload encoded as a JSON string.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: event.payload, semanticTerm: urn:xopt:attribute:event-payload, planningUse: [replanning-trigger]}

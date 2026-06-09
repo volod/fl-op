@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from fl_op.models.types import ClusterSpec
+from fl_op.solver.types import ClusterSpec
 from fl_op.solver.allocation.candidates import (
     collect_pair_candidates,
     reserve_best_candidates,
@@ -31,12 +31,12 @@ def allocate_resources(
     feasible_pairs: dict[str, list[tuple[int, int]]],
     scored_pairs: dict[str, list[tuple[float, int, int]]] | None = None,
 ) -> list[ClusterSpec]:
-    """Mutate clusters with allocated_vehicle_implements; return sorted list."""
+    """Mutate clusters with allocated_prime_related; return sorted list."""
     sorted_clusters = sorted(
         clusters,
         key=lambda c: (-c["total_penalty_per_day"], c["cluster_id"]),
     )
-    order_map = {o["order_id"]: o for o in orders}
+    order_map = {o["task_id"]: o for o in orders}
     idx_to_vehicle = {idx: vehicle_id for vehicle_id, idx in vehicle_index.items()}
     idx_to_implement = {
         idx: implement_id for implement_id, idx in implement_index.items()
@@ -47,7 +47,7 @@ def allocate_resources(
 
     for cluster in sorted_clusters:
         cluster_orders = [
-            order_map[oid] for oid in cluster["order_ids"] if oid in order_map
+            order_map[oid] for oid in cluster["task_ids"] if oid in order_map
         ]
         pair_candidates = collect_pair_candidates(
             cluster_orders,
@@ -77,7 +77,7 @@ def allocate_resources(
             state,
         )
         assign_operator(cluster, operators, depot_operators, state)
-        cluster["allocated_vehicle_implements"] = allocated
+        cluster["allocated_prime_related"] = allocated
         _log_cluster_allocation(cluster, allocated)
 
     return sorted_clusters
@@ -88,12 +88,12 @@ def _log_cluster_allocation(cluster: ClusterSpec, allocated: dict[str, list[str]
         logger.warning(
             "Cluster %s (%d orders): no implements could be allocated",
             cluster["cluster_id"],
-            len(cluster["order_ids"]),
+            len(cluster["task_ids"]),
         )
         return
     logger.debug(
         "Cluster %s: allocated %d vehicles, operator=%s",
         cluster["cluster_id"],
         len(allocated),
-        cluster.get("operator_id", "none"),  # type: ignore[call-overload]
+        cluster.get("operator_ref", "none"),  # type: ignore[call-overload]
     )

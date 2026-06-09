@@ -1,0 +1,90 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: canonical-task
+version: 0.1.0
+status: active
+name: Canonical Task
+domain: canonical
+tenant: optimization
+description:
+  purpose: Minimal optimization contract for a unit of schedulable work (task).
+  usage: Assignment, time windows, contract commitments, objective terms.
+customProperties:
+  - property: canonicalEntity
+    value:
+      entity: task
+      canonicalModelRef: urn:xopt:model:canonical:0.1.0
+schema:
+  - name: task
+    logicalType: object
+    properties:
+      - name: taskId
+        logicalType: string
+        required: true
+        description: Stable canonical identifier of the task.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.taskId, semanticTerm: urn:xopt:identity:task-id, planningUse: [identity]}
+      - name: orderId
+        logicalType: string
+        required: false
+        description: Owning contract/order reference.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.orderId, semanticTerm: urn:xopt:relationship:contract, planningUse: [commitment]}
+      - name: locationRef
+        logicalType: string
+        required: true
+        description: Location where the task is performed.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.locationRef, semanticTerm: urn:xopt:relationship:location, planningUse: [geospatial]}
+      - name: operationType
+        logicalType: string
+        required: true
+        description: Operation the task requires; matched against asset capabilities.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.operationType, semanticTerm: urn:xopt:attribute:operation-type, planningUse: [compatibility-filter]}
+      - name: areaHa
+        logicalType: number
+        required: false
+        description: Service area used for duration estimation.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.areaHa, semanticTerm: urn:xopt:attribute:service-area, canonicalUnit: ha, quantityKind: area, planningUse: [duration-estimation]}
+      - name: deadline
+        logicalType: string
+        required: false
+        description: Hard time-window end (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.deadline, semanticTerm: urn:xopt:commitment:deadline, quantityKind: timestamp, planningUse: [time-window, commitment]}
+      - name: penaltyPerDay
+        logicalType: number
+        required: false
+        description: Penalty accrued per day the deadline is missed.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.penaltyPerDay, semanticTerm: urn:xopt:commitment:lateness-penalty, canonicalUnit: EUR, quantityKind: money, planningUse: [objective, commitment]}
+      - name: priorityClass
+        logicalType: integer
+        required: false
+        description: Priority class used for objective ordering.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.priorityClass, semanticTerm: urn:xopt:attribute:priority-class, planningUse: [objective]}
+      - name: status
+        logicalType: string
+        required: false
+        description: Lifecycle status used for freeze handling.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.status, semanticTerm: urn:xopt:attribute:task-status, planningUse: [freeze]}
+      - name: revenueValue
+        logicalType: number
+        required: false
+        description: Expected revenue if the task is completed on time.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.revenueValue, semanticTerm: urn:xopt:attribute:expected-revenue, canonicalUnit: EUR, quantityKind: money, planningUse: [objective]}

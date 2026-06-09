@@ -20,19 +20,21 @@ from fl_op.solver.reschedule import (
 
 
 def _order(oid, status="pending"):
+    # Raw physical order row (events are keyed by physical order_id).
     return {"order_id": oid, "status": status}
 
 
 def _dp(oid, vid="v0", start="2026-06-01T06:00:00+00:00"):
+    # Dispatch package uses canonical keys.
     return {
-        "order_id": oid, "vehicle_id": vid, "scheduled_start": start,
-        "cluster_id": "cl0", "depot_id": "d0", "implement_id": "i0",
-        "operator_id": "op0", "scheduled_end": "2026-06-01T10:00:00+00:00",
+        "task_id": oid, "prime_asset_id": vid, "scheduled_start": start,
+        "cluster_id": "cl0", "depot_ref": "d0", "related_asset_id": "i0",
+        "operator_asset_id": "op0", "scheduled_end": "2026-06-01T10:00:00+00:00",
     }
 
 
 # ---------------------------------------------------------------------------
-# _apply_events
+# _apply_events  (operates on raw physical order rows)
 # ---------------------------------------------------------------------------
 
 
@@ -71,7 +73,7 @@ class TestApplyEvents:
 
 
 # ---------------------------------------------------------------------------
-# _build_plan_diff
+# _build_plan_diff  (operates on canonical dispatch schedules)
 # ---------------------------------------------------------------------------
 
 
@@ -84,57 +86,57 @@ class TestBuildPlanDiff:
 
     def test_new_order_classified_as_added(self):
         diff = _build_plan_diff(old_schedule=[], new_schedule=[_dp("o_new")],
-                                frozen_order_ids=set(), infeasible_order_ids=set())
-        assert any(d["order_id"] == "o_new" for d in diff["added"])
+                                frozen_task_ids=set(), infeasible_task_ids=set())
+        assert any(d["task_id"] == "o_new" for d in diff["added"])
         assert diff["removed"] == []
 
     def test_disappeared_order_classified_as_removed(self):
         diff = _build_plan_diff(old_schedule=[_dp("o_gone")], new_schedule=[],
-                                frozen_order_ids=set(), infeasible_order_ids=set())
-        assert any(d["order_id"] == "o_gone" for d in diff["removed"])
+                                frozen_task_ids=set(), infeasible_task_ids=set())
+        assert any(d["task_id"] == "o_gone" for d in diff["removed"])
 
     def test_frozen_order_excluded_from_removed(self):
         diff = _build_plan_diff(
             old_schedule=[_dp("o_frozen")], new_schedule=[],
-            frozen_order_ids={"o_frozen"}, infeasible_order_ids=set(),
+            frozen_task_ids={"o_frozen"}, infeasible_task_ids=set(),
         )
-        assert not any(d["order_id"] == "o_frozen" for d in diff["removed"])
+        assert not any(d["task_id"] == "o_frozen" for d in diff["removed"])
         assert "o_frozen" in diff["frozen_orders"]
 
     def test_vehicle_change_classified_as_rescheduled(self):
         diff = _build_plan_diff(
             old_schedule=[_dp("o0", vid="v_old")],
             new_schedule=[_dp("o0", vid="v_new")],
-            frozen_order_ids=set(), infeasible_order_ids=set(),
+            frozen_task_ids=set(), infeasible_task_ids=set(),
         )
-        assert any(r["order_id"] == "o0" for r in diff["rescheduled"])
+        assert any(r["task_id"] == "o0" for r in diff["rescheduled"])
 
     def test_time_change_classified_as_rescheduled(self):
         diff = _build_plan_diff(
             old_schedule=[_dp("o0", start="2026-06-01T06:00:00+00:00")],
             new_schedule=[_dp("o0", start="2026-06-01T09:00:00+00:00")],
-            frozen_order_ids=set(), infeasible_order_ids=set(),
+            frozen_task_ids=set(), infeasible_task_ids=set(),
         )
-        assert any(r["order_id"] == "o0" for r in diff["rescheduled"])
+        assert any(r["task_id"] == "o0" for r in diff["rescheduled"])
 
     def test_unchanged_order_not_rescheduled(self):
         dp = _dp("o0")
         diff = _build_plan_diff([dp], [dp], set(), set())
-        assert not any(r["order_id"] == "o0" for r in diff["rescheduled"])
+        assert not any(r["task_id"] == "o0" for r in diff["rescheduled"])
 
     def test_newly_infeasible_recorded(self):
-        diff = _build_plan_diff([], [], set(), infeasible_order_ids={"o_inf"})
+        diff = _build_plan_diff([], [], set(), infeasible_task_ids={"o_inf"})
         assert "o_inf" in diff["newly_infeasible"]
 
     def test_rescheduled_item_has_from_and_to(self):
         old = _dp("o0", vid="v_old")
         new = _dp("o0", vid="v_new")
         diff = _build_plan_diff([old], [new], set(), set())
-        reschedule = next(r for r in diff["rescheduled"] if r["order_id"] == "o0")
+        reschedule = next(r for r in diff["rescheduled"] if r["task_id"] == "o0")
         assert "from" in reschedule
         assert "to" in reschedule
-        assert reschedule["from"]["vehicle_id"] == "v_old"
-        assert reschedule["to"]["vehicle_id"] == "v_new"
+        assert reschedule["from"]["prime_asset_id"] == "v_old"
+        assert reschedule["to"]["prime_asset_id"] == "v_new"
 
 
 # ---------------------------------------------------------------------------
@@ -164,9 +166,9 @@ class TestWritePlanDiffTxt:
 
     def test_rescheduled_section_included(self, tmp_path):
         diff = self._diff(rescheduled=[{
-            "order_id": "o42",
-            "from": {"vehicle_id": "v_old"},
-            "to": {"vehicle_id": "v_new"},
+            "task_id": "o42",
+            "from": {"prime_asset_id": "v_old"},
+            "to": {"prime_asset_id": "v_new"},
         }])
         path = tmp_path / "diff.txt"
         _write_plan_diff_txt(diff, path)
@@ -183,28 +185,28 @@ class TestWritePlanDiffTxt:
 
 
 # ---------------------------------------------------------------------------
-# Status validation (inline logic from run_reschedule)
+# Status validation (canonical TaskStatus)
 # ---------------------------------------------------------------------------
 
 
 class TestOrderStatusValidation:
     def test_unknown_status_raises_value_error(self):
-        from fl_op.models.enums import OrderStatus
+        from fl_op.canonical.enums import TaskStatus
         with pytest.raises(ValueError):
-            OrderStatus("flying")
+            TaskStatus("flying")
 
     def test_started_status_is_valid(self):
-        from fl_op.models.enums import OrderStatus
-        assert OrderStatus("started") == OrderStatus.STARTED
+        from fl_op.canonical.enums import TaskStatus
+        assert TaskStatus("started") == TaskStatus.STARTED
 
     def test_pending_status_is_valid(self):
-        from fl_op.models.enums import OrderStatus
-        assert OrderStatus("pending") == OrderStatus.PENDING
+        from fl_op.canonical.enums import TaskStatus
+        assert TaskStatus("pending") == TaskStatus.PENDING
 
     def test_completed_status_is_valid(self):
-        from fl_op.models.enums import OrderStatus
-        assert OrderStatus("completed") == OrderStatus.COMPLETED
+        from fl_op.canonical.enums import TaskStatus
+        assert TaskStatus("completed") == TaskStatus.COMPLETED
 
     def test_infeasible_status_is_valid(self):
-        from fl_op.models.enums import OrderStatus
-        assert OrderStatus("infeasible") == OrderStatus.INFEASIBLE
+        from fl_op.canonical.enums import TaskStatus
+        assert TaskStatus("infeasible") == TaskStatus.INFEASIBLE

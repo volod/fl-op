@@ -28,9 +28,9 @@ class TestBuildVehicleTimeIndex:
 
     def test_groups_windows_by_vehicle(self):
         packages = [
-            {"vehicle_id": "v0", "scheduled_start": "s0", "scheduled_end": "e0", "order_id": "o0"},
-            {"vehicle_id": "v0", "scheduled_start": "s1", "scheduled_end": "e1", "order_id": "o1"},
-            {"vehicle_id": "v1", "scheduled_start": "s2", "scheduled_end": "e2", "order_id": "o2"},
+            {"prime_asset_id": "v0", "scheduled_start": "s0", "scheduled_end": "e0", "task_id": "o0"},
+            {"prime_asset_id": "v0", "scheduled_start": "s1", "scheduled_end": "e1", "task_id": "o1"},
+            {"prime_asset_id": "v1", "scheduled_start": "s2", "scheduled_end": "e2", "task_id": "o2"},
         ]
         index = _build_vehicle_time_index(packages)
         assert set(index.keys()) == {"v0", "v1"}
@@ -38,20 +38,20 @@ class TestBuildVehicleTimeIndex:
         assert len(index["v1"]) == 1
 
     def test_time_window_is_named_tuple(self):
-        dp = {"vehicle_id": "v0", "scheduled_start": "2026-06-01T06:00:00+00:00",
-              "scheduled_end": "2026-06-01T10:00:00+00:00", "order_id": "o0"}
+        dp = {"prime_asset_id": "v0", "scheduled_start": "2026-06-01T06:00:00+00:00",
+              "scheduled_end": "2026-06-01T10:00:00+00:00", "task_id": "o0"}
         index = _build_vehicle_time_index([dp])
         tw = index["v0"][0]
         assert isinstance(tw, TimeWindow)
 
     def test_time_window_fields_match_package(self):
-        dp = {"vehicle_id": "v0", "scheduled_start": "2026-06-01T06:00:00+00:00",
-              "scheduled_end": "2026-06-01T10:00:00+00:00", "order_id": "o42"}
+        dp = {"prime_asset_id": "v0", "scheduled_start": "2026-06-01T06:00:00+00:00",
+              "scheduled_end": "2026-06-01T10:00:00+00:00", "task_id": "o42"}
         index = _build_vehicle_time_index([dp])
         tw = index["v0"][0]
         assert tw.start == "2026-06-01T06:00:00+00:00"
         assert tw.end == "2026-06-01T10:00:00+00:00"
-        assert tw.order_id == "o42"
+        assert tw.task_id == "o42"
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +98,7 @@ class TestWindowsOverlap:
 
 
 def _tw(start: str, end: str, oid: str = "o0") -> TimeWindow:
-    return TimeWindow(start=start, end=end, order_id=oid)
+    return TimeWindow(start=start, end=end, task_id=oid)
 
 
 _MORNING = "2026-06-01T06:00:00+00:00"
@@ -176,31 +176,31 @@ class TestQueryModuleDoesNotUseSolver:
 class TestTop3SortOrder:
     def test_highest_margin_first(self):
         candidates = [
-            {"vehicle_id": "v0", "estimated_margin_eur": 300.0},
-            {"vehicle_id": "v1", "estimated_margin_eur": 600.0},
-            {"vehicle_id": "v2", "estimated_margin_eur": 100.0},
+            {"prime_asset_id": "v0", "estimated_margin_eur": 300.0},
+            {"prime_asset_id": "v1", "estimated_margin_eur": 600.0},
+            {"prime_asset_id": "v2", "estimated_margin_eur": 100.0},
         ]
-        candidates.sort(key=lambda c: (-c["estimated_margin_eur"], c["vehicle_id"]))
+        candidates.sort(key=lambda c: (-c["estimated_margin_eur"], c["prime_asset_id"]))
         assert candidates[0]["estimated_margin_eur"] == 600.0
 
     def test_vehicle_id_tiebreak_is_alphabetical(self):
         candidates = [
-            {"vehicle_id": "v_z", "estimated_margin_eur": 500.0},
-            {"vehicle_id": "v_a", "estimated_margin_eur": 500.0},
-            {"vehicle_id": "v_m", "estimated_margin_eur": 500.0},
+            {"prime_asset_id": "v_z", "estimated_margin_eur": 500.0},
+            {"prime_asset_id": "v_a", "estimated_margin_eur": 500.0},
+            {"prime_asset_id": "v_m", "estimated_margin_eur": 500.0},
         ]
-        candidates.sort(key=lambda c: (-c["estimated_margin_eur"], c["vehicle_id"]))
-        assert candidates[0]["vehicle_id"] == "v_a"
-        assert candidates[1]["vehicle_id"] == "v_m"
-        assert candidates[2]["vehicle_id"] == "v_z"
+        candidates.sort(key=lambda c: (-c["estimated_margin_eur"], c["prime_asset_id"]))
+        assert candidates[0]["prime_asset_id"] == "v_a"
+        assert candidates[1]["prime_asset_id"] == "v_m"
+        assert candidates[2]["prime_asset_id"] == "v_z"
 
     def test_mixed_margin_and_tiebreak(self):
         candidates = [
-            {"vehicle_id": "v_z", "estimated_margin_eur": 500.0},
-            {"vehicle_id": "v_a", "estimated_margin_eur": 500.0},
-            {"vehicle_id": "v_x", "estimated_margin_eur": 700.0},
+            {"prime_asset_id": "v_z", "estimated_margin_eur": 500.0},
+            {"prime_asset_id": "v_a", "estimated_margin_eur": 500.0},
+            {"prime_asset_id": "v_x", "estimated_margin_eur": 700.0},
         ]
-        candidates.sort(key=lambda c: (-c["estimated_margin_eur"], c["vehicle_id"]))
-        assert candidates[0]["vehicle_id"] == "v_x"   # highest margin
-        assert candidates[1]["vehicle_id"] == "v_a"   # tiebreak: a before z
-        assert candidates[2]["vehicle_id"] == "v_z"
+        candidates.sort(key=lambda c: (-c["estimated_margin_eur"], c["prime_asset_id"]))
+        assert candidates[0]["prime_asset_id"] == "v_x"   # highest margin
+        assert candidates[1]["prime_asset_id"] == "v_a"   # tiebreak: a before z
+        assert candidates[2]["prime_asset_id"] == "v_z"

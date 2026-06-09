@@ -1,0 +1,76 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: canonical-forecast
+version: 0.1.0
+status: active
+name: Canonical Forecast
+domain: canonical
+tenant: optimization
+description:
+  purpose: Minimal optimization contract for an environmental forecast.
+  usage: Weather-window feasibility for environment-dependent operations.
+customProperties:
+  - property: canonicalEntity
+    value:
+      entity: forecast
+      canonicalModelRef: urn:xopt:model:canonical:0.1.0
+schema:
+  - name: forecast
+    logicalType: object
+    properties:
+      - name: forecastId
+        logicalType: string
+        required: true
+        description: Stable canonical identifier of the forecast window.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: forecast.forecastId, semanticTerm: urn:xopt:identity:forecast-id, planningUse: [identity]}
+      - name: forecastFrom
+        logicalType: string
+        required: false
+        description: Start of the forecast interval (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: forecast.forecastFor.from, semanticTerm: urn:xopt:time:forecast-from, quantityKind: timestamp, planningUse: [weather-window]}
+      - name: forecastTo
+        logicalType: string
+        required: false
+        description: End of the forecast interval (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: forecast.forecastFor.to, semanticTerm: urn:xopt:time:forecast-to, quantityKind: timestamp, planningUse: [weather-window]}
+      - name: locationLat
+        logicalType: number
+        required: false
+        description: Forecast location latitude.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: forecast.location.lat, semanticTerm: urn:xopt:attribute:latitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
+      - name: locationLon
+        logicalType: number
+        required: false
+        description: Forecast location longitude.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: forecast.location.lon, semanticTerm: urn:xopt:attribute:longitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
+      - name: windSpeed
+        logicalType: number
+        required: false
+        description: Sustained wind speed forecast.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: forecast.value.windSpeed, semanticTerm: urn:xopt:forecast:wind-speed, canonicalUnit: m/s, quantityKind: speed, planningUse: [weather-window]}
+      - name: precipitationRate
+        logicalType: number
+        required: false
+        description: Hourly precipitation forecast.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: forecast.value.precipitationRate, semanticTerm: urn:xopt:forecast:precipitation-rate, canonicalUnit: mm/h, quantityKind: flow-rate, planningUse: [weather-window]}
+      - name: soilMoisture
+        logicalType: number
+        required: false
+        description: Volumetric soil-moisture forecast.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: forecast.value.soilMoisture, semanticTerm: urn:xopt:forecast:soil-moisture, canonicalUnit: "%", quantityKind: ratio, planningUse: [weather-window]}

@@ -1,27 +1,24 @@
-"""Resolve x-optimization bindings for a dataset into a usable BindingTable.
+"""Resolve a contract's canonical mapping into a usable BindingTable.
 
-The ODCS contract is the authority for all semantic bindings. The BindingTable
-exposes both the forward direction (source field -> canonical path), used by the
-mapping engine, and the reverse direction (canonical path -> source field), used
-by the snapshot solver-payload projector to reconstruct solver rows from
-canonical objects.
+The canonical mapping document (contracts/domains/<domain>/mappings/<contract>.mapping.yaml)
+is the authority for all semantic bindings. The BindingTable exposes both the
+forward direction (source field -> canonical path), used by the mapping engine,
+and the reverse direction (canonical path -> source field), used by the snapshot
+solver-payload projector to reconstruct solver rows from canonical objects.
 """
 
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 from fl_op.contracts.registry import FileRegistry
-from fl_op.contracts.xopt import FieldBinding, XOptContractProfile
-
-if TYPE_CHECKING:
-    pass
+from fl_op.contracts.xopt import FieldBinding
 
 
 @dataclass
 class BindingTable:
     contract_id: str
     canonical_entity: str
-    profile: Optional[XOptContractProfile]
+    asset_role: Optional[str]
     bindings: list[FieldBinding]
 
     def by_source_field(self) -> dict[str, FieldBinding]:
@@ -37,20 +34,20 @@ class BindingTable:
                 return b.source_field
         return None
 
-    @property
-    def asset_role(self) -> Optional[str]:
-        return self.profile.asset_role if self.profile else None
-
 
 def load_binding_table(registry: FileRegistry, contract_id: str) -> BindingTable:
-    """Build a BindingTable for a registered contract from its ODCS contract."""
-    entry = registry.get_entry(contract_id)
-    odcs = registry.get_odcs(contract_id)
-    profile = odcs.profile if odcs else None
-    bindings = list(odcs.bindings) if odcs else []
+    """Build a BindingTable for a registered contract from its mapping document."""
+    mapping = registry.get_mapping(contract_id)
+    if mapping is None:
+        return BindingTable(
+            contract_id=contract_id,
+            canonical_entity="",
+            asset_role=None,
+            bindings=[],
+        )
     return BindingTable(
         contract_id=contract_id,
-        canonical_entity=entry.canonical_entity or "",
-        profile=profile,
-        bindings=bindings,
+        canonical_entity=mapping.canonical_entity,
+        asset_role=mapping.asset_role,
+        bindings=list(mapping.bindings),
     )

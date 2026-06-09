@@ -1,14 +1,14 @@
-"""Pydantic models for the x-optimization extension objects.
+"""Pydantic models for the canonical field-binding metadata.
 
-These describe the metadata embedded in Avro schemas (record- and field-level)
-and in ODCS contracts (via customProperties). They are intentionally permissive:
-unknown keys are preserved so that schema evolution does not silently drop
-metadata, while the typed fields document the binding contract used by the
-mapping engine.
+A field binding ties one physical source column to a canonical attribute path
+(plus its semantic term, unit, and missing-value policy). These are parsed from
+the per-domain mapping documents by fl_op.contracts.mapping_loader and consumed
+by the mapping engine. Models are permissive: unknown keys are preserved so that
+schema evolution does not silently drop metadata.
 """
 
 from enum import Enum
-from typing import Any, Optional
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -42,41 +42,6 @@ class XOptFieldMeta(BaseModel):
     )
 
 
-class XOptRecordMeta(BaseModel):
-    """Record-level x-optimization metadata."""
-
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
-
-    extension_version: str = Field(alias="extensionVersion")
-    semantic_entity: str = Field(alias="semanticEntity")
-    data_product_role: Optional[str] = Field(default=None, alias="dataProductRole")
-    asset_role: Optional[str] = Field(default=None, alias="assetRole")
-    entity_key_field: Optional[str] = Field(default=None, alias="entityKeyField")
-    event_time_field: Optional[str] = Field(default=None, alias="eventTimeField")
-    valid_from_field: Optional[str] = Field(default=None, alias="validFromField")
-    valid_to_field: Optional[str] = Field(default=None, alias="validToField")
-
-
-class XOptContractProfile(BaseModel):
-    """Root-level ODCS xOptimization contract profile."""
-
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
-
-    extension_version: str = Field(alias="extensionVersion")
-    semantic_model_ref: str = Field(alias="semanticModelRef")
-    data_product_role: Optional[str] = Field(default=None, alias="dataProductRole")
-    asset_role: Optional[str] = Field(default=None, alias="assetRole")
-    avro_schema_ref: Optional[str] = Field(default=None, alias="avroSchemaRef")
-    mapping_version: Optional[str] = Field(default=None, alias="mappingVersion")
-    permitted_planning_uses: list[str] = Field(
-        default_factory=list, alias="permittedPlanningUses"
-    )
-    migration_policy_ref: Optional[str] = Field(default=None, alias="migrationPolicyRef")
-    default_quality_policy_ref: Optional[str] = Field(
-        default=None, alias="defaultQualityPolicyRef"
-    )
-
-
 class FieldBinding(BaseModel):
     """A resolved binding from one source field to a canonical attribute path.
 
@@ -92,9 +57,3 @@ class FieldBinding(BaseModel):
     @property
     def binding(self) -> str:
         return self.meta.binding
-
-
-def extract_xopt_block(node: dict[str, Any]) -> Optional[dict[str, Any]]:
-    """Return the raw x-optimization dict from an Avro record/field node, if present."""
-    block = node.get("x-optimization")
-    return block if isinstance(block, dict) else None

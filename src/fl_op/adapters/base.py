@@ -24,20 +24,20 @@ def _parse_ts(value: str) -> datetime:
 
 def dispatch_to_assignment(dp: dict[str, Any]) -> Assignment:
     """Convert a solver dispatch package into a canonical Assignment."""
-    vehicle_id = dp.get("vehicle_id", "")
-    implement_id = dp.get("implement_id", "")
-    operator_id = dp.get("operator_id", "")
+    vehicle_id = dp.get("prime_asset_id", "")
+    implement_id = dp.get("related_asset_id", "")
+    operator_id = dp.get("operator_asset_id", "")
     bundle_id = compute_bundle_id([vehicle_id, implement_id], [], MAPPING_VERSION)
     return Assignment(
-        assignment_id=dp.get("dispatch_id", f"assign-{dp.get('order_id', '')}"),
-        task_id=dp.get("order_id", ""),
+        assignment_id=dp.get("dispatch_id", f"assign-{dp.get('task_id', '')}"),
+        task_id=dp.get("task_id", ""),
         bundle_id=bundle_id,
         asset_ids=[a for a in (vehicle_id, implement_id) if a],
         operator_ids=[operator_id] if operator_id else [],
         planned_start=_parse_ts(dp.get("scheduled_start", "")),
         planned_finish=_parse_ts(dp.get("scheduled_end", "")),
         expected_margin_eur=float(dp.get("estimated_margin_eur", 0.0)),
-        explanation_ref=f"explain://assignment/{dp.get('order_id', '')}",
+        explanation_ref=f"explain://assignment/{dp.get('task_id', '')}",
     )
 
 
@@ -45,13 +45,13 @@ def infeasible_to_unassigned(inf: dict[str, Any]) -> UnassignedTask:
     """Convert a solver infeasibility record into a canonical UnassignedTask."""
     reason_code = ReasonCode(inf.get("reason_code", ReasonCode.UNKNOWN.value))
     return UnassignedTask(
-        task_id=inf.get("order_id", ""),
+        task_id=inf.get("task_id", ""),
         reason_code=reason_code,
         details={
             "detail": inf.get("detail", ""),
             "cluster_id": inf.get("cluster_id", ""),
         },
-        explanation_ref=f"explain://unassigned/{inf.get('order_id', '')}",
+        explanation_ref=f"explain://unassigned/{inf.get('task_id', '')}",
     )
 
 

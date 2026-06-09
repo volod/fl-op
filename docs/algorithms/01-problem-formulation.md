@@ -1,244 +1,182 @@
 # Problem Formulation
 
-## 1. Problem Overview
+## 1. Problem overview
 
-Agricultural fleet optimization is a joint **order selection** and **vehicle routing**
-problem. A fleet manager receives a set of candidate orders (contracts to spray, till,
-seed, harvest, or fertilize specific fields). Not every order can or should be accepted:
-accepting a low-margin order that blocks a high-margin one is a business loss. The goal
-is to choose which orders to fulfill, assign a vehicle-implement-operator triple to each,
-and compute a dispatch schedule that maximizes total net margin subject to physical,
-temporal, and contractual constraints.
+The engine plans over **canonical entities** and is domain-agnostic: it selects
+which **tasks** to fulfil, assigns a **prime mover + related equipment + operator**
+bundle to each, and computes a dispatch schedule that maximizes total net margin
+subject to physical, temporal, and contractual constraints. Not every task can or
+should be served: accepting a low-margin task that blocks a high-margin one is a
+business loss, so task selection is part of the problem.
 
 The formal problem class is:
 
     Heterogeneous Fleet VRP with Time Windows (HFVRPTW)
-    + Multi-resource Scheduling (vehicles, implements, operators must all match)
-    + Profit-Maximizing Order Selection (not all orders need to be served)
+    + Multi-resource scheduling (prime mover, related equipment, operator must all match)
+    + Profit-maximizing task selection (not all tasks need to be served)
 
----
+> "Vehicle Routing Problem" (VRP) and "vehicle" in the academic/OR-Tools sense
+> below refer to a generic routed resource; they are the literature's names, not
+> the agricultural domain.
 
-## 2. Sets and Indices
+## 2. Terminology: canonical model vs domain
+
+These docs use the **agricultural** reference domain for concrete examples. The
+engine itself only sees canonical entities; each physical domain maps onto them
+(see [domain-mapping.md](../reference/domain-mapping.md)).
+
+| Canonical (engine) | Agricultural example | Construction example |
+|---|---|---|
+| asset, role `mobile-prime-mover` | tractor, self-propelled sprayer | excavator, wheel loader |
+| asset, role `implement` (related equipment) | plow, sprayer, seeder | bucket, breaker |
+| asset, role `operator` | machine operator | machine operator |
+| location, type `depot` | depot | yard |
+| location, type `field` (work site) | field parcel | work site |
+| task | service order | earthworks job |
+| capability `rated-power` / `required-power` | engine kW / implement draw kW | machine kW / attachment kW |
+| capability `working-width` | implement swath | attachment cut width |
+| `operation-type` | SPRAYING, TILLAGE, ... | EXCAVATION, GRADING, ... |
+
+The rest of this document states the math over the canonical entities, using
+agricultural terms only as illustration.
+
+## 3. Sets and indices
 
 | Symbol | Description |
 |--------|-------------|
-| V      | set of vehicles, |V| up to 3000 |
-| I      | set of implements, |I| up to 20000 |
-| P      | set of operators (pilots), |P| up to 3000 |
-| D      | set of depots, |D| up to 50 |
-| O      | set of candidate orders, |O| up to 10000 |
-| F      | set of fields |
+| M      | set of prime movers, \|M\| up to 3000 |
+| R      | set of related-equipment assets, \|R\| up to 20000 |
+| P      | set of operators, \|P\| up to 3000 |
+| D      | set of depot locations, \|D\| up to 50 |
+| T      | set of candidate tasks, \|T\| up to 10000 |
+| S      | set of work-site locations |
 
----
+## 4. Input data (canonical fields)
 
-## 3. Input Data
+### 4.1 Prime mover (asset)
 
-### 3.1 Vehicle
+- `asset_type`: source category (illustration: TRACTOR, SELF_PROPELLED, TRUCK)
+- `rated_power`: power the asset can deliver; constrains related-equipment compatibility
+- `fuel_consumption_rate`: energy burn at working load
+- `lat` / `lon`: current location at planning time
+- `home_depot_ref`: home depot
+- availability: earliest dispatch time
 
-Each vehicle v in V is characterised by:
+### 4.2 Related equipment (asset)
 
-- `type_v` in {TRACTOR, SELF_PROPELLED, TRUCK}: determines which implement types can attach
-- `rated_power_kw_v`: engine output; constrains implement compatibility
-- `fuel_consumption_l_per_h_v`: fuel burn at rated power
-- `current_location_v` = (lat_v, lon_v): GPS coordinates at planning time
-- `depot_id_v`: home depot
-- `available_from_v`: earliest dispatch time (UTC ISO-8601)
+- `asset_type` (illustration: SPRAYER, PLOW, SEEDER, ...)
+- `required_power`: minimum prime-mover power to drive it
+- `working_width`: swath width, determines pass count per site
+- `compatible_operations`: operation types it can perform
+- `home_depot_ref`
 
-### 3.2 Implement
+### 4.3 Task
 
-Each implement i in I is characterised by:
+- `operation_type`: operation required; matched against asset capabilities
+- `location_ref`: target work site (with centroid coordinates)
+- `area`: work-site area to be serviced
+- `deadline`: hard deadline; penalty accrues after it
+- `penalty_per_day`: contractual late-delivery penalty rate
+- `revenue`: expected gross value if delivered on time
 
-- `type_i` in {SPRAYER, PLOW, DISK_HARROW, SEEDER, COMBINE_HEADER, FERTILIZER_SPREADER}
-- `required_power_kw_i`: minimum engine power to drive this implement
-- `working_width_m_i`: swath width, determines pass count per field
-- `compatible_operations_i` subset of {SPRAYING, TILLAGE, SEEDING, HARVESTING, FERTILIZING}
-- `depot_id_i`: storage location
+### 4.4 Location (work site / depot)
 
-### 3.3 Order
+- centroid coordinates `lat`, `lon`
+- `area` (sites); depot affinity from a nearest-depot BallTree query
 
-Each order o in O is characterised by:
+## 5. Decision variables
 
-- `operation_type_o` in {SPRAYING, TILLAGE, SEEDING, HARVESTING, FERTILIZING}
-- `field_id_o`: target field with centroid coordinates
-- `area_ha_o`: field area to be worked
-- `deadline_o`: hard deadline (UTC ISO-8601); penalty accrues after this
-- `penalty_per_day_eur_o`: contractual late-delivery penalty rate
-- `estimated_revenue_eur_o`: gross contract value if delivered on time
+Let x_{m,r,t} in {0, 1} indicate that prime mover m is paired with related
+equipment r to serve task t. Additionally:
 
-### 3.4 Field
+- `start_{m,r,t}` in R: scheduled start time for the assignment
+- `selected_t` in {0, 1}: 1 if task t is included in the schedule
 
-Each field f in F has:
+with `selected_t = 1  <=>  exists exactly one (m, r) such that x_{m,r,t} = 1`.
 
-- centroid coordinates `(lat_f, lon_f)`
-- area `area_ha_f`
-- depot affinity derived from nearest-depot BallTree query
+## 6. Compatibility constraints
 
----
+### 6.1 Power compatibility
 
-## 4. Decision Variables
+Prime mover m can drive related equipment r only if:
 
-Let x_{v,i,o} in {0, 1} indicate that vehicle v is paired with implement i to serve order o.
+    rated_power_m >= required_power_r * (1 - POWER_MARGIN_PCT / 100)
 
-Additionally:
+`POWER_MARGIN_PCT = 10.0` (`core/constants.py`): a prime mover may drive equipment
+needing slightly more power than its rated output, within tolerance.
 
-- `start_{v,i,o}` in R: scheduled start time for assignment (v, i, o)
-- `selected_o` in {0, 1}: 1 if order o is included in the schedule
+### 6.2 Operation-type compatibility
 
-Feasibility requires:
+Related equipment r can serve task t only if `operation_type_t in compatible_operations_r`.
+Power and operation-type compatibility are encoded as a boolean matrix C of shape
+(\|M\|, \|R\|) computed once at solve time.
 
-    selected_o = 1  <=>  exists exactly one (v, i) such that x_{v,i,o} = 1
+### 6.3 Assignment uniqueness
 
----
+    sum_{r,t} x_{m,r,t} <= 1   for all m   (each prime mover serves one task at a time)
+    sum_{m,t} x_{m,r,t} <= 1   for all r   (each related-equipment asset used once at a time)
+    sum_{m,r} x_{m,r,t} <= 1   for all t   (each task served by one bundle)
 
-## 5. Compatibility Constraints
+### 6.4 Time windows
 
-### 5.1 Power compatibility
+For each selected task t:
 
-Vehicle v can pull implement i only if:
+    available_from_m <= start_{m,r,t}
+    start_{m,r,t} + duration_{m,r,t} <= deadline_t
 
-    rated_power_kw_v >= required_power_kw_i * (1 - POWER_MARGIN_PCT / 100)
+where `duration_{m,r,t} = area_t / effective_rate_{m,r}` and
+`effective_rate_{m,r} = working_width_r * field_speed / 10` [area/h].
 
-`POWER_MARGIN_PCT = 10.0` (defined in `core/constants.py`). A vehicle can pull an implement
-that requires slightly more power than its rated output, within this tolerance.
+## 7. Objective function
 
-### 5.2 Operation-type compatibility
+Maximize total net margin across selected tasks:
 
-Implement i can serve order o only if:
+    maximize  sum_t selected_t * margin_t(m, r)
 
-    operation_type_o in compatible_operations_i
+    margin_t(m, r) = revenue_t - fuel_cost_t(m, r) - reposition_cost_t(m) - material_cost_t(r)
 
-Both the power constraint and the operation-type constraint are encoded as a boolean
-compatibility matrix C of shape (|V|, |I|) computed once at solve time.
+- `fuel_cost = duration * fuel_consumption_rate_m * FUEL_COST_EUR_PER_L` (1.45)
+- `reposition_cost = haversine(location_m, site_t) / field_speed * fuel_consumption_rate_m * FUEL_COST_EUR_PER_L`
+- `material_cost = area_t * material_kg_per_area * FERTILIZER_COST_EUR_PER_KG` (0.55); zero for non-material operations
 
-### 5.3 Assignment uniqueness
+## 8. Why this is hard
 
-Each vehicle can be assigned to at most one order at a time:
-
-    sum_{i in I, o in O} x_{v,i,o}  <=  1    for all v in V
-
-Each implement can be assigned to at most one order at a time:
-
-    sum_{v in V, o in O} x_{v,i,o}  <=  1    for all i in I
-
-Each order is served by at most one vehicle-implement pair:
-
-    sum_{v in V, i in I} x_{v,i,o}  <=  1    for all o in O
-
-### 5.4 Time windows
-
-For each selected order o, the scheduled start must satisfy:
-
-    available_from_v  <=  start_{v,i,o}                    (vehicle available)
-    start_{v,i,o} + duration_{v,i,o}  <=  deadline_o       (completes before deadline)
-
-where:
-
-    duration_{v,i,o} = area_ha_o / effective_rate_{v,i}
-    effective_rate_{v,i} = working_width_m_i * field_speed_kmh / 10  [ha/h]
-
----
-
-## 6. Objective Function
-
-Maximize total net margin across selected orders:
-
-    maximize  sum_{o in O} selected_o * margin_o(v, i)
-
-where the margin for order o served by vehicle v with implement i is:
-
-    margin_o(v, i) = estimated_revenue_eur_o
-                   - fuel_cost_o(v, i)
-                   - reposition_cost_o(v)
-                   - material_cost_o(i)
-
-**Fuel cost:**
-
-    fuel_cost_o(v, i) = duration_{v,i,o} * fuel_consumption_l_per_h_v * FUEL_COST_EUR_PER_L
-
-where `FUEL_COST_EUR_PER_L = 1.45`.
-
-**Repositioning cost** (driving from vehicle's current location to field centroid):
-
-    distance_km = haversine(current_location_v, centroid_field_o)
-    travel_h = distance_km / field_speed_kmh
-    reposition_cost = travel_h * fuel_consumption_l_per_h_v * FUEL_COST_EUR_PER_L
-
-**Material cost** (for fertilizer and spraying operations):
-
-    material_cost_o(i) = area_ha_o * material_kg_per_ha * FERTILIZER_COST_EUR_PER_KG
-
-where `FERTILIZER_COST_EUR_PER_KG = 0.55`. Zero for non-material operations.
-
----
-
-## 7. Why This Is Hard
-
-### 7.1 Size
-
-At production scale:
-
-- |V| = 3000, |I| = 20000, |O| = 2500
-- Number of (v, i, o) triples: 3000 * 20000 * 2500 = 150 billion
-- Even after compatibility filtering, hundreds of millions of feasible triples remain
-
-Exact MIP solvers cannot enumerate this space in operational time.
-
-### 7.2 Coupled constraints
-
-Vehicles, implements, and operators form a three-way assignment. Assigning vehicle v to
-order o blocks v from all other orders, regardless of which implement is used. A solver
-must reason about three interacting resources simultaneously.
-
-### 7.3 Time windows and sequencing
-
-A vehicle completing order o1 before moving to order o2 must satisfy:
-
-    start_{v,i2,o2}  >=  start_{v,i1,o1} + duration_{v,i1,o1} + travel_time(field_o1, field_o2)
-
-This creates sequencing dependencies that interact with the time-window constraints.
-
-### 7.4 Selective serving (VRP with profits)
-
-The fleet cannot serve all orders. Choosing which orders to drop (infeasible) and which
-to serve is itself an NP-hard selection problem (akin to the Orienteering Problem or the
-selective TSP). The solver must jointly optimize order selection and routing.
-
----
-
-## 8. Problem Class in the Literature
-
-This problem is a special case of the **Vehicle Routing Problem with Time Windows and
-Multiple Resource Constraints** (VRPTW-MR), extended with profit-maximizing order
-selection. Key references from the academic literature:
-
-- **HFVRPTW base**: Gendreau, M., Laporte, G., Musaraganyi, C., & Taillard, E.D. (1999).
-  "A Tabu Search Heuristic for the Heterogeneous Fleet Vehicle Routing Problem."
-  Computers & Operations Research, 26(12), 1153-1173.
-
-- **Selective VRP (profits)**: Feillet, D., Dejax, P., & Gendreau, M. (2005).
-  "Traveling Salesman Problems with Profits." Transportation Science, 39(2), 188-205.
-
-- **Multi-resource VRP**: Ribeiro, G.M., & Laporte, G. (2012). "An adaptive large
-  neighbourhood search heuristic for the cumulative capacitated vehicle routing problem."
-  Computers & Operations Research, 39(3), 728-735.
-
-The fl-op problem adds agricultural-specific structure (implement compatibility,
-operation-type matching, field area rates) that allows the hierarchical decomposition
-described in `02-solver-pipeline.md`.
-
----
-
-## 9. Relation to Implemented Code
+- **Size**: at \|M\|=3000, \|R\|=20000, \|T\|=2500 there are ~150 billion (m, r, t)
+  triples; even after compatibility filtering, hundreds of millions remain. Exact
+  MIP cannot enumerate this in operational time.
+- **Coupled resources**: prime mover, related equipment, and operator form a
+  three-way assignment; assigning m to t blocks m from all other tasks.
+- **Sequencing**: `start_{m,r2,t2} >= start_{m,r1,t1} + duration_{m,r1,t1} + travel(site_t1, site_t2)`
+  couples with the time windows.
+- **Selective serving (VRP with profits)**: choosing which tasks to drop is itself
+  NP-hard (akin to the Orienteering Problem / selective TSP).
+
+## 9. Problem class in the literature
+
+A special case of the **Vehicle Routing Problem with Time Windows and Multiple
+Resource Constraints** (VRPTW-MR), extended with profit-maximizing selection:
+
+- **HFVRPTW base**: Gendreau, Laporte, Musaraganyi & Taillard (1999), *Computers &
+  Operations Research* 26(12), 1153-1173.
+- **Selective VRP (profits)**: Feillet, Dejax & Gendreau (2005), *Transportation
+  Science* 39(2), 188-205.
+- **Multi-resource VRP**: Ribeiro & Laporte (2012), *Computers & Operations
+  Research* 39(3), 728-735.
+
+The capability/requirement structure (power, operation-type, area rates) is what
+enables the hierarchical decomposition in `02-solver-pipeline.md`.
+
+## 10. Relation to implemented code
 
 | Mathematical object | Code location |
 |---------------------|---------------|
-| V, I, P, D, O, F    | `src/fl_op/models/` Pydantic models |
-| Compatibility matrix C | `src/fl_op/models/compat_matrix.py` |
-| x_{v,i,o} variables | OR-Tools routing model in `solver/cluster_solver.py` |
-| margin_o(v, i)      | `solver/greedy.py` vectorized scorer |
-| Order selection     | `solver/allocation/` + `solver/aggregator.py` |
-| Infeasible orders   | TypedDict `InfeasibleOrder` in `models/types.py` |
-| Time window check   | `solver/preprocessing.py` filter_feasible_vehicle_implement_pairs() |
+| Canonical entities (M, R, P, D, T, S) | `src/fl_op/canonical/` |
+| Solver working rows (projected from a snapshot) | `src/fl_op/solver/inputs.py` |
+| Compatibility matrix C | `src/fl_op/solver/feasibility.py` |
+| x_{m,r,t} variables | OR-Tools routing model in `solver/cluster_solver.py` |
+| margin_t(m, r) | `solver/greedy.py` vectorized scorer |
+| Task selection | `solver/allocation/` + `solver/aggregator.py` |
+| Infeasible tasks | TypedDict `InfeasibleOrder` in `solver/types.py` |
+| Time-window / op-type filter | `solver/preprocessing.py` |
 
-See `02-solver-pipeline.md` for how the solver maps this formulation onto tractable
-subproblems.
+See `02-solver-pipeline.md` for how this formulation maps onto tractable subproblems.

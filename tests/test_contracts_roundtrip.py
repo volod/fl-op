@@ -2,7 +2,6 @@
 
 import pytest
 
-from fl_op.contracts.fingerprint import odcs_metadata_hash
 from fl_op.contracts.registry import FileRegistry
 from fl_op.contracts.schema_gen import check_generation
 from fl_op.contracts.validate import validate_suite
@@ -28,11 +27,13 @@ def test_suite_validates(registry: FileRegistry) -> None:
     ] + report.profile_errors
 
 
-def test_every_odcs_contract_has_bindings(registry: FileRegistry) -> None:
+def test_every_contract_has_canonical_mapping(registry: FileRegistry) -> None:
+    # Bindings now live in the per-domain canonical mapping documents, not in the
+    # physical ODCS schema.
     for cid in _odcs_contract_ids(registry):
-        odcs = registry.get_odcs(cid)
-        assert odcs is not None
-        assert odcs.bindings, f"{cid} has no xOptimization field bindings in ODCS"
+        mapping = registry.get_mapping(cid)
+        assert mapping is not None, f"{cid} has no canonical mapping document"
+        assert mapping.bindings, f"{cid} mapping has no field bindings"
 
 
 def test_generated_avro_has_no_xoptimization(registry: FileRegistry) -> None:
@@ -71,14 +72,26 @@ def test_es_generation_ready_for_all_odcs(registry: FileRegistry) -> None:
         assert report.ok, f"{cid}: ES generation check failed: {report.errors}"
 
 
-def test_fingerprints_are_deterministic(registry: FileRegistry) -> None:
-    for cid in _odcs_contract_ids(registry):
-        odcs = registry.get_odcs(cid)
-        assert odcs is not None
-        a = odcs_metadata_hash(odcs.doc)
-        b = odcs_metadata_hash(odcs.doc)
-        assert a == b, f"{cid}: odcs_metadata_hash is not deterministic"
+def test_mapping_metadata_hash_is_deterministic(registry: FileRegistry) -> None:
+    from fl_op.contracts.fingerprint import mapping_metadata_hash
+    from fl_op.contracts.mapping_loader import mapping_metadata_blocks
 
+    for cid in _odcs_contract_ids(registry):
+        entry = registry.get_entry(cid)
+        assert entry.mapping_ref, f"{cid} has no mapping ref"
+        doc = mapping_metadata_blocks(registry.root / entry.mapping_ref)
+        assert mapping_metadata_hash(doc) == mapping_metadata_hash(doc)
+
+
+def test_construction_domain_maps_onto_canonical_model(registry: FileRegistry) -> None:
+    from fl_op.contracts.validate import validate_domain
+
+    report = validate_domain("construction", registry)
+    assert report.ok, report.errors
+    assert set(report.entities_covered) >= {"asset", "location", "task"}
+
+
+def test_fingerprints_are_deterministic(registry: FileRegistry) -> None:
     for cid in _avro_contract_ids(registry):
         avro = registry.get_avro(cid)
         a = avro.avro_parsing_fingerprint

@@ -5,8 +5,8 @@ import logging
 import pathlib
 from typing import Any
 
+from fl_op.canonical.enums import TaskStatus
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
-from fl_op.models.enums import OrderStatus
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +25,14 @@ def _apply_events(
     orders: list[dict[str, Any]],
     events: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Mutate order statuses based on events; raise ValueError on unknown event types."""
+    """Mutate raw physical order rows based on events (keyed by physical order_id)."""
     order_map = {o["order_id"]: o for o in orders}
     for event in events:
         event_type = event.get("type")
         if event_type == "mark_started":
             oid = event.get("order_id")
             if oid and oid in order_map:
-                order_map[oid]["status"] = OrderStatus.STARTED.value
+                order_map[oid]["status"] = TaskStatus.STARTED.value
             else:
                 logger.warning("mark_started: order_id %s not found", oid)
         else:
@@ -45,37 +45,37 @@ def _apply_events(
 def _build_plan_diff(
     old_schedule: list[dict[str, Any]],
     new_schedule: list[dict[str, Any]],
-    frozen_order_ids: set[str],
-    infeasible_order_ids: set[str],
+    frozen_task_ids: set[str],
+    infeasible_task_ids: set[str],
 ) -> dict[str, Any]:
-    old_order_ids = {d["order_id"] for d in old_schedule}
-    new_order_ids = {d["order_id"] for d in new_schedule}
+    old_task_ids = {d["task_id"] for d in old_schedule}
+    new_task_ids = {d["task_id"] for d in new_schedule}
 
-    added = [d for d in new_schedule if d["order_id"] not in old_order_ids]
+    added = [d for d in new_schedule if d["task_id"] not in old_task_ids]
     removed = [
         d for d in old_schedule
-        if d["order_id"] not in new_order_ids and d["order_id"] not in frozen_order_ids
+        if d["task_id"] not in new_task_ids and d["task_id"] not in frozen_task_ids
     ]
 
     rescheduled = []
-    old_map = {d["order_id"]: d for d in old_schedule}
+    old_map = {d["task_id"]: d for d in old_schedule}
     for dp in new_schedule:
-        oid = dp["order_id"]
+        oid = dp["task_id"]
         if oid in old_map:
             old = old_map[oid]
             if (
-                old.get("vehicle_id") != dp.get("vehicle_id")
+                old.get("prime_asset_id") != dp.get("prime_asset_id")
                 or old.get("scheduled_start") != dp.get("scheduled_start")
             ):
-                rescheduled.append({"order_id": oid, "from": old, "to": dp})
+                rescheduled.append({"task_id": oid, "from": old, "to": dp})
 
     return {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
-        "frozen_orders": list(frozen_order_ids),
+        "frozen_orders": list(frozen_task_ids),
         "added": added,
         "removed": removed,
         "rescheduled": rescheduled,
-        "newly_infeasible": list(infeasible_order_ids),
+        "newly_infeasible": list(infeasible_task_ids),
     }
 
 
@@ -94,7 +94,7 @@ def _write_plan_diff_txt(diff: dict[str, Any], path: pathlib.Path) -> None:
         lines.append("Rescheduled orders (first 10):")
         for r in diff["rescheduled"][:10]:
             lines.append(
-                f"  {r['order_id']}: "
-                f"{r['from'].get('vehicle_id')} -> {r['to'].get('vehicle_id')}"
+                f"  {r['task_id']}: "
+                f"{r['from'].get('prime_asset_id')} -> {r['to'].get('prime_asset_id')}"
             )
     path.write_text("\n".join(lines) + "\n")

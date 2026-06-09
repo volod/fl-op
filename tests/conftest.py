@@ -8,6 +8,20 @@ from fl_op.data.generator import run_generate
 from fl_op.io import detect_format, get_codec, locate_source
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_generated_avro() -> None:
+    """Generate the physical Avro schemas if missing (they are gitignored).
+
+    Contract-suite tests load the generated Avro from contracts/generated/avro;
+    regenerate it from the ODCS contracts so the suite is self-contained.
+    """
+    from fl_op.contracts.schema_gen import run_generate as generate_schemas
+    from fl_op.core.paths import CONTRACTS_ROOT
+
+    if not (CONTRACTS_ROOT / "generated" / "avro").exists():
+        generate_schemas(fmt="avro")
+
+
 @pytest.fixture(scope="session")
 def dataset_dir(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
     """Generate a small synthetic dataset once per test session."""

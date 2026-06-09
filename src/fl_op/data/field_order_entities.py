@@ -5,8 +5,9 @@ from typing import Any
 
 import numpy as np
 
+from fl_op.canonical.enums import TaskStatus
+from fl_op.data.agri_enums import OperationType
 from fl_op.data.geo import _REGION_CENTER_LAT, _REGION_CENTER_LON, _REGION_RADIUS_KM, _nearest_depot_ids, _random_points_in_circle
-from fl_op.models.enums import OperationType, OrderStatus
 
 _ORDER_AREA_MIN_HA = 10.0
 _ORDER_AREA_MAX_HA = 800.0
@@ -107,7 +108,7 @@ def _generate_orders_and_contracts(
                 "deadline": deadline.isoformat(),
                 "penalty_per_day_eur": round(float(penalties[oi]), 2),
                 "priority": int(priorities[oi]),
-                "status": OrderStatus.PENDING.value,
+                "status": TaskStatus.PENDING.value,
                 "estimated_revenue_eur": round(float(revenues[oi]), 2),
                 "contract_id_ref": c_id,
             }

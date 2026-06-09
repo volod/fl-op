@@ -1,0 +1,66 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: sites
+version: 1.0.0
+status: active
+name: Construction Work Sites
+domain: construction-earthworks
+tenant: fleet-ops
+description:
+  purpose: Work-site locations and entry points mapped to canonical Locations.
+  usage: Geospatial clustering, site-entry coordinates, ground restrictions.
+  # Canonical projection lives in mappings/sites.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: sites.csv
+schema:
+  - name: sites
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.construction.sites
+            recordName: WorkSite
+            recordDoc: "Construction work site mapped to a canonical Location. Source dataset: sites.csv."
+          proto:
+            package: org.example.construction.sites
+            messageName: WorkSite
+            syntax: proto3
+          es:
+            indexName: sites
+            dynamic: strict
+    properties:
+      - name: site_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the work site.
+      - name: label
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Human-readable site name.
+      - name: plot_ha
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Work-site area.
+      - name: entry_lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Site-entry latitude.
+      - name: entry_lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Site-entry longitude.
+      - name: ground_class
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Ground classification.

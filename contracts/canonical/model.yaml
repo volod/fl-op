@@ -1,0 +1,93 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalModel
+
+# The canonical optimization model: the single source of truth for what the
+# optimization engine consumes. Domain mapping packs (contracts/domains/<domain>)
+# project their physical schemas onto the entities and semantic terms declared
+# here. The engine never reads a physical schema directly; it only sees canonical
+# entities built according to these contracts.
+metadata:
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  version: 0.1.0
+  extensionVersion: 0.1.0
+  description: Minimal entity, capability, and semantic-term contract for fleet optimization.
+
+# Canonical entities. Each references an ODCS DataContract that declares the
+# entity's canonical fields, their bindings, required flags, and semantic terms.
+entities:
+  asset:
+    contract: odcs/asset.odcs.yaml
+    description: A schedulable resource (prime mover, implement, operator).
+  location:
+    contract: odcs/location.odcs.yaml
+    description: A point of interest (work site, depot, loading station).
+  task:
+    contract: odcs/task.odcs.yaml
+    description: A unit of work requested by a contract/order.
+  forecast:
+    contract: odcs/forecast.odcs.yaml
+    description: An environmental forecast for a location and time interval.
+  execution-event:
+    contract: odcs/execution-event.odcs.yaml
+    description: An operational event envelope that triggers rolling re-solves.
+
+# Controlled vocabulary of semantic terms. A domain mapping may only bind a
+# physical field to a canonical field whose semanticTerm appears here. Each term
+# fixes the meaning, value type, quantity kind, and canonical unit so that
+# physical values from any domain are normalized to one comparable scale.
+semanticTerms:
+  # -- identity --------------------------------------------------------------
+  urn:xopt:identity:asset-id: {valueType: string, quantityKind: identifier}
+  urn:xopt:identity:location-id: {valueType: string, quantityKind: identifier}
+  urn:xopt:identity:task-id: {valueType: string, quantityKind: identifier}
+  urn:xopt:identity:forecast-id: {valueType: string, quantityKind: identifier}
+  urn:xopt:identity:event-id: {valueType: string, quantityKind: identifier}
+  # -- attributes ------------------------------------------------------------
+  urn:xopt:attribute:asset-type: {valueType: string, quantityKind: categorical}
+  urn:xopt:attribute:display-name: {valueType: string, quantityKind: text}
+  urn:xopt:attribute:latitude: {valueType: number, quantityKind: angle, canonicalUnit: deg}
+  urn:xopt:attribute:longitude: {valueType: number, quantityKind: angle, canonicalUnit: deg}
+  urn:xopt:attribute:area: {valueType: number, quantityKind: area, canonicalUnit: ha}
+  urn:xopt:attribute:service-area: {valueType: number, quantityKind: area, canonicalUnit: ha}
+  urn:xopt:attribute:polygon: {valueType: array, quantityKind: geometry}
+  urn:xopt:attribute:soil-type: {valueType: string, quantityKind: categorical}
+  urn:xopt:attribute:operation-type: {valueType: string, quantityKind: categorical}
+  urn:xopt:attribute:priority-class: {valueType: integer, quantityKind: ordinal}
+  urn:xopt:attribute:task-status: {valueType: string, quantityKind: categorical}
+  urn:xopt:attribute:expected-revenue: {valueType: number, quantityKind: money, canonicalUnit: EUR}
+  urn:xopt:attribute:event-type: {valueType: string, quantityKind: categorical}
+  urn:xopt:attribute:event-payload: {valueType: string, quantityKind: text}
+  # -- capabilities ----------------------------------------------------------
+  urn:xopt:capability:rated-power: {valueType: number, quantityKind: power, canonicalUnit: kW}
+  urn:xopt:capability:required-power: {valueType: number, quantityKind: power, canonicalUnit: kW}
+  urn:xopt:capability:fuel-tank-volume: {valueType: number, quantityKind: volume, canonicalUnit: L}
+  urn:xopt:capability:fuel-consumption-rate: {valueType: number, quantityKind: flow-rate, canonicalUnit: L/h}
+  urn:xopt:capability:travel-speed: {valueType: number, quantityKind: speed, canonicalUnit: km/h}
+  urn:xopt:capability:working-width: {valueType: number, quantityKind: length, canonicalUnit: m}
+  urn:xopt:capability:min-operating-speed: {valueType: number, quantityKind: speed, canonicalUnit: km/h}
+  urn:xopt:capability:max-operating-speed: {valueType: number, quantityKind: speed, canonicalUnit: km/h}
+  urn:xopt:capability:fertilizer-capacity: {valueType: number, quantityKind: mass, canonicalUnit: kg}
+  urn:xopt:capability:compatible-operations: {valueType: array, quantityKind: categorical-set}
+  urn:xopt:capability:operator-certification: {valueType: array, quantityKind: categorical-set}
+  # -- availability ----------------------------------------------------------
+  urn:xopt:availability:shift-start: {valueType: integer, quantityKind: time, canonicalUnit: s}
+  urn:xopt:availability:shift-end: {valueType: integer, quantityKind: time, canonicalUnit: s}
+  # -- commitments -----------------------------------------------------------
+  urn:xopt:commitment:deadline: {valueType: string, quantityKind: timestamp}
+  urn:xopt:commitment:lateness-penalty: {valueType: number, quantityKind: money, canonicalUnit: EUR}
+  # -- relationships ---------------------------------------------------------
+  urn:xopt:relationship:home-depot: {valueType: string, quantityKind: identifier}
+  urn:xopt:relationship:contract: {valueType: string, quantityKind: identifier}
+  urn:xopt:relationship:location: {valueType: string, quantityKind: identifier}
+  urn:xopt:relationship:entity-ref: {valueType: string, quantityKind: identifier}
+  # -- inventory -------------------------------------------------------------
+  urn:xopt:inventory:fuel: {valueType: number, quantityKind: volume, canonicalUnit: L}
+  urn:xopt:inventory:fertilizer: {valueType: number, quantityKind: mass, canonicalUnit: kg}
+  # -- forecast values -------------------------------------------------------
+  urn:xopt:forecast:wind-speed: {valueType: number, quantityKind: speed, canonicalUnit: m/s}
+  urn:xopt:forecast:precipitation-rate: {valueType: number, quantityKind: flow-rate, canonicalUnit: mm/h}
+  urn:xopt:forecast:soil-moisture: {valueType: number, quantityKind: ratio, canonicalUnit: "%"}
+  # -- time ------------------------------------------------------------------
+  urn:xopt:time:forecast-from: {valueType: string, quantityKind: timestamp}
+  urn:xopt:time:forecast-to: {valueType: string, quantityKind: timestamp}
+  urn:xopt:time:observed-at: {valueType: string, quantityKind: timestamp}

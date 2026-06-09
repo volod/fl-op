@@ -1,7 +1,7 @@
 """Pre-filter, geographic clustering, and ClusterSpec construction.
 
 Pipeline:
-  1. Power + OperationType compatibility filter (vectorised over compat matrix).
+  1. Power + operation-type compatibility filter (vectorised over compat matrix).
   2. Haversine BallTree depot-affinity clustering: each order is assigned to the
      nearest depot; orders within a depot group are split into sub-clusters of
      CLUSTER_TARGET_SIZE.
@@ -15,8 +15,7 @@ import numpy as np
 from sklearn.neighbors import BallTree
 
 from fl_op.core.constants import CLUSTER_TARGET_SIZE
-from fl_op.models.enums import OperationType
-from fl_op.models.types import ClusterSpec
+from fl_op.solver.types import ClusterSpec
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ def filter_feasible_vehicle_implement_pairs(
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
 ) -> dict[str, list[tuple[int, int]]]:
-    """Return {order_id: [(v_idx, i_idx), ...]} for all compatible V-I pairs.
+    """Return {task_id: [(v_idx, i_idx), ...]} for all compatible V-I pairs.
 
     A pair is feasible when:
       - compat[v_idx, i_idx] is True (power margin within threshold)
@@ -52,21 +51,21 @@ def filter_feasible_vehicle_implement_pairs(
                 ops_raw = ast.literal_eval(ops_raw)
             except Exception:
                 ops_raw = [ops_raw]
-        impl_ops[im["implement_id"]] = set(ops_raw)
+        impl_ops[im["asset_id"]] = set(ops_raw)
 
     feasible: dict[str, list[tuple[int, int]]] = {}
     for order in orders:
         op = order["operation_type"]
-        oid = order["order_id"]
+        oid = order["task_id"]
         pairs: list[tuple[int, int]] = []
         for im in implements:
-            if op not in impl_ops.get(im["implement_id"], set()):
+            if op not in impl_ops.get(im["asset_id"], set()):
                 continue
-            i_idx = implement_index.get(im["implement_id"])
+            i_idx = implement_index.get(im["asset_id"])
             if i_idx is None:
                 continue
             for v in vehicles:
-                v_idx = vehicle_index.get(v["vehicle_id"])
+                v_idx = vehicle_index.get(v["asset_id"])
                 if v_idx is None:
                     continue
                 if compat[v_idx, i_idx]:
@@ -92,13 +91,13 @@ def cluster_orders_by_depot(
     fields: list[dict[str, Any]],
     depots: list[dict[str, Any]],
 ) -> dict[str, list[str]]:
-    """Assign each order to the nearest depot; return {depot_id: [order_ids]}.
+    """Assign each order to the nearest depot; return {depot_id: [task_ids]}.
 
     Uses sklearn BallTree with haversine metric on field centroids.
     """
-    field_map: dict[str, dict[str, Any]] = {f["field_id"]: f for f in fields}
+    field_map: dict[str, dict[str, Any]] = {f["location_id"]: f for f in fields}
 
-    depot_ids = [d["depot_id"] for d in depots]
+    depot_ids = [d["location_id"] for d in depots]
     depot_coords = np.radians(
         np.array([[float(d["lat"]), float(d["lon"])] for d in depots])
     )
@@ -106,31 +105,31 @@ def cluster_orders_by_depot(
 
     assignment: dict[str, list[str]] = {did: [] for did in depot_ids}
     for order in orders:
-        field = field_map.get(order["field_id"])
+        field = field_map.get(order["location_ref"])
         if field is None:
-            logger.warning("Order %s has no matching field; skipping", order["order_id"])
+            logger.warning("Order %s has no matching field; skipping", order["task_id"])
             continue
-        lat = float(field.get("centroid_lat", 0))
-        lon = float(field.get("centroid_lon", 0))
+        lat = float(field.get("lat", 0))
+        lon = float(field.get("lon", 0))
         coords = np.radians([[lat, lon]])
         _, indices = tree.query(coords, k=1)
         nearest_depot = depot_ids[indices[0][0]]
-        assignment[nearest_depot].append(order["order_id"])
+        assignment[nearest_depot].append(order["task_id"])
 
     return assignment
 
 
 def _split_into_subclusters(
-    order_ids: list[str],
+    task_ids: list[str],
     target_size: int,
 ) -> list[list[str]]:
-    """Split a flat list of order_ids into sub-lists of approximately target_size."""
-    if not order_ids:
+    """Split a flat list of task_ids into sub-lists of approximately target_size."""
+    if not task_ids:
         return []
-    n = len(order_ids)
+    n = len(task_ids)
     n_clusters = max(1, round(n / target_size))
     chunk = max(1, n // n_clusters)
-    chunks = [order_ids[i : i + chunk] for i in range(0, n, chunk)]
+    chunks = [task_ids[i : i + chunk] for i in range(0, n, chunk)]
     return chunks
 
 
@@ -156,10 +155,10 @@ def build_cluster_specs(
       1. Depot-affinity clustering via haversine BallTree.
       2. Sub-cluster each depot group to CLUSTER_TARGET_SIZE.
       3. Compute total_penalty_per_day for priority sorting.
-      4. Initialise allocated_vehicle_implements to empty (filled by allocation).
+      4. Initialise allocated_prime_related to empty (filled by allocation).
     """
     if order_index is None:
-        order_index = {o["order_id"]: o for o in orders}
+        order_index = {o["task_id"]: o for o in orders}
 
     depot_assignment = cluster_orders_by_depot(orders, fields, depots)
 
@@ -171,13 +170,13 @@ def build_cluster_specs(
         subclusters = _split_into_subclusters(oid_list, CLUSTER_TARGET_SIZE)
         for sub in subclusters:
             total_penalty = sum(
-                float(order_index[oid].get("penalty_per_day_eur", 0.0)) for oid in sub
+                float(order_index[oid].get("penalty_per_day", 0.0)) for oid in sub
             )
             spec: ClusterSpec = {
                 "cluster_id": f"cluster_{cluster_seq:06d}",
-                "depot_id": depot_id,
-                "order_ids": sub,
-                "allocated_vehicle_implements": {},
+                "depot_ref": depot_id,
+                "task_ids": sub,
+                "allocated_prime_related": {},
                 "total_penalty_per_day": total_penalty,
             }
             clusters.append(spec)

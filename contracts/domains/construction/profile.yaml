@@ -1,0 +1,76 @@
+apiVersion: x-optimization/v0.1.0
+kind: OptimizationProfile
+
+metadata:
+  id: construction-earthworks
+  version: 0.1.0
+  extensionVersion: 0.1.0
+  semanticModelRef: urn:xopt:model:construction-earthworks:0.1.0
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+
+# Input contracts consumed to build a planning snapshot.
+inputContracts:
+  - machines
+  - attachments
+  - operators
+  - yards
+  - sites
+  - jobs
+
+planningModes:
+  - id: periodic
+    adapter: ortools-periodic
+  - id: rolling
+    adapter: ortools-rolling
+
+# Bundle roles map onto the SAME canonical asset roles the engine understands.
+bundleGeneration:
+  roles:
+    primaryAsset:
+      - mobile-prime-mover
+    relatedEquipment:
+      - implement
+    operator:
+      - operator
+
+constraints:
+  - id: compatible-equipment
+    severity: hard
+    enforced: true
+  - id: sufficient-power
+    severity: hard
+    enforced: true
+  - id: operator-qualified
+    severity: hard
+    enforced: false
+  - id: asset-available
+    severity: hard
+    enforced: true
+  - id: no-double-booking
+    severity: hard
+    enforced: true
+  - id: respect-contract-time-window
+    severity: hard
+    enforced: true
+  - id: protect-frozen-tasks
+    severity: hard
+    enforced: true
+
+objectives:
+  mode: lexicographic
+  priorities:
+    - maximize-mandatory-contract-fulfillment
+    - minimize-contractual-penalties
+    - maximize-expected-contribution-margin
+    - minimize-plan-instability
+    - minimize-repositioning-time
+    - balance-utilization
+
+planningDefaults:
+  periodicHorizonDays: 7
+  rollingHorizonHours: 48
+  freezeWindowMinutes: 60
+  maxAssignmentRoutingIterations: 3
+
+outputContracts:
+  - dispatch-plans

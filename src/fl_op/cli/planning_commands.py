@@ -26,6 +26,27 @@ def contracts_validate(write: bool) -> None:
         raise SystemExit(1)
 
 
+@contracts_group.command("canonical-validate")
+def contracts_canonical_validate() -> None:
+    """Validate only the canonical optimization-model contracts and vocabulary."""
+    from fl_op.planning.runner import run_canonical_validate
+
+    ok = run_canonical_validate()
+    if not ok:
+        raise SystemExit(1)
+
+
+@contracts_group.command("validate-domain")
+@click.option("--domain", required=True, help="Domain pack id (e.g. construction).")
+def contracts_validate_domain(domain: str) -> None:
+    """Validate that a domain pack's mappings cover the canonical model completely."""
+    from fl_op.planning.runner import run_domain_validate
+
+    ok = run_domain_validate(domain)
+    if not ok:
+        raise SystemExit(1)
+
+
 @contracts_group.command("generate")
 @click.option(
     "--format",

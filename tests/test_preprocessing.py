@@ -1,12 +1,6 @@
-"""T06-T10: Pre-filter + clustering tests."""
+"""T06-T10: Pre-filter + clustering tests (canonical solver rows)."""
 
-import numpy as np
-import pytest
-
-from fl_op.models.compat_matrix import build_compat_matrix
-from fl_op.models.enums import ImplementType, OperationType, VehicleType
-from fl_op.models.implement import Implement
-from fl_op.models.vehicle import Vehicle
+from fl_op.solver.feasibility import build_compat_matrix
 from fl_op.solver.preprocessing import (
     build_cluster_specs,
     cluster_orders_by_depot,
@@ -16,68 +10,66 @@ from fl_op.solver.preprocessing import (
 
 def _vehicle(vid: str, power_kw: float = 150.0, depot: str = "d0") -> dict:
     return {
-        "vehicle_id": vid,
-        "vehicle_type": VehicleType.TRACTOR.value,
-        "rated_power_kw": str(power_kw),
-        "fuel_tank_l": "400",
-        "fuel_consumption_l_per_h": "18",
-        "current_lat": "48.5",
-        "current_lon": "32.0",
-        "depot_id": depot,
-        "travel_speed_kmh": "15",
+        "asset_id": vid,
+        "asset_type": "TRACTOR",
+        "rated_power": str(power_kw),
+        "fuel_tank_volume": "400",
+        "fuel_consumption_rate": "18",
+        "lat": "48.5",
+        "lon": "32.0",
+        "home_depot_ref": depot,
+        "travel_speed": "15",
     }
 
 
 def _implement(iid: str, power_kw: float = 120.0, op: str = "SPRAYING", depot: str = "d0") -> dict:
     return {
-        "implement_id": iid,
-        "implement_type": ImplementType.SPRAYER.value,
+        "asset_id": iid,
+        "asset_type": "SPRAYER",
         "compatible_operations": f"['{op}']",
-        "required_power_kw": str(power_kw),
-        "working_width_m": "24",
-        "min_speed_kmh": "5",
-        "max_speed_kmh": "12",
-        "fertilizer_capacity_kg": "0",
-        "depot_id": depot,
+        "required_power": str(power_kw),
+        "working_width": "24",
+        "min_speed": "5",
+        "max_speed": "12",
+        "material_capacity": "0",
+        "home_depot_ref": depot,
     }
 
 
 def _order(oid: str, op: str = "SPRAYING", fid: str = "f0") -> dict:
     return {
-        "order_id": oid,
+        "task_id": oid,
         "operation_type": op,
-        "field_id": fid,
-        "area_ha": "100",
+        "location_ref": fid,
+        "area": "100",
         "deadline": "2026-06-01T00:00:00+00:00",
-        "penalty_per_day_eur": "200",
+        "penalty_per_day": "200",
         "status": "pending",
-        "estimated_revenue_eur": "5000",
-        "contract_id": "c0",
+        "revenue": "5000",
+        "order_ref": "c0",
     }
 
 
 def _field(fid: str, lat: float, lon: float) -> dict:
     return {
-        "field_id": fid,
-        "centroid_lat": str(lat),
-        "centroid_lon": str(lon),
-        "area_ha": "100",
+        "location_id": fid,
+        "lat": str(lat),
+        "lon": str(lon),
+        "area": "100",
         "name": fid,
     }
 
 
 def _depot(did: str, lat: float, lon: float) -> dict:
-    return {"depot_id": did, "lat": str(lat), "lon": str(lon), "name": did,
-            "fuel_available_l": "5000", "fertilizer_available_kg": "0"}
+    return {"location_id": did, "lat": str(lat), "lon": str(lon), "name": did,
+            "inventory_fuel": "5000", "inventory_material": "0"}
 
 
 class TestPowerFilter:
     def _setup(self, v_power: float, i_power: float):
         vraw = [_vehicle("v0", v_power)]
         iraw = [_implement("i0", i_power)]
-        vehicles_p = [Vehicle.model_validate(v) for v in vraw]
-        implements_p = [Implement.model_validate(im) for im in iraw]
-        compat, _ = build_compat_matrix(vehicles_p, implements_p)
+        compat, _ = build_compat_matrix(vraw, iraw)
         v_idx = {"v0": 0}
         i_idx = {"i0": 0}
         return vraw, iraw, compat, v_idx, i_idx
@@ -98,9 +90,7 @@ class TestPowerFilter:
     def test_operation_type_mismatch_excluded(self):
         vraw = [_vehicle("v0", 200)]
         iraw = [_implement("i0", 100, op="TILLAGE")]
-        vehicles_p = [Vehicle.model_validate(v) for v in vraw]
-        implements_p = [Implement.model_validate(im) for im in iraw]
-        compat, _ = build_compat_matrix(vehicles_p, implements_p)
+        compat, _ = build_compat_matrix(vraw, iraw)
         orders = [_order("o0", op="SPRAYING")]  # wants SPRAYING, implement is TILLAGE
         result = filter_feasible_vehicle_implement_pairs(orders, vraw, iraw, compat, {"v0": 0}, {"i0": 0})
         assert result["o0"] == []

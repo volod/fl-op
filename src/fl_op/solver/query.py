@@ -16,7 +16,7 @@ _QUERY_DEADLINE_FALLBACK_DAYS = 7
 class TimeWindow(NamedTuple):
     start: str  # ISO-8601
     end: str  # ISO-8601
-    order_id: str
+    task_id: str
 
 
 def _build_vehicle_time_index(
@@ -25,11 +25,11 @@ def _build_vehicle_time_index(
     """Build {vehicle_id: [TimeWindow, ...]} from schedule for O(1) conflict lookup."""
     index: dict[str, list[TimeWindow]] = {}
     for dp in dispatch_packages:
-        vid = dp.get("vehicle_id", "")
+        vid = dp.get("prime_asset_id", "")
         tw = TimeWindow(
             start=dp.get("scheduled_start", ""),
             end=dp.get("scheduled_end", ""),
-            order_id=dp.get("order_id", ""),
+            task_id=dp.get("task_id", ""),
         )
         index.setdefault(vid, []).append(tw)
     return index

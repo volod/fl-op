@@ -1,0 +1,141 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: vehicles
+version: 1.0.0
+status: active
+name: Vehicles Asset Master
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: Stable characteristics of mobile prime-mover assets.
+  usage: Bundle generation, compatibility filtering, repositioning cost.
+  # Canonical projection lives in mappings/vehicles.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: vehicles.csv
+schema:
+  - name: vehicles
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.assets
+            recordName: Vehicle
+            recordDoc: "Mobile prime-mover or self-propelled machine. Source dataset: vehicles.csv."
+          proto:
+            package: org.example.agri.assets
+            messageName: Vehicle
+            syntax: proto3
+          es:
+            indexName: vehicles
+            dynamic: strict
+    properties:
+      - name: vehicle_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the vehicle.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
+      - name: vehicle_type
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Source vehicle category.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
+      - name: rated_power_kw
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Nominal rated continuous engine power.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {aliases: [engine_power_kw]}
+              proto: {fieldNumber: 3}
+      - name: fuel_tank_l
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Usable fuel tank volume.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
+      - name: fuel_consumption_l_per_h
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Average fuel consumption at working load.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
+      - name: current_lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Current latitude at planning horizon start.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}
+      - name: current_lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Current longitude at planning horizon start.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 7}
+      - name: depot_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Home depot reference.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 8}
+      - name: travel_speed_kmh
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Average field travel speed.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: 15.0}
+              proto: {fieldNumber: 9}
+      # Extra real-data fields: present in the physical schema for persistence and
+      # analysis, but intentionally NOT mapped to the canonical optimization model.
+      - name: manufacture_year
+        logicalType: integer
+        physicalType: int
+        required: false
+        description: Year the vehicle was manufactured (analytical, not used by the optimizer).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: 0}
+              proto: {fieldNumber: 10}
+      - name: telematics_unit_id
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Installed telematics unit identifier (analytical, not used by the optimizer).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 11}

@@ -1,0 +1,45 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+# Projects the construction physical 'yards' schema onto the canonical Location
+# entity (depot role). Diesel inventory maps onto canonical location fuel inventory.
+metadata:
+  domain: construction
+  sourceContract: yards
+  canonicalEntity: location
+  assetRole: depot
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: depots
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+
+fieldMappings:
+  - sourceField: yard_id
+    binding: location.locationId
+    semanticTerm: urn:xopt:identity:location-id
+    planningUse: [identity]
+  - sourceField: label
+    binding: location.name
+    semanticTerm: urn:xopt:attribute:display-name
+    planningUse: [display]
+  - sourceField: lat
+    binding: location.lat
+    semanticTerm: urn:xopt:attribute:latitude
+    canonicalUnit: deg
+    quantityKind: angle
+    planningUse: [geospatial]
+    missingValuePolicy: reject-for-planning
+  - sourceField: lon
+    binding: location.lon
+    semanticTerm: urn:xopt:attribute:longitude
+    canonicalUnit: deg
+    quantityKind: angle
+    planningUse: [geospatial]
+    missingValuePolicy: reject-for-planning
+  - sourceField: diesel_litres
+    binding: location.inventory.fuel
+    semanticTerm: urn:xopt:inventory:fuel
+    canonicalUnit: L
+    quantityKind: volume
+    planningUse: [material-availability]
+    missingValuePolicy: fallback-to-conservative-value

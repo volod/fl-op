@@ -75,8 +75,10 @@ class OrToolsPeriodicAdapter:
         profile: "OptimizationProfile",
         config: dict[str, Any],
     ) -> dict[str, Any]:
-        # The compiled solver input is simply the snapshot's validated payload.
-        return dict(snapshot.solver_payload)
+        # Project the canonical snapshot into the solver's working rows.
+        from fl_op.solver.inputs import build_solver_inputs
+
+        return build_solver_inputs(snapshot)
 
     def solve(self, solver_input: dict[str, Any], config: dict[str, Any]) -> SolverChainResult:
         return run_solver_chain(solver_input)

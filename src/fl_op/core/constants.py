@@ -128,6 +128,17 @@ XOPT_API_VERSION: str = "x-optimization/v0.1.0"
 # Semantic-model URN for the agricultural custom-services domain.
 URN_MODEL: str = "urn:xopt:model:agricultural-custom-services:0.1.0"
 
+# Semantic-model URN for the domain-agnostic canonical optimization model. Domain
+# mapping packs project their physical schemas onto this model.
+URN_MODEL_CANONICAL: str = "urn:xopt:model:canonical:0.1.0"
+
+# ODCS custom-property names used by the canonical optimization-model contracts.
+CANONICAL_ENTITY_PROPERTY: str = "canonicalEntity"
+CANONICAL_BINDING_PROPERTY: str = "canonicalBinding"
+
+# Filename of the canonical-model index inside the canonical contract root.
+CANONICAL_MODEL_FILENAME: str = "model.yaml"
+
 # URN prefixes used by semantic terms and bindings.
 URN_CAPABILITY_PREFIX: str = "urn:xopt:capability:"
 URN_RELATIONSHIP_PREFIX: str = "urn:xopt:relationship:"

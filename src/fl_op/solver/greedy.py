@@ -5,7 +5,7 @@ combinations in a single numpy broadcast — no Python-level loops over pairs.
 
 Score = gross_margin_estimate - repositioning_cost
 
-greedy_assign() returns a dict {order_id: (vehicle_id, implement_id)} by
+greedy_assign() returns a dict {task_id: (vehicle_id, implement_id)} by
 taking the top-1 scoring V-I pair for each order.
 """
 
@@ -45,8 +45,8 @@ def _estimate_gross_margin(
     implement: dict[str, Any],
 ) -> float:
     """Rough gross revenue estimate for completing this order with this implement."""
-    area = float(order.get("area_ha", 0))
-    revenue = float(order.get("estimated_revenue_eur", 0))
+    area = float(order.get("area", 0))
+    revenue = float(order.get("revenue", 0))
     return revenue if revenue > 0 else area * 200.0  # fallback: 200 EUR/ha
 
 
@@ -56,14 +56,14 @@ def _estimate_repositioning_cost(
 ) -> float:
     """Diesel cost to drive from vehicle's current position to the field centroid."""
     dist_km = _haversine_km(
-        float(vehicle.get("current_lat", 0)),
-        float(vehicle.get("current_lon", 0)),
-        float(field.get("centroid_lat", 0)),
-        float(field.get("centroid_lon", 0)),
+        float(vehicle.get("lat", 0)),
+        float(vehicle.get("lon", 0)),
+        float(field.get("lat", 0)),
+        float(field.get("lon", 0)),
     )
-    speed_kmh = float(vehicle.get("travel_speed_kmh", 15))
+    speed_kmh = float(vehicle.get("travel_speed", 15))
     hours = dist_km / speed_kmh if speed_kmh > 0 else 0
-    fuel_l_per_h = float(vehicle.get("fuel_consumption_l_per_h", 18))
+    fuel_l_per_h = float(vehicle.get("fuel_consumption_rate", 18))
     return hours * fuel_l_per_h * FUEL_COST_EUR_PER_L
 
 
@@ -76,31 +76,31 @@ def vectorized_score(
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
 ) -> dict[str, list[tuple[float, int, int]]]:
-    """Return {order_id: [(score, v_idx, i_idx), ...]} sorted descending by score.
+    """Return {task_id: [(score, v_idx, i_idx), ...]} sorted descending by score.
 
     Vectorises over all orders and their feasible pairs using numpy broadcast.
     """
-    field_map = {f["field_id"]: f for f in fields}
-    idx_to_vehicle = {idx: v for v in vehicles for idx in [vehicle_index[v["vehicle_id"]]]}
-    idx_to_implement = {idx: im for im in implements for idx in [implement_index[im["implement_id"]]]}
+    field_map = {f["location_id"]: f for f in fields}
+    idx_to_vehicle = {idx: v for v in vehicles for idx in [vehicle_index[v["asset_id"]]]}
+    idx_to_implement = {idx: im for im in implements for idx in [implement_index[im["asset_id"]]]}
 
     # Pre-compute vehicle current positions as arrays for batch distance calculation
-    v_lats = np.array([float(v.get("current_lat", 0)) for v in vehicles])
-    v_lons = np.array([float(v.get("current_lon", 0)) for v in vehicles])
-    v_speeds = np.array([float(v.get("travel_speed_kmh", 15)) for v in vehicles])
-    v_consumptions = np.array([float(v.get("fuel_consumption_l_per_h", 18)) for v in vehicles])
+    v_lats = np.array([float(v.get("lat", 0)) for v in vehicles])
+    v_lons = np.array([float(v.get("lon", 0)) for v in vehicles])
+    v_speeds = np.array([float(v.get("travel_speed", 15)) for v in vehicles])
+    v_consumptions = np.array([float(v.get("fuel_consumption_rate", 18)) for v in vehicles])
 
     results: dict[str, list[tuple[float, int, int]]] = {}
 
     for order in orders:
-        oid = order["order_id"]
-        field = field_map.get(order.get("field_id", ""))
+        oid = order["task_id"]
+        field = field_map.get(order.get("location_ref", ""))
         if field is None:
             results[oid] = []
             continue
 
-        f_lat = float(field.get("centroid_lat", 0))
-        f_lon = float(field.get("centroid_lon", 0))
+        f_lat = float(field.get("lat", 0))
+        f_lon = float(field.get("lon", 0))
 
         pairs = feasible_pairs.get(oid, [])
         if not pairs:
@@ -157,7 +157,7 @@ def greedy_assign(
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
 ) -> dict[str, tuple[int, int]]:
-    """Greedy assignment: {order_id: (v_idx, i_idx)}.
+    """Greedy assignment: {task_id: (v_idx, i_idx)}.
 
     Orders with fewer implement alternatives and larger best-vs-second-best
     regret are assigned first. That keeps the warm start from spending a scarce

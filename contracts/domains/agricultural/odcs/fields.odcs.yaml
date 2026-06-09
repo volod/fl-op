@@ -1,0 +1,102 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: fields
+version: 1.0.0
+status: active
+name: Field Parcels
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: Field polygons and field-entry points mapped to canonical Locations.
+  usage: Geospatial clustering, field-entry coordinates, field restrictions.
+  # Canonical projection lives in mappings/fields.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: fields.csv
+schema:
+  - name: fields
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.fields
+            recordName: FieldParcel
+            recordDoc: "Agricultural field parcel, mapped to a canonical Location. Source dataset: fields.csv."
+          proto:
+            package: org.example.agri.fields
+            messageName: FieldParcel
+            syntax: proto3
+          es:
+            indexName: fields
+            dynamic: strict
+    properties:
+      - name: field_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the field parcel.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
+      - name: name
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Human-readable field name.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 2}
+      - name: area_ha
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Field area.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
+      - name: polygon
+        logicalType: array
+        physicalType: string
+        required: false
+        description: Field polygon vertices (stringified list of [lat, lon]).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: "[]"}
+              proto: {fieldNumber: 4}
+      - name: centroid_lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Field-entry latitude proxy (centroid).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
+      - name: centroid_lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Field-entry longitude proxy (centroid).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}
+      - name: soil_type
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Soil classification.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 7}

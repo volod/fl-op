@@ -1,0 +1,69 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+# Projects the construction physical 'jobs' schema onto the canonical Task entity,
+# reusing the agricultural 'orders' bindings.
+metadata:
+  domain: construction
+  sourceContract: jobs
+  canonicalEntity: task
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: serviceOrders
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+
+fieldMappings:
+  - sourceField: job_id
+    binding: task.taskId
+    semanticTerm: urn:xopt:identity:task-id
+    planningUse: [identity]
+  - sourceField: contract_id
+    binding: task.orderId
+    semanticTerm: urn:xopt:relationship:contract
+    planningUse: [commitment]
+  - sourceField: site_id
+    binding: task.locationRef
+    semanticTerm: urn:xopt:relationship:location
+    planningUse: [geospatial]
+    missingValuePolicy: reject-for-planning
+  - sourceField: work_type
+    binding: task.operationType
+    semanticTerm: urn:xopt:attribute:operation-type
+    planningUse: [compatibility-filter]
+    missingValuePolicy: reject-for-planning
+  - sourceField: plot_ha
+    binding: task.areaHa
+    semanticTerm: urn:xopt:attribute:service-area
+    canonicalUnit: ha
+    quantityKind: area
+    planningUse: [duration-estimation]
+    missingValuePolicy: reject-for-planning
+  - sourceField: deadline
+    binding: task.deadline
+    semanticTerm: urn:xopt:commitment:deadline
+    quantityKind: timestamp
+    planningUse: [time-window, commitment]
+    missingValuePolicy: reject-for-planning
+  - sourceField: penalty_per_day_eur
+    binding: task.penaltyPerDay
+    semanticTerm: urn:xopt:commitment:lateness-penalty
+    canonicalUnit: EUR
+    quantityKind: money
+    planningUse: [objective, commitment]
+    missingValuePolicy: fallback-to-conservative-value
+  - sourceField: priority
+    binding: task.priorityClass
+    semanticTerm: urn:xopt:attribute:priority-class
+    planningUse: [objective]
+    missingValuePolicy: fallback-to-conservative-value
+  - sourceField: status
+    binding: task.status
+    semanticTerm: urn:xopt:attribute:task-status
+    planningUse: [freeze]
+  - sourceField: revenue_eur
+    binding: task.revenueValue
+    semanticTerm: urn:xopt:attribute:expected-revenue
+    canonicalUnit: EUR
+    quantityKind: money
+    planningUse: [objective]
+    missingValuePolicy: fallback-to-conservative-value

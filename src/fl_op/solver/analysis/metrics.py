@@ -46,9 +46,9 @@ def build_schedule_stats(artifacts: SolveArtifacts) -> ScheduleStats:
     n_dispatched = int(kpis.get("n_dispatched", len(schedule)) or 0)
     n_infeasible = int(kpis.get("n_infeasible", len(infeasible)) or 0)
 
-    vehicle_counts = Counter(d.get("vehicle_id", "unknown") for d in schedule)
-    implement_counts = Counter(d.get("implement_id", "unknown") for d in schedule)
-    operator_counts = Counter(d.get("operator_id", "unknown") for d in schedule)
+    vehicle_counts = Counter(d.get("prime_asset_id", "unknown") for d in schedule)
+    implement_counts = Counter(d.get("related_asset_id", "unknown") for d in schedule)
+    operator_counts = Counter(d.get("operator_asset_id", "unknown") for d in schedule)
     cluster_counts = Counter(d.get("cluster_id", "unknown") for d in schedule)
     infeasible_reasons = Counter(
         item.get("reason_code", "UNKNOWN") for item in infeasible

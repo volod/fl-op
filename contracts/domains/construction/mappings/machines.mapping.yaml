@@ -1,0 +1,72 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+# Projects the construction physical 'machines' schema onto the canonical Asset
+# entity (prime-mover role). It reuses the SAME canonical bindings and semantic
+# terms as the agricultural 'vehicles' mapping, demonstrating that a second domain
+# maps onto the one optimization model without engine changes.
+metadata:
+  domain: construction
+  sourceContract: machines
+  canonicalEntity: asset
+  assetRole: mobile-prime-mover
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: assetMaster
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+
+fieldMappings:
+  - sourceField: machine_id
+    binding: asset.assetId
+    semanticTerm: urn:xopt:identity:asset-id
+    planningUse: [identity]
+  - sourceField: machine_class
+    binding: asset.assetType
+    semanticTerm: urn:xopt:attribute:asset-type
+    planningUse: [classification]
+  - sourceField: engine_power_kw
+    binding: asset.capabilities.ratedPower
+    semanticTerm: urn:xopt:capability:rated-power
+    canonicalUnit: kW
+    quantityKind: power
+    planningUse: [capacity, compatibility-filter]
+    missingValuePolicy: reject-for-planning
+  - sourceField: tank_litres
+    binding: asset.capabilities.fuelTankVolume
+    semanticTerm: urn:xopt:capability:fuel-tank-volume
+    canonicalUnit: L
+    quantityKind: volume
+    planningUse: [capacity]
+    missingValuePolicy: accept-with-warning
+  - sourceField: burn_l_per_h
+    binding: asset.capabilities.fuelConsumptionRate
+    semanticTerm: urn:xopt:capability:fuel-consumption-rate
+    canonicalUnit: L/h
+    quantityKind: flow-rate
+    planningUse: [cost]
+    missingValuePolicy: accept-with-warning
+  - sourceField: current_lat
+    binding: asset.location.lat
+    semanticTerm: urn:xopt:attribute:latitude
+    canonicalUnit: deg
+    quantityKind: angle
+    planningUse: [geospatial]
+    missingValuePolicy: reject-for-planning
+  - sourceField: current_lon
+    binding: asset.location.lon
+    semanticTerm: urn:xopt:attribute:longitude
+    canonicalUnit: deg
+    quantityKind: angle
+    planningUse: [geospatial]
+    missingValuePolicy: reject-for-planning
+  - sourceField: yard_id
+    binding: asset.homeDepotRef
+    semanticTerm: urn:xopt:relationship:home-depot
+    planningUse: [assignment]
+  - sourceField: transit_speed_kmh
+    binding: asset.capabilities.travelSpeed
+    semanticTerm: urn:xopt:capability:travel-speed
+    canonicalUnit: km/h
+    quantityKind: speed
+    planningUse: [routing]
+    missingValuePolicy: fallback-to-conservative-value

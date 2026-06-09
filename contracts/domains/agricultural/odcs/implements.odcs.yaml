@@ -1,0 +1,118 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: implements
+version: 1.0.0
+status: active
+name: Implements Asset Master
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: Stable characteristics of attachable implements (related equipment).
+  usage: Compatibility filtering, area-rate estimation, material capacity.
+  # Canonical projection lives in mappings/implements.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: implements.csv
+schema:
+  - name: implements
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.assets
+            recordName: Implement
+            recordDoc: "Attachable implement (related equipment). Source dataset: implements.csv."
+          proto:
+            package: org.example.agri.assets
+            messageName: Implement
+            syntax: proto3
+          es:
+            indexName: implements
+            dynamic: strict
+    properties:
+      - name: implement_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the implement.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
+      - name: implement_type
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Source implement category.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
+      - name: compatible_operations
+        logicalType: array
+        physicalType: string
+        required: true
+        description: Operation types this implement can perform (stringified list).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
+      - name: required_power_kw
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Continuous power draw demanded from the prime mover.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
+      - name: working_width_m
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Working width used for area-rate estimation.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
+      - name: min_speed_kmh
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Minimum operating speed.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}
+      - name: max_speed_kmh
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Maximum operating speed.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 7}
+      - name: fertilizer_capacity_kg
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Onboard fertilizer capacity.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: 0.0}
+              proto: {fieldNumber: 8}
+      - name: depot_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Home depot reference.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 9}

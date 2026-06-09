@@ -12,7 +12,6 @@ def log_implementation_analysis(
     revisions: list[dict[str, Any]],
 ) -> None:
     """Log dataflow, decomposition, utilization, and rolling-stability diagnostics."""
-    payload = snapshot.get("solver_payload", {})
     score = plan.get("score", {})
     assignments = plan.get("assignments", [])
     unassigned = plan.get("unassigned_tasks", [])
@@ -25,14 +24,24 @@ def log_implementation_analysis(
         f"{k}={v}" for k, v in sorted(mapping_versions.items())
     ) or "?"
 
+    # Solver working rows are projected one-per canonical asset, location, and
+    # task; reconstruct the per-role/per-type counts from the canonical entities.
+    assets = snapshot.get("assets", [])
+    locations = snapshot.get("locations", [])
     payload_counts = {
-        key: len(value) for key, value in payload.items() if isinstance(value, list)
+        "vehicles": sum(1 for a in assets if "mobile-prime-mover" in (a.get("roles") or [])),
+        "implements": sum(1 for a in assets if "implement" in (a.get("roles") or [])),
+        "operators": sum(1 for a in assets if "operator" in (a.get("roles") or [])),
+        "depots": sum(1 for l in locations if l.get("location_type") == "depot"),
+        "fields": sum(1 for l in locations if l.get("location_type") == "field"),
+        "orders": len(snapshot.get("tasks", [])),
     }
+    solver_row_count = len(assets) + len(locations) + len(snapshot.get("tasks", []))
     logger.info(
         "  dataflow        : %d governed contracts -> %d canonical tasks -> %d solver rows",
         contract_count,
         len(snapshot.get("tasks", [])),
-        sum(payload_counts.values()),
+        solver_row_count,
     )
     logger.info(
         "  versions        : profile %s, mapping %s",

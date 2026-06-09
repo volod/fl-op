@@ -10,7 +10,12 @@ import pytest
 @pytest.mark.timeout(300)
 def test_e2e_smoke(tmp_path):
     """Full pipeline smoke test at minimum scale; asserts no crash and artifacts written."""
+    import shutil
+
     orig_cwd = os.getcwd()
+    # The solver now builds a canonical snapshot, which requires the contract
+    # registry; make it available in the temporary working directory.
+    shutil.copytree(pathlib.Path(orig_cwd) / "contracts", tmp_path / "contracts")
     os.chdir(tmp_path)
     try:
         from fl_op.data.generator import run_generate

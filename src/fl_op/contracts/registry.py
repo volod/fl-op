@@ -16,7 +16,12 @@ from typing import Any, Optional
 import yaml
 
 from fl_op.contracts.avro_loader import AvroContractSchema, load_avro_schema
-from fl_op.contracts.fingerprint import avro_parsing_fingerprint, odcs_metadata_hash
+from fl_op.contracts.fingerprint import mapping_metadata_hash
+from fl_op.contracts.mapping_loader import (
+    CanonicalMapping,
+    load_mapping,
+    mapping_metadata_blocks,
+)
 from fl_op.contracts.odcs_loader import OdcsContract, load_odcs_contract
 from fl_op.contracts.profile import OptimizationProfile, load_profile
 from fl_op.core.paths import CONTRACTS_ROOT
@@ -33,10 +38,10 @@ class ContractEntry:
         self.contract_id = contract_id
         self.avro_ref: Optional[str] = spec.get("avro")
         self.odcs_ref: Optional[str] = spec.get("odcs")
+        self.mapping_ref: Optional[str] = spec.get("mapping")
+        self.domain: Optional[str] = spec.get("domain")
         self.source_file: Optional[str] = spec.get("sourceFile")
         self.source_format: str = spec.get("sourceFormat", "csv")
-        self.canonical_entity: Optional[str] = spec.get("canonicalEntity")
-        self.asset_role: Optional[str] = spec.get("assetRole")
         self.stored_fingerprints: dict[str, str] = dict(spec.get("fingerprints") or {})
 
 
@@ -76,6 +81,21 @@ class FileRegistry:
             return None
         return load_odcs_contract(self.root / entry.odcs_ref)
 
+    def get_mapping(self, contract_id: str) -> Optional[CanonicalMapping]:
+        """Load the canonical mapping document for a registered contract."""
+        entry = self.get_entry(contract_id)
+        if not entry.mapping_ref:
+            return None
+        return load_mapping(self.root / entry.mapping_ref)
+
+    @property
+    def active_domain(self) -> Optional[str]:
+        return self.index.get("activeDomain")
+
+    @property
+    def canonical_model_ref(self) -> Optional[str]:
+        return self.index.get("canonicalModelRef")
+
     def get_profile(self, profile_id: str) -> OptimizationProfile:
         profiles = self.index.get("profiles") or {}
         if profile_id not in profiles:
@@ -88,7 +108,7 @@ class FileRegistry:
         """Compute both fingerprints for a contract.
 
         avroParsingFingerprint   - from generated Avro schema (structural)
-        optimizationMetadataHash - from ODCS document (semantic)
+        optimizationMetadataHash - from the canonical mapping document (semantic)
         """
         fps: dict[str, str] = {}
         entry = self.get_entry(contract_id)
@@ -97,9 +117,9 @@ class FileRegistry:
             avro = self.get_avro(contract_id)
             fps["avroParsingFingerprint"] = avro.avro_parsing_fingerprint
 
-        odcs = self.get_odcs(contract_id)
-        if odcs is not None:
-            fps["optimizationMetadataHash"] = odcs_metadata_hash(odcs.doc)
+        if entry.mapping_ref:
+            mapping_doc = mapping_metadata_blocks(self.root / entry.mapping_ref)
+            fps["optimizationMetadataHash"] = mapping_metadata_hash(mapping_doc)
 
         return fps
 

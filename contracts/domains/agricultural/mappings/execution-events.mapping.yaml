@@ -1,0 +1,38 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+# Projects the agricultural physical 'execution-events' schema onto the canonical
+# ExecutionEvent entity (rolling-dispatch replanning trigger).
+metadata:
+  domain: agricultural
+  sourceContract: execution-events
+  canonicalEntity: execution-event
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: executionEvents
+  permittedPlanningUses: [rolling-dispatch]
+  entityKeyField: event_id
+  eventTimeField: observed_at
+
+fieldMappings:
+  - sourceField: event_id
+    binding: event.eventId
+    semanticTerm: urn:xopt:identity:event-id
+    planningUse: [identity]
+  - sourceField: event_type
+    binding: event.eventType
+    semanticTerm: urn:xopt:attribute:event-type
+    planningUse: [replanning-trigger]
+  - sourceField: observed_at
+    binding: event.observedAt
+    semanticTerm: urn:xopt:time:observed-at
+    quantityKind: timestamp
+    planningUse: [temporal]
+  - sourceField: entity_ref
+    binding: event.entityRef
+    semanticTerm: urn:xopt:relationship:entity-ref
+    planningUse: [replanning-trigger]
+  - sourceField: payload_json
+    binding: event.payload
+    semanticTerm: urn:xopt:attribute:event-payload
+    planningUse: [replanning-trigger]

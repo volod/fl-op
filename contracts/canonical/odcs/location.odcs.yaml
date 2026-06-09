@@ -1,0 +1,83 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: canonical-location
+version: 0.1.0
+status: active
+name: Canonical Location
+domain: canonical
+tenant: optimization
+description:
+  purpose: Minimal optimization contract for a point of interest (location).
+  usage: Geospatial clustering, repositioning anchors, material availability.
+customProperties:
+  - property: canonicalEntity
+    value:
+      entity: location
+      canonicalModelRef: urn:xopt:model:canonical:0.1.0
+schema:
+  - name: location
+    logicalType: object
+    properties:
+      - name: locationId
+        logicalType: string
+        required: true
+        description: Stable canonical identifier of the location.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.locationId, semanticTerm: urn:xopt:identity:location-id, planningUse: [identity]}
+      - name: name
+        logicalType: string
+        required: false
+        description: Human-readable display name.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.name, semanticTerm: urn:xopt:attribute:display-name, planningUse: [display]}
+      - name: lat
+        logicalType: number
+        required: true
+        description: Location latitude (entry point or centroid).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.lat, semanticTerm: urn:xopt:attribute:latitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
+      - name: lon
+        logicalType: number
+        required: true
+        description: Location longitude (entry point or centroid).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.lon, semanticTerm: urn:xopt:attribute:longitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
+      - name: areaHa
+        logicalType: number
+        required: false
+        description: Work-site area.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.areaHa, semanticTerm: urn:xopt:attribute:area, canonicalUnit: ha, quantityKind: area, planningUse: [duration-estimation]}
+      - name: polygon
+        logicalType: array
+        required: false
+        description: Work-site boundary vertices as a list of [lat, lon] pairs.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.polygon, semanticTerm: urn:xopt:attribute:polygon, quantityKind: geometry, planningUse: [geospatial]}
+      - name: soilType
+        logicalType: string
+        required: false
+        description: Ground/soil classification used for restrictions.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.soilType, semanticTerm: urn:xopt:attribute:soil-type, planningUse: [field-restriction]}
+      - name: inventoryFuel
+        logicalType: number
+        required: false
+        description: Available fuel/energy inventory at this location.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.inventory.fuel, semanticTerm: urn:xopt:inventory:fuel, canonicalUnit: L, quantityKind: volume, planningUse: [material-availability]}
+      - name: inventoryMaterial
+        logicalType: number
+        required: false
+        description: Available consumable-material inventory at this location.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.inventory.fertilizer, semanticTerm: urn:xopt:inventory:fertilizer, canonicalUnit: kg, quantityKind: mass, planningUse: [material-availability]}

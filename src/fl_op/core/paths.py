@@ -11,6 +11,15 @@ DATA_ROOT = pathlib.Path(os.environ.get("DATA_DIR", ".data"))
 # optimization profiles, and the file-based registry index).
 CONTRACTS_ROOT = pathlib.Path(os.environ.get("CONTRACTS_DIR", "contracts"))
 
+# Root of the canonical optimization-model contracts (the domain-agnostic entity,
+# capability, and semantic-term contract the engine consumes). Domain mapping
+# packs project physical schemas onto this model.
+CANONICAL_ROOT = CONTRACTS_ROOT / "canonical"
+
+# Root of the per-domain mapping packs (physical ODCS schema + canonical mapping
+# docs + optimization profile), one subdirectory per domain.
+DOMAINS_ROOT = CONTRACTS_ROOT / "domains"
+
 
 def resolve_latest(
     path_or_latest: str,

@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: venv setenv quickstart analyse data demo contracts avro-gen proto-gen es-gen parquet-gen contracts-gen check-gen clean
+.PHONY: venv setenv quickstart analyse data demo contracts canonical-validate validate-construction avro-gen proto-gen es-gen parquet-gen contracts-gen check-gen clean
 
 PYTHON := .venv/bin/python
 FL_OP := .venv/bin/fl-op
@@ -19,8 +19,21 @@ FORMAT ?= avro
 SEED_ARG := $(if $(SEED),--seed $(SEED),)
 QUICKSTART_SEED_ARG := $(if $(SEED),--seed $(SEED),--seed 42)
 
+# Pick uv link mode by comparing the repo filesystem device with the uv cache
+# device. Hardlinks cannot span filesystems, so fall back to copy when they
+# differ (silences the "Failed to hardlink files" warning); use hardlink when
+# they share a device for fast, space-saving installs.
 venv:
-	uv sync
+	@cache_dir="$$(uv cache dir 2>/dev/null)"; \
+	repo_dev="$$(stat -c '%d' . 2>/dev/null)"; \
+	cache_dev="$$(stat -c '%d' "$$cache_dir" 2>/dev/null)"; \
+	if [ -n "$$repo_dev" ] && [ "$$repo_dev" = "$$cache_dev" ]; then \
+		link_mode=hardlink; \
+	else \
+		link_mode=copy; \
+	fi; \
+	echo "[venv] repo dev=$$repo_dev cache dev=$$cache_dev -> link-mode=$$link_mode"; \
+	uv sync --link-mode="$$link_mode"
 	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env from .env.example"; else echo ".env already exists, skipping"; fi
 
 setenv:
@@ -39,7 +52,16 @@ quickstart: venv
 analyse: venv
 	$(FL_OP) analyse --schedule latest
 
-# Validate the declarative data-contract suite (ODCS + generated schemas + dual fingerprints).
+# Validate only the canonical optimization-model contracts (entities + vocabulary).
+canonical-validate: venv
+	$(FL_OP) contracts canonical-validate
+
+# Validate that the construction domain pack maps completely onto the canonical
+# model (proof that a second physical domain reuses the one optimization model).
+validate-construction: venv
+	$(FL_OP) contracts validate-domain --domain construction
+
+# Validate the declarative data-contract suite (canonical model + ODCS + generated schemas + dual fingerprints).
 contracts: venv
 	$(FL_OP) contracts validate
 
@@ -64,7 +86,9 @@ check-gen: venv  ## Check ODCS contracts have complete generation hints for all 
 	$(FL_OP) contracts check-generation --format parquet
 
 # Full declarative demo: contracts -> snapshot -> periodic (batch) -> rolling (stream).
-demo: venv
+# Depends on avro-gen because contracts/generated/ is gitignored: the demo's first
+# step validates Avro fingerprints, so the schemas must be materialised first.
+demo: venv avro-gen
 	@echo "Generating demo dataset ($(QUICKSTART_SEED_ARG) --format $(FORMAT))..."
 	$(FL_OP) generate-data --vehicles $(VEHICLES) --implements $(IMPLEMENTS) --orders $(ORDERS) --depots $(DEPOTS) $(QUICKSTART_SEED_ARG) --format $(FORMAT)
 	$(FL_OP) demo --data latest

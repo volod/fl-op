@@ -9,8 +9,8 @@ _LATE_PENALTY_EXPOSURE_DAYS = 3
 
 def order_drop_penalty_s(order: dict[str, Any]) -> int:
     """Return the routing penalty, in seconds, for leaving an order unserved."""
-    revenue = _nonnegative_float(order.get("estimated_revenue_eur", 0.0))
-    late_exposure = _nonnegative_float(order.get("penalty_per_day_eur", 0.0))
+    revenue = _nonnegative_float(order.get("revenue", 0.0))
+    late_exposure = _nonnegative_float(order.get("penalty_per_day", 0.0))
     business_value = revenue + late_exposure * _LATE_PENALTY_EXPOSURE_DAYS
     return max(_MIN_DROP_PENALTY_S, int(business_value * _EUR_TO_DROP_PENALTY_SECONDS))
 

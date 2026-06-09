@@ -1,0 +1,91 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: depots
+version: 1.0.0
+status: active
+name: Depots and Loading Stations
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: Depot locations and material inventory positions.
+  usage: Repositioning anchors, fuel and fertilizer availability.
+  # Canonical projection lives in mappings/depots.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: depots.csv
+schema:
+  - name: depots
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.depots
+            recordName: Depot
+            recordDoc: "Depot / loading station providing location and material inventory. Source dataset: depots.csv."
+          proto:
+            package: org.example.agri.depots
+            messageName: Depot
+            syntax: proto3
+          es:
+            indexName: depots
+            dynamic: strict
+    properties:
+      - name: depot_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the depot.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
+      - name: name
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Human-readable depot name.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 2}
+      - name: lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Depot latitude.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
+      - name: lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Depot longitude.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
+      - name: fuel_available_l
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Available diesel inventory.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
+      - name: fertilizer_available_kg
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Available fertilizer inventory.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}

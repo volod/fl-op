@@ -21,7 +21,7 @@ def collect_pair_candidates(
     """Collect scored (vehicle_id, implement_id) candidates for one cluster."""
     candidates: dict[tuple[str, str], float] = {}
     for order in cluster_orders:
-        for v_idx, i_idx in feasible_pairs.get(order["order_id"], []):
+        for v_idx, i_idx in feasible_pairs.get(order["task_id"], []):
             vehicle_id = idx_to_vehicle.get(v_idx)
             implement_id = idx_to_implement.get(i_idx)
             if vehicle_id is None or implement_id is None:

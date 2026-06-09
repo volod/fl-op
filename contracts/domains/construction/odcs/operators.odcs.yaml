@@ -1,0 +1,66 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: operators
+version: 1.0.0
+status: active
+name: Construction Operators Master
+domain: construction-earthworks
+tenant: fleet-ops
+description:
+  purpose: Operator identity, shift availability, and machine licences.
+  usage: Operator assignment and licence compatibility.
+  # Canonical projection lives in mappings/operators.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: operators.csv
+schema:
+  - name: operators
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.construction.operators
+            recordName: Operator
+            recordDoc: "Construction machine operator. Source dataset: operators.csv."
+          proto:
+            package: org.example.construction.operators
+            messageName: Operator
+            syntax: proto3
+          es:
+            indexName: operators
+            dynamic: strict
+    properties:
+      - name: operator_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the operator.
+      - name: full_name
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Operator display name.
+      - name: shift_start_s
+        logicalType: integer
+        physicalType: int
+        required: true
+        description: Shift start, seconds since midnight.
+      - name: shift_end_s
+        logicalType: integer
+        physicalType: int
+        required: true
+        description: Shift end, seconds since midnight.
+      - name: licensed_operations
+        logicalType: array
+        physicalType: string
+        required: true
+        description: Operation types the operator is licensed for (stringified list).
+      - name: yard_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Home yard reference.

@@ -12,7 +12,7 @@ class ClusterContext:
     """Prepared plain-dict state needed by the OR-Tools routing model."""
 
     cluster_id: str
-    order_ids: list[str]
+    task_ids: list[str]
     depot_id: str
     cluster_orders: list[dict[str, Any]]
     field_map: dict[str, dict[str, Any]]
@@ -31,20 +31,20 @@ def prepare_cluster_context(
 ) -> tuple[Optional[ClusterContext], Optional[tuple[list[dict], list[dict]]]]:
     """Build routing context or return an early infeasibility result."""
     cluster_id = cluster_dict.get("cluster_id", "")
-    order_ids = cluster_dict.get("order_ids", [])
-    depot_id = cluster_dict.get("depot_id", "")
-    allocated: dict[str, list[str]] = cluster_dict.get("allocated_vehicle_implements", {})
+    task_ids = cluster_dict.get("task_ids", [])
+    depot_id = cluster_dict.get("depot_ref", "")
+    allocated: dict[str, list[str]] = cluster_dict.get("allocated_prime_related", {})
 
-    if not order_ids:
+    if not task_ids:
         return None, ([], [])
 
-    order_map = {o["order_id"]: o for o in all_orders}
-    field_map = {f["field_id"]: f for f in all_fields}
-    depot_map = {d["depot_id"]: d for d in all_depots}
-    vehicle_map = {v["vehicle_id"]: v for v in all_vehicles}
-    implement_map = {im["implement_id"]: im for im in all_implements}
+    order_map = {o["task_id"]: o for o in all_orders}
+    field_map = {f["location_id"]: f for f in all_fields}
+    depot_map = {d["location_id"]: d for d in all_depots}
+    vehicle_map = {v["asset_id"]: v for v in all_vehicles}
+    implement_map = {im["asset_id"]: im for im in all_implements}
 
-    cluster_orders = [order_map[oid] for oid in order_ids if oid in order_map]
+    cluster_orders = [order_map[oid] for oid in task_ids if oid in order_map]
     if not cluster_orders:
         return None, mark_all_infeasible(
             cluster_dict, ReasonCode.UNKNOWN, "orders not found in dataset"
@@ -66,7 +66,7 @@ def prepare_cluster_context(
 
     return ClusterContext(
         cluster_id=cluster_id,
-        order_ids=order_ids,
+        task_ids=task_ids,
         depot_id=depot_id,
         cluster_orders=cluster_orders,
         field_map=field_map,
@@ -88,5 +88,5 @@ def _routing_vehicles(
         vehicle = vehicle_map.get(vehicle_id)
         implement = implement_map.get(implement_ids[0])
         if vehicle is not None and implement is not None:
-            routing_vehicles.append({"vehicle": vehicle, "implement": implement})
+            routing_vehicles.append({"prime": vehicle, "related": implement})
     return routing_vehicles

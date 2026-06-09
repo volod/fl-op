@@ -34,37 +34,43 @@ def run_solver_chain(
     rows: dict[str, list[dict[str, Any]]],
     matrix_out_dir: Optional[pathlib.Path] = None,
 ) -> SolverChainResult:
-    """Run preprocess -> allocate -> greedy -> pool on dict rows; return results.
+    """Run preprocess -> allocate -> greedy -> pool on canonical dict rows.
 
-    `rows` must contain keys: vehicles, implements, orders, depots, fields,
-    operators (operators may be empty).
+    `rows` must contain the canonical sections: prime_movers, related_equipment,
+    tasks, depots, sites, operators (operators may be empty). Each row is keyed by
+    canonical field names (asset_id, rated_power, task_id, ...), never by
+    domain-specific physical column names.
     """
-    from fl_op.models.compat_matrix import build_compat_matrix, save_compat_matrix
-    from fl_op.models.implement import Implement
-    from fl_op.models.vehicle import Vehicle
     from fl_op.solver.aggregator import _compute_kpis
     from fl_op.solver.cluster_pool import pool_solve
+    from fl_op.solver.feasibility import build_compat_matrix, save_compat_matrix
     from fl_op.solver.greedy import greedy_assign, vectorized_score
+    from fl_op.solver.inputs import (
+        SECTION_DEPOTS,
+        SECTION_OPERATORS,
+        SECTION_PRIME_MOVERS,
+        SECTION_RELATED,
+        SECTION_SITES,
+        SECTION_TASKS,
+    )
     from fl_op.solver.preprocessing import (
         build_cluster_specs,
         filter_feasible_vehicle_implement_pairs,
     )
     from fl_op.solver.allocation import allocate_resources
 
-    vehicles_raw = rows["vehicles"]
-    implements_raw = rows["implements"]
-    orders_raw = rows["orders"]
-    depots_raw = rows["depots"]
-    fields_raw = rows["fields"]
-    operators_raw = rows.get("operators", [])
+    vehicles_raw = rows[SECTION_PRIME_MOVERS]
+    implements_raw = rows[SECTION_RELATED]
+    orders_raw = rows[SECTION_TASKS]
+    depots_raw = rows[SECTION_DEPOTS]
+    fields_raw = rows[SECTION_SITES]
+    operators_raw = rows.get(SECTION_OPERATORS, [])
 
-    vehicle_index = {v["vehicle_id"]: i for i, v in enumerate(vehicles_raw)}
-    implement_index = {im["implement_id"]: i for i, im in enumerate(implements_raw)}
-    order_index = {o["order_id"]: o for o in orders_raw}
+    vehicle_index = {v["asset_id"]: i for i, v in enumerate(vehicles_raw)}
+    implement_index = {im["asset_id"]: i for i, im in enumerate(implements_raw)}
+    order_index = {o["task_id"]: o for o in orders_raw}
 
-    vehicles_parsed = [Vehicle.model_validate(v) for v in vehicles_raw]
-    implements_parsed = [Implement.model_validate(im) for im in implements_raw]
-    compat, power_margin = build_compat_matrix(vehicles_parsed, implements_parsed)
+    compat, power_margin = build_compat_matrix(vehicles_raw, implements_raw)
     if matrix_out_dir is not None:
         save_compat_matrix(compat, power_margin, matrix_out_dir / "matrix")
 

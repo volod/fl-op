@@ -1,0 +1,62 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+# Projects the agricultural physical 'weather' schema onto the canonical Forecast
+# entity.
+metadata:
+  domain: agricultural
+  sourceContract: weather
+  canonicalEntity: forecast
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: weatherForecasts
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+
+fieldMappings:
+  - sourceField: window_id
+    binding: forecast.forecastId
+    semanticTerm: urn:xopt:identity:forecast-id
+    planningUse: [identity]
+  - sourceField: valid_from
+    binding: forecast.forecastFor.from
+    semanticTerm: urn:xopt:time:forecast-from
+    quantityKind: timestamp
+    planningUse: [weather-window]
+  - sourceField: valid_to
+    binding: forecast.forecastFor.to
+    semanticTerm: urn:xopt:time:forecast-to
+    quantityKind: timestamp
+    planningUse: [weather-window]
+  - sourceField: wind_ms
+    binding: forecast.value.windSpeed
+    semanticTerm: urn:xopt:forecast:wind-speed
+    canonicalUnit: m/s
+    quantityKind: speed
+    planningUse: [weather-window]
+    missingValuePolicy: fallback-to-conservative-value
+  - sourceField: rain_mm_per_h
+    binding: forecast.value.precipitationRate
+    semanticTerm: urn:xopt:forecast:precipitation-rate
+    canonicalUnit: mm/h
+    quantityKind: flow-rate
+    planningUse: [weather-window]
+    missingValuePolicy: fallback-to-conservative-value
+  - sourceField: soil_moisture_pct
+    binding: forecast.value.soilMoisture
+    semanticTerm: urn:xopt:forecast:soil-moisture
+    canonicalUnit: "%"
+    quantityKind: ratio
+    planningUse: [weather-window]
+    missingValuePolicy: fallback-to-conservative-value
+  - sourceField: lat
+    binding: forecast.location.lat
+    semanticTerm: urn:xopt:attribute:latitude
+    canonicalUnit: deg
+    quantityKind: angle
+    planningUse: [geospatial]
+  - sourceField: lon
+    binding: forecast.location.lon
+    semanticTerm: urn:xopt:attribute:longitude
+    canonicalUnit: deg
+    quantityKind: angle
+    planningUse: [geospatial]

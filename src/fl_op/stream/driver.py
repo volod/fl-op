@@ -13,10 +13,9 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fl_op.adapters.ortools_rolling import OrToolsRollingAdapter
-from fl_op.canonical.enums import PlanningMode
+from fl_op.canonical.enums import PlanningMode, TaskStatus
 from fl_op.canonical.plan import Plan
 from fl_op.contracts.registry import FileRegistry
-from fl_op.models.enums import OrderStatus
 from fl_op.snapshot.builder import SnapshotBuilder
 from fl_op.stream.source import ExecutionEvent
 
@@ -38,11 +37,16 @@ class StreamResult:
 
 
 def _apply_event(sources: dict[str, list[dict[str, Any]]], event: ExecutionEvent) -> None:
-    """Mutate the in-memory source rows in response to one execution event."""
+    """Mutate the in-memory source rows in response to one execution event.
+
+    These are raw physical source rows (keyed by domain column names) that are fed
+    to the SnapshotBuilder's mapping engine, so they use the active domain's
+    physical identifiers (order_id, vehicle_id), not canonical solver-row keys.
+    """
     if event.event_type == "task.started":
         for o in sources["orders"]:
             if o["order_id"] == event.entity_ref:
-                o["status"] = OrderStatus.STARTED.value
+                o["status"] = TaskStatus.STARTED.value
     elif event.event_type == "order.cancelled":
         sources["orders"] = [
             o for o in sources["orders"] if o["order_id"] != event.entity_ref

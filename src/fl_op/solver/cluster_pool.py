@@ -36,7 +36,7 @@ from typing import Any
 
 from fl_op.canonical.enums import ReasonCode
 from fl_op.core.constants import CLUSTER_SOLVE_TIME_LIMIT_S, SOLVER_WORKERS
-from fl_op.models.types import ClusterSpec
+from fl_op.solver.types import ClusterSpec
 
 logger = logging.getLogger(__name__)
 
@@ -129,12 +129,12 @@ def pool_solve(
                     logger.error("Cluster %s worker crashed: %s", cluster_id, exc)
                     all_infeasible.extend(
                         {
-                            "order_id": oid,
+                            "task_id": oid,
                             "cluster_id": cluster_id,
                             "reason_code": ReasonCode.UNKNOWN.value,
                             "detail": str(exc),
                         }
-                        for oid in cd.get("order_ids", [])
+                        for oid in cd.get("task_ids", [])
                     )
 
         except concurrent.futures.TimeoutError:
@@ -148,12 +148,12 @@ def pool_solve(
                     future.cancel()
                     all_infeasible.extend(
                         {
-                            "order_id": oid,
+                            "task_id": oid,
                             "cluster_id": cluster_id,
                             "reason_code": ReasonCode.OPTIMIZATION_TRADEOFF.value,
                             "detail": f"worker did not complete within {overall_timeout}s",
                         }
-                        for oid in cd.get("order_ids", [])
+                        for oid in cd.get("task_ids", [])
                     )
 
     return all_dispatch, all_infeasible

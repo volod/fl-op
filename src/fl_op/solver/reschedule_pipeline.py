@@ -8,8 +8,8 @@ from typing import Any
 
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
 from fl_op.core.paths import DATA_ROOT
+from fl_op.canonical.enums import TaskStatus
 from fl_op.io import detect_format, get_codec, locate_source
-from fl_op.models.enums import OrderStatus
 from fl_op.solver.aggregator import _write_json, _write_report
 from fl_op.solver.reschedule import _apply_events, _build_plan_diff, _load_json, _write_plan_diff_txt
 
@@ -47,25 +47,27 @@ def run_reschedule(data_dir: str, schedule_dir: str, events_path: str | None) ->
             events = json.load(fh)
         orders_raw = _apply_events(orders_raw, events)
 
-    frozen_order_ids: set[str] = set()
+    # orders_raw are raw physical rows (order_id/status columns); the canonical
+    # task id equals the physical order_id via the identity binding.
+    frozen_task_ids: set[str] = set()
     remaining_orders: list[dict[str, Any]] = []
     for order in orders_raw:
         status = order.get("status", "")
         try:
-            order_status = OrderStatus(status)
+            task_status = TaskStatus(status)
         except ValueError:
             raise ValueError(
-                f"Unknown order status '{status}' for order {order.get('order_id')}. "
-                f"Valid values: {[s.value for s in OrderStatus]}"
+                f"Unknown task status '{status}' for task {order.get('order_id')}. "
+                f"Valid values: {[s.value for s in TaskStatus]}"
             )
-        if order_status == OrderStatus.STARTED:
-            frozen_order_ids.add(order["order_id"])
-        elif order_status == OrderStatus.PENDING:
+        if task_status == TaskStatus.STARTED:
+            frozen_task_ids.add(order["order_id"])
+        elif task_status == TaskStatus.PENDING:
             remaining_orders.append(order)
 
     logger.info(
         "Reschedule: %d frozen (started), %d remaining",
-        len(frozen_order_ids), len(remaining_orders),
+        len(frozen_task_ids), len(remaining_orders),
     )
 
     if not remaining_orders:
@@ -73,7 +75,7 @@ def run_reschedule(data_dir: str, schedule_dir: str, events_path: str | None) ->
         empty_diff = {
             "schema_version": ARTIFACT_SCHEMA_VERSION,
             "reason": "no_unstarted_orders",
-            "frozen_orders": list(frozen_order_ids),
+            "frozen_orders": list(frozen_task_ids),
             "added": [], "removed": [], "rescheduled": [], "newly_infeasible": [],
         }
         _write_json({"schema_version": ARTIFACT_SCHEMA_VERSION, "schedule": []}, out_dir / "schedule.json")
@@ -81,14 +83,22 @@ def run_reschedule(data_dir: str, schedule_dir: str, events_path: str | None) ->
         _write_plan_diff_txt(empty_diff, out_dir / "plan_diff.txt")
         sys.exit(0)
 
-    rows = {
+    # Project the (event-mutated) physical sources through the canonical snapshot
+    # so the solver consumes canonical rows, never raw source data.
+    from fl_op.snapshot.builder import SnapshotBuilder
+    from fl_op.solver.inputs import build_solver_inputs
+
+    sources = {
         "vehicles": vehicles_raw,
         "implements": implements_raw,
-        "orders": remaining_orders,
+        "operators": operators_raw,
         "depots": depots_raw,
         "fields": fields_raw,
-        "operators": operators_raw,
+        "orders": remaining_orders,
+        "weather": [],
     }
+    snapshot = SnapshotBuilder().build_from_sources(sources)
+    rows = build_solver_inputs(snapshot)
     result = run_solver_chain(rows, matrix_out_dir=out_dir)
     all_dispatch = result.dispatch
     all_infeasible = result.infeasible
@@ -98,12 +108,12 @@ def run_reschedule(data_dir: str, schedule_dir: str, events_path: str | None) ->
         "timestamp": ts,
         "data_dir": str(data_path),
         "schedule_dir": str(sched_path),
-        "n_frozen": len(frozen_order_ids),
+        "n_frozen": len(frozen_task_ids),
         "n_remaining": len(remaining_orders),
     }
 
-    new_infeasible_ids = {inf["order_id"] for inf in all_infeasible}
-    plan_diff = _build_plan_diff(old_schedule, all_dispatch, frozen_order_ids, new_infeasible_ids)
+    new_infeasible_ids = {inf["task_id"] for inf in all_infeasible}
+    plan_diff = _build_plan_diff(old_schedule, all_dispatch, frozen_task_ids, new_infeasible_ids)
 
     _write_json(
         {"schema_version": ARTIFACT_SCHEMA_VERSION, "run_metadata": run_metadata, "schedule": all_dispatch},

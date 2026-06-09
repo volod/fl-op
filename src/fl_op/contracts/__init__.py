@@ -5,7 +5,7 @@ ODCS is the single source of truth for all semantic metadata. Physical schemas
 semantic blocks.
 """
 
-from fl_op.contracts.fingerprint import avro_parsing_fingerprint, odcs_metadata_hash
+from fl_op.contracts.fingerprint import avro_parsing_fingerprint, mapping_metadata_hash
 from fl_op.contracts.registry import FileRegistry, MetadataLossError
 from fl_op.contracts.validate import SuiteReport, validate_suite
 
@@ -15,5 +15,5 @@ __all__ = [
     "SuiteReport",
     "validate_suite",
     "avro_parsing_fingerprint",
-    "odcs_metadata_hash",
+    "mapping_metadata_hash",
 ]

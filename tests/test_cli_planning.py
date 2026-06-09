@@ -24,4 +24,4 @@ def test_snapshot_build_runner_logic(dataset_dir: pathlib.Path) -> None:
     snapshot = SnapshotBuilder().build(dataset_dir, PlanningMode.ROLLING)
     assert snapshot.planning_mode == PlanningMode.ROLLING
     assert snapshot.snapshot_hash
-    assert snapshot.solver_payload["orders"]
+    assert snapshot.tasks

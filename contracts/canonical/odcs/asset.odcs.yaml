@@ -1,0 +1,157 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: canonical-asset
+version: 0.1.0
+status: active
+name: Canonical Asset
+domain: canonical
+tenant: optimization
+description:
+  purpose: Minimal optimization contract for a schedulable resource (asset).
+  usage: Bundle generation, compatibility filtering, repositioning, scheduling.
+customProperties:
+  - property: canonicalEntity
+    value:
+      entity: asset
+      canonicalModelRef: urn:xopt:model:canonical:0.1.0
+      # Source vocabulary (vehicle, implement, operator, ...) is unified onto this
+      # one entity. Capability fields are optional at the entity level because they
+      # apply only to assets that play the relevant role; role-aware requirements
+      # are enforced by the optimization profile, not by this contract.
+schema:
+  - name: asset
+    logicalType: object
+    properties:
+      - name: assetId
+        logicalType: string
+        required: true
+        description: Stable canonical identifier of the asset.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.assetId, semanticTerm: urn:xopt:identity:asset-id, planningUse: [identity]}
+      - name: assetType
+        logicalType: string
+        required: false
+        description: Source asset category, retained for explanation and grouping.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.assetType, semanticTerm: urn:xopt:attribute:asset-type, planningUse: [classification]}
+      - name: name
+        logicalType: string
+        required: false
+        description: Human-readable display name.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.name, semanticTerm: urn:xopt:attribute:display-name, planningUse: [display]}
+      - name: homeDepotRef
+        logicalType: string
+        required: false
+        description: Home location/depot the asset is anchored to.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.homeDepotRef, semanticTerm: urn:xopt:relationship:home-depot, planningUse: [assignment]}
+      - name: locationLat
+        logicalType: number
+        required: false
+        description: Current latitude at planning-horizon start.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.location.lat, semanticTerm: urn:xopt:attribute:latitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
+      - name: locationLon
+        logicalType: number
+        required: false
+        description: Current longitude at planning-horizon start.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.location.lon, semanticTerm: urn:xopt:attribute:longitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
+      - name: ratedPower
+        logicalType: number
+        required: false
+        description: Nominal continuous power the asset can deliver (prime movers).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.ratedPower, semanticTerm: urn:xopt:capability:rated-power, canonicalUnit: kW, quantityKind: power, planningUse: [capacity, compatibility-filter]}
+      - name: requiredPower
+        logicalType: number
+        required: false
+        description: Continuous power the asset demands from a prime mover (implements).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.requiredPower, semanticTerm: urn:xopt:capability:required-power, canonicalUnit: kW, quantityKind: power, planningUse: [compatibility-filter]}
+      - name: fuelTankVolume
+        logicalType: number
+        required: false
+        description: Usable fuel/energy tank volume.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.fuelTankVolume, semanticTerm: urn:xopt:capability:fuel-tank-volume, canonicalUnit: L, quantityKind: volume, planningUse: [capacity]}
+      - name: fuelConsumptionRate
+        logicalType: number
+        required: false
+        description: Average fuel/energy consumption at working load.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.fuelConsumptionRate, semanticTerm: urn:xopt:capability:fuel-consumption-rate, canonicalUnit: L/h, quantityKind: flow-rate, planningUse: [cost]}
+      - name: travelSpeed
+        logicalType: number
+        required: false
+        description: Average travel speed used for repositioning and routing.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.travelSpeed, semanticTerm: urn:xopt:capability:travel-speed, canonicalUnit: km/h, quantityKind: speed, planningUse: [routing]}
+      - name: workingWidth
+        logicalType: number
+        required: false
+        description: Effective working width used for service-duration estimation.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.workingWidth, semanticTerm: urn:xopt:capability:working-width, canonicalUnit: m, quantityKind: length, planningUse: [duration-estimation]}
+      - name: minOperatingSpeed
+        logicalType: number
+        required: false
+        description: Minimum operating speed during task execution.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.minOperatingSpeed, semanticTerm: urn:xopt:capability:min-operating-speed, canonicalUnit: km/h, quantityKind: speed, planningUse: [duration-estimation]}
+      - name: maxOperatingSpeed
+        logicalType: number
+        required: false
+        description: Maximum operating speed during task execution.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.maxOperatingSpeed, semanticTerm: urn:xopt:capability:max-operating-speed, canonicalUnit: km/h, quantityKind: speed, planningUse: [duration-estimation]}
+      - name: materialCapacity
+        logicalType: number
+        required: false
+        description: Onboard consumable-material capacity (e.g. fertilizer, sealant).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.fertilizerCapacity, semanticTerm: urn:xopt:capability:fertilizer-capacity, canonicalUnit: kg, quantityKind: mass, planningUse: [capacity]}
+      - name: compatibleOperations
+        logicalType: array
+        required: false
+        description: Operation types this asset can perform.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.compatibleOperations, semanticTerm: urn:xopt:capability:compatible-operations, quantityKind: categorical-set, planningUse: [compatibility-filter]}
+      - name: certifiedOperations
+        logicalType: array
+        required: false
+        description: Operation types the asset (operator) is certified for.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.certifiedOperations, semanticTerm: urn:xopt:capability:operator-certification, quantityKind: categorical-set, planningUse: [compatibility-filter]}
+      - name: shiftStart
+        logicalType: integer
+        required: false
+        description: Availability window start, seconds since midnight.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.availability.shiftStart, semanticTerm: urn:xopt:availability:shift-start, canonicalUnit: s, quantityKind: time, planningUse: [availability]}
+      - name: shiftEnd
+        logicalType: integer
+        required: false
+        description: Availability window end, seconds since midnight.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.availability.shiftEnd, semanticTerm: urn:xopt:availability:shift-end, canonicalUnit: s, quantityKind: time, planningUse: [availability]}

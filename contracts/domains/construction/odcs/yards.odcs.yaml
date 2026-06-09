@@ -1,0 +1,61 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: yards
+version: 1.0.0
+status: active
+name: Construction Yards
+domain: construction-earthworks
+tenant: fleet-ops
+description:
+  purpose: Yard locations and diesel inventory positions.
+  usage: Repositioning anchors, fuel availability.
+  # Canonical projection lives in mappings/yards.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: yards.csv
+schema:
+  - name: yards
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.construction.yards
+            recordName: Yard
+            recordDoc: "Construction yard providing location and diesel inventory. Source dataset: yards.csv."
+          proto:
+            package: org.example.construction.yards
+            messageName: Yard
+            syntax: proto3
+          es:
+            indexName: yards
+            dynamic: strict
+    properties:
+      - name: yard_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the yard.
+      - name: label
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Human-readable yard name.
+      - name: lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Yard latitude.
+      - name: lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Yard longitude.
+      - name: diesel_litres
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Available diesel inventory.

@@ -32,7 +32,6 @@ from fl_op.io import detect_format, get_codec, locate_source
 from fl_op.mapping.engine import MappingEngine, MappingResult
 from fl_op.snapshot.bundles import generate_bundles
 from fl_op.snapshot.hashing import compute_snapshot_hash
-from fl_op.snapshot.payload import to_solver_rows
 
 logger = logging.getLogger(__name__)
 
@@ -151,14 +150,12 @@ class SnapshotBuilder:
         )
 
         snapshot_hash = compute_snapshot_hash(base.canonical_content())
-        solver_payload = to_solver_rows(base, self.registry)
         snapshot_id = f"snap-{planning_mode.value}-{generated_at.strftime('%Y%m%dT%H%M%S')}-{snapshot_hash[:8]}"
 
         snapshot = base.model_copy(
             update={
                 "snapshot_id": snapshot_id,
                 "snapshot_hash": snapshot_hash,
-                "solver_payload": solver_payload,
             }
         )
         logger.info(

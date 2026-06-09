@@ -100,14 +100,17 @@ infeasible_orders.json # orders that could not be assigned with reason codes
 
 **Sample dispatch package** from `schedule.json`:
 
+Dispatch packages are keyed by canonical names (`prime_asset_id`,
+`related_asset_id`, `operator_asset_id`, `task_id`, `depot_ref`):
+
 ```json
 {
   "dispatch_id": "a9720e7b-0a72-4e52-80b6-bbb6c86f2fea",
-  "vehicle_id": "vehicle_00001",
-  "implement_id": "implement_000001",
-  "operator_id": "operator_00009",
-  "order_id": "order_000001",
-  "depot_id": "depot_0004",
+  "prime_asset_id": "vehicle_00001",
+  "related_asset_id": "implement_000001",
+  "operator_asset_id": "operator_00009",
+  "task_id": "order_000001",
+  "depot_ref": "depot_0004",
   "scheduled_start": "2026-05-21T16:55:12+00:00",
   "scheduled_end":   "2026-05-22T16:55:12+00:00",
   "estimated_fuel_l": 436.56,
@@ -198,29 +201,24 @@ running the full solver:
     --order prospect_001.json
 ```
 
-Returns top-3 vehicle-implement options with conflict risk:
+Returns top-3 prime-mover + related-equipment options with conflict risk. The
+candidate keys are canonical (`prime_asset_id` / `related_asset_id`):
 
 ```json
 {
   "feasible": true,
   "candidates": [
     {
-      "vehicle_id": "vehicle_00042",
-      "implement_id": "implement_005301",
+      "prime_asset_id": "vehicle_00042",
+      "related_asset_id": "implement_005301",
       "estimated_margin_eur": 14200.00,
       "schedule_conflict_risk": "low"
     },
     {
-      "vehicle_id": "vehicle_00017",
-      "implement_id": "implement_002847",
+      "prime_asset_id": "vehicle_00017",
+      "related_asset_id": "implement_002847",
       "estimated_margin_eur": 13850.00,
       "schedule_conflict_risk": "medium"
-    },
-    {
-      "vehicle_id": "vehicle_00089",
-      "implement_id": "implement_009112",
-      "estimated_margin_eur": 13200.00,
-      "schedule_conflict_risk": "low"
     }
   ]
 }
