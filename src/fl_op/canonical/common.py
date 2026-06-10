@@ -67,6 +67,9 @@ class QualitySummary(BaseModel):
     by_severity: dict[str, int] = Field(default_factory=dict)
     n_entities_excluded: int = 0
     n_imputed: int = 0
+    # Source contract id -> share of bad observation readings (outliers plus
+    # fault-suspected series), from the statistical assessment.
+    observation_error_rates: dict[str, float] = Field(default_factory=dict)
 
 
 class RiskSummary(BaseModel):

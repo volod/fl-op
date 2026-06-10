@@ -27,6 +27,16 @@ entities:
   forecast:
     contract: odcs/forecast.odcs.yaml
     description: An environmental forecast for a location and time interval.
+  observation:
+    contract: odcs/observation.odcs.yaml
+    description: >-
+      A measured value reported about an entity (sensor reading, telemetry
+      sample, manual inspection). Covers both historical batches and realtime
+      streamed readings; the engine's monitoring policy derives service tasks
+      for stationary equipment from the latest observations.
+  commitment:
+    contract: odcs/commitment.odcs.yaml
+    description: A contractual obligation (deadline, penalty, hardness) attached to work.
   execution-event:
     contract: odcs/execution-event.odcs.yaml
     description: An operational event envelope that triggers rolling re-solves.
@@ -42,6 +52,8 @@ semanticTerms:
   urn:xopt:identity:task-id: {valueType: string, quantityKind: identifier}
   urn:xopt:identity:forecast-id: {valueType: string, quantityKind: identifier}
   urn:xopt:identity:event-id: {valueType: string, quantityKind: identifier}
+  urn:xopt:identity:observation-id: {valueType: string, quantityKind: identifier}
+  urn:xopt:identity:commitment-id: {valueType: string, quantityKind: identifier}
   # -- attributes ------------------------------------------------------------
   urn:xopt:attribute:asset-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:display-name: {valueType: string, quantityKind: text}
@@ -57,6 +69,19 @@ semanticTerms:
   urn:xopt:attribute:expected-revenue: {valueType: number, quantityKind: money, canonicalUnit: EUR}
   urn:xopt:attribute:event-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:event-payload: {valueType: string, quantityKind: text}
+  urn:xopt:attribute:mobility: {valueType: string, quantityKind: categorical}
+  # -- maintenance (master data; dynamic condition comes from observations) -----
+  urn:xopt:maintenance:last-service-at: {valueType: string, quantityKind: timestamp}
+  urn:xopt:maintenance:service-interval: {valueType: number, quantityKind: duration, canonicalUnit: d}
+  # -- observations (sensor / telemetry measurements) --------------------------
+  urn:xopt:observation:metric: {valueType: string, quantityKind: categorical}
+  urn:xopt:observation:value: {valueType: number, quantityKind: measurement}
+  urn:xopt:observation:state: {valueType: string, quantityKind: categorical}
+  urn:xopt:observation:unit: {valueType: string, quantityKind: categorical}
+  urn:xopt:observation:quality-flag: {valueType: string, quantityKind: categorical}
+  # -- commitment qualifiers ----------------------------------------------------
+  urn:xopt:commitment:type: {valueType: string, quantityKind: categorical}
+  urn:xopt:commitment:hardness: {valueType: string, quantityKind: categorical}
   # -- capabilities ----------------------------------------------------------
   urn:xopt:capability:rated-power: {valueType: number, quantityKind: power, canonicalUnit: kW}
   urn:xopt:capability:required-power: {valueType: number, quantityKind: power, canonicalUnit: kW}
@@ -91,3 +116,5 @@ semanticTerms:
   urn:xopt:time:forecast-from: {valueType: string, quantityKind: timestamp}
   urn:xopt:time:forecast-to: {valueType: string, quantityKind: timestamp}
   urn:xopt:time:observed-at: {valueType: string, quantityKind: timestamp}
+  urn:xopt:time:valid-from: {valueType: string, quantityKind: timestamp}
+  urn:xopt:time:valid-to: {valueType: string, quantityKind: timestamp}

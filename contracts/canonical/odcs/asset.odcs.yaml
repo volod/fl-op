@@ -43,6 +43,30 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: asset.name, semanticTerm: urn:xopt:attribute:display-name, planningUse: [display]}
+      - name: mobility
+        logicalType: string
+        required: false
+        description: >-
+          Mobility class (mobile, stationary, portable). Stationary assets
+          (road sensors, field stations, fixed equipment) are never scheduled as
+          movable resources; they are monitored and serviced in place.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.mobility, semanticTerm: urn:xopt:attribute:mobility, planningUse: [classification, compatibility-filter]}
+      - name: lastServiceAt
+        logicalType: string
+        required: false
+        description: Timestamp of the last completed service visit (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.state.lastServiceAt, semanticTerm: urn:xopt:maintenance:last-service-at, quantityKind: timestamp, planningUse: [monitoring]}
+      - name: serviceIntervalDays
+        logicalType: number
+        required: false
+        description: Planned service interval; overdue assets get a service task.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.state.serviceIntervalDays, semanticTerm: urn:xopt:maintenance:service-interval, canonicalUnit: d, quantityKind: duration, planningUse: [monitoring]}
       - name: homeDepotRef
         logicalType: string
         required: false

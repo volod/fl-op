@@ -16,6 +16,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class MissingValuePolicy(str, Enum):
     """Action taken when a bound source field is missing or unparseable."""
 
+    # The field is optional by design (for example an observation carries either
+    # a numeric value or a categorical state): skip it silently, no finding.
+    ACCEPT_OPTIONAL = "accept-optional"
     REJECT_FOR_PLANNING = "reject-for-planning"
     ACCEPT_WITH_WARNING = "accept-with-warning"
     ACCEPT_WITH_PENALTY = "accept-with-penalty"

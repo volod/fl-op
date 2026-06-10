@@ -93,6 +93,26 @@ contracts:
     fingerprints:
       avroParsingFingerprint: 05057d4e059617c578c0e3b2a35010246c56fda747a97405909491563448ac6c
       optimizationMetadataHash: 5fc5c0195295bf0b489403b3813053306abcabbc961dcaf88550667ad563de08
+  sensors:
+    domain: agricultural
+    odcs: domains/agricultural/odcs/sensors.odcs.yaml
+    mapping: domains/agricultural/mappings/sensors.mapping.yaml
+    avro: generated/avro/sensors.avsc
+    sourceFile: sensors.csv
+    sourceFormat: csv
+    fingerprints:
+      avroParsingFingerprint: b099ab7b472c06e17f3c62e3a5d7d8ff300d3534a9d4ebd8ffe25f751d283031
+      optimizationMetadataHash: 06fb03cd7c4c3d97798edf7c305c3135b80f5f7273b0393956627e22ba0da9f5
+  sensor-readings:
+    domain: agricultural
+    odcs: domains/agricultural/odcs/sensor-readings.odcs.yaml
+    mapping: domains/agricultural/mappings/sensor-readings.mapping.yaml
+    avro: generated/avro/sensor-readings.avsc
+    sourceFile: sensor-readings.jsonl
+    sourceFormat: jsonl
+    fingerprints:
+      avroParsingFingerprint: f4d9f615b2f7bd84d7459c9ca0ffff58b499a89432cbd02438f20eeee14025db
+      optimizationMetadataHash: 01bf0e436bd327075b36456ca4090e8334dc904f3385f6a6a7268aaf05ba1a5d
   execution-events:
     domain: agricultural
     odcs: domains/agricultural/odcs/execution-events.odcs.yaml

@@ -7,6 +7,9 @@ SUPPORTED_CONSTRAINTS = {
     "no-double-booking",
     "respect-contract-time-window",
     "protect-frozen-tasks",
+    "operator-qualified",
+    "required-material-available",
+    "respect-weather-window",
 }
 
 SUPPORTED_FEATURES = {

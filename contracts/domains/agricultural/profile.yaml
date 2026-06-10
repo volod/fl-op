@@ -18,6 +18,8 @@ inputContracts:
   - fields
   - orders
   - weather
+  - sensors
+  - sensor-readings
 
 planningModes:
   - id: periodic
@@ -49,7 +51,7 @@ constraints:
     enforced: true
   - id: operator-qualified
     severity: hard
-    enforced: false
+    enforced: true
   - id: asset-available
     severity: hard
     enforced: true
@@ -58,13 +60,13 @@ constraints:
     enforced: true
   - id: required-material-available
     severity: medium
-    enforced: false
+    enforced: true
   - id: respect-contract-time-window
     severity: hard
     enforced: true
   - id: respect-weather-window
     severity: hard
-    enforced: false
+    enforced: true
   - id: respect-field-restrictions
     severity: medium
     enforced: false
@@ -74,6 +76,25 @@ constraints:
   - id: protect-frozen-tasks
     severity: hard
     enforced: true
+
+# Weather-window limits and which weather dimensions each operation cares
+# about; operations without an entry are never weather-blocked.
+weatherPolicy:
+  maxWindMs: 10.0
+  maxRainMmPerH: 5.0
+  maxSoilMoisturePct: 85.0
+  sensitivity:
+    SPRAYING: [wind, rain]
+    FERTILIZING: [wind, rain]
+    SEEDING: [rain, soil-moisture]
+    TILLAGE: [soil-moisture]
+    HARVESTING: [rain, soil-moisture]
+
+# Consumable demand per operation type, charged against depot inventory.
+materialDemand:
+  FERTILIZING:
+    material: fertilizer
+    perAreaHa: 50.0
 
 objectives:
   mode: lexicographic
@@ -92,6 +113,31 @@ planningDefaults:
   rollingHorizonHours: 48
   freezeWindowMinutes: 60
   maxAssignmentRoutingIterations: 3
+
+# Stationary-equipment monitoring policy: thresholds for deriving
+# EQUIPMENT_SERVICE tasks from sensor-station observations. Asset-type
+# overrides layer on top of the base policy for individual station classes.
+monitoring:
+  batteryLowThresholdPct: 20.0
+  batteryCriticalThresholdPct: 5.0
+  batteryForecastHorizonDays: 3.0
+  minObservationConfidence: 0.5
+  compositeHealthThreshold: 0.35
+  serviceOperationType: EQUIPMENT_SERVICE
+  servicePriorityClass: 2
+  serviceDeadlineDays: 3
+  servicePenaltyPerDayEur: 150.0
+  serviceNominalAreaHa: 1.0
+  # Escalation tier: the asset failed earlier than the prognosis (critical
+  # battery or failed health) and must be visited urgently.
+  escalatedPriorityClass: 1
+  escalatedDeadlineDays: 1
+  assetTypeOverrides:
+    # Weather stations feed the weather-window constraints, so they get a
+    # larger battery safety margin and a tighter service deadline.
+    WEATHER_STATION:
+      batteryLowThresholdPct: 25.0
+      serviceDeadlineDays: 2
 
 outputContracts:
   - dispatch-plans

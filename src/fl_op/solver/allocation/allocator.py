@@ -76,7 +76,8 @@ def allocate_resources(
             cluster_resource_limit(cluster_orders),
             state,
         )
-        assign_operator(cluster, operators, depot_operators, state)
+        cluster_operations = {o.operation_type for o in cluster_orders}
+        assign_operator(cluster, operators, depot_operators, state, cluster_operations)
         cluster["allocated_prime_related"] = allocated
         _log_cluster_allocation(cluster, allocated)
 

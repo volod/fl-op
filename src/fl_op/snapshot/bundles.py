@@ -10,7 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from fl_op.canonical.asset import Capability
-from fl_op.canonical.bundle import OperationalBundle, compute_bundle_id
+from fl_op.canonical.bundle import BundleDiagnostics, OperationalBundle, compute_bundle_id
 from fl_op.core.constants import (
     BUNDLE_GENERATION_CAP,
     POWER_MARGIN_PCT,
@@ -29,10 +29,23 @@ _COMPATIBLE_OPS_TERM = URN_CAPABILITY_PREFIX + "compatible-operations"
 
 def generate_bundles(
     assets: list["Asset"], configuration_version: str
-) -> list[OperationalBundle]:
-    """Enumerate compatible prime-mover + implement bundles (power feasibility)."""
+) -> tuple[list[OperationalBundle], BundleDiagnostics]:
+    """Enumerate compatible prime-mover + implement bundles (power feasibility).
+
+    Returns the materialized bundles plus diagnostics recording whether the
+    list was truncated by BUNDLE_GENERATION_CAP.
+    """
     prime_movers = [a for a in assets if "mobile-prime-mover" in a.roles]
     implements = [a for a in assets if "implement" in a.roles]
+
+    def diagnostics(n_generated: int, truncated: bool) -> BundleDiagnostics:
+        return BundleDiagnostics(
+            n_prime_movers=len(prime_movers),
+            n_related_equipment=len(implements),
+            n_generated=n_generated,
+            generation_cap=BUNDLE_GENERATION_CAP,
+            truncated=truncated,
+        )
 
     bundles: list[OperationalBundle] = []
     for pm in prime_movers:
@@ -67,6 +80,6 @@ def generate_bundles(
                     "Bundle generation capped at %d; snapshot bundle list truncated",
                     BUNDLE_GENERATION_CAP,
                 )
-                return bundles
+                return bundles, diagnostics(len(bundles), True)
     logger.info("Generated %d operational bundles", len(bundles))
-    return bundles
+    return bundles, diagnostics(len(bundles), False)

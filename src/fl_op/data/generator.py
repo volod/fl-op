@@ -17,12 +17,13 @@ from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION, DEFAULT_DATA_FORMAT
 from fl_op.core.paths import DATA_ROOT
 from fl_op.data.field_order_entities import _generate_fields, _generate_orders_and_contracts, _generate_weather
 from fl_op.data.fleet_entities import _generate_depots, _generate_implements, _generate_operators, _generate_vehicles
-from fl_op.data.io import _load_csv_or_empty, _merge_real_into_synthetic, _write_json
+from fl_op.data.io import _load_csv_or_empty, _merge_real_into_synthetic, _write_json, _write_jsonl
+from fl_op.data.sensor_entities import _generate_sensor_readings, _generate_sensors
 from fl_op.io import get_codec
 
 logger = logging.getLogger(__name__)
 
-_TABULAR_DATASETS = ["depots", "vehicles", "implements", "operators", "fields", "orders"]
+_TABULAR_DATASETS = ["depots", "vehicles", "implements", "operators", "fields", "orders", "sensors"]
 
 
 def run_generate(
@@ -57,6 +58,8 @@ def run_generate(
     fields = _generate_fields(rng, n_orders, depots)
     orders, contracts = _generate_orders_and_contracts(rng, n_orders, fields, now)
     weather = _generate_weather(rng, depots, now)
+    sensors = _generate_sensors(rng, fields, now)
+    sensor_readings = _generate_sensor_readings(rng, sensors, now)
 
     if data_path is not None:
         real_dir = pathlib.Path(data_path)
@@ -77,12 +80,13 @@ def run_generate(
 
     for name, records in zip(
         _TABULAR_DATASETS,
-        [depots, vehicles, implements, operators, fields, orders],
+        [depots, vehicles, implements, operators, fields, orders, sensors],
     ):
         codec.write(records, out_dir / f"{name}{codec.extension}")
 
     _write_json(contracts, out_dir / "contracts.json")
     _write_json(weather, out_dir / "weather.json")
+    _write_jsonl(sensor_readings, out_dir / "sensor-readings.jsonl")
 
     metadata: dict[str, Any] = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
@@ -97,6 +101,8 @@ def run_generate(
             "n_operators": len(operators),
             "n_fields": len(fields),
             "n_contracts": len(contracts),
+            "n_sensors": len(sensors),
+            "n_sensor_readings": len(sensor_readings),
             "data_path": data_path,
         },
     }

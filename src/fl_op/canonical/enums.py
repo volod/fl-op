@@ -19,6 +19,27 @@ class TaskStatus(str, Enum):
     INFEASIBLE = "infeasible"
 
 
+class AssetMobility(str, Enum):
+    """Mobility class of a canonical asset.
+
+    Stationary assets (road sensors, field stations, fixed equipment) are never
+    scheduled as movable resources; they are monitored and serviced in place.
+    """
+
+    MOBILE = "mobile"
+    STATIONARY = "stationary"
+    PORTABLE = "portable"
+
+
+class HealthStatus(str, Enum):
+    """Normalized health state of an asset, fed by observations or snapshots."""
+
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+
+
 class PlanStatus(str, Enum):
     """Lifecycle status of a plan."""
 
@@ -62,6 +83,20 @@ class ReasonCode(str, Enum):
     MANUAL_OVERRIDE_CONFLICT = "MANUAL_OVERRIDE_CONFLICT"
     OPTIMIZATION_TRADEOFF = "OPTIMIZATION_TRADEOFF"
     UNKNOWN = "UNKNOWN"
+
+
+class CorrectiveActionType(str, Enum):
+    """Kind of corrective action a rolling revision applied to survive being wrong."""
+
+    # An assignment lost one of its assets mid-plan; the task was released for
+    # re-solve instead of staying bound to a dead bundle.
+    REASSIGNED_AFTER_ASSET_LOSS = "reassigned-after-asset-loss"
+    # A derived service task was withdrawn because newer readings contradict
+    # the prognosis (false positive).
+    SERVICE_WITHDRAWN = "service-withdrawn"
+    # A derived service task was escalated because the asset degraded faster
+    # than forecast (false negative).
+    SERVICE_ESCALATED = "service-escalated"
 
 
 class QualitySeverity(str, Enum):

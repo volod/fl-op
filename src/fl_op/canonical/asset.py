@@ -6,6 +6,7 @@ from typing import Any, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from fl_op.canonical.common import TimeInterval
+from fl_op.canonical.enums import AssetMobility
 
 
 class Capability(BaseModel):
@@ -15,7 +16,7 @@ class Capability(BaseModel):
 
     capability_id: str
     semantic_term: str
-    value: Union[float, int, str, bool, list[Any], dict[str, Any], None]
+    value: Union[float, int, str, bool, datetime, list[Any], dict[str, Any], None]
     canonical_unit: Optional[str] = None
     confidence: Optional[float] = None
     source_ref: str = ""
@@ -34,6 +35,7 @@ class Asset(BaseModel):
     asset_type: str
     roles: list[str] = Field(default_factory=list)
     status: str = "available"
+    mobility: str = AssetMobility.MOBILE.value
     capabilities: list[Capability] = Field(default_factory=list)
     location: Optional["GeoLocation"] = None
     home_depot_ref: Optional[str] = None

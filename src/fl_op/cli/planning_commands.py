@@ -19,7 +19,7 @@ def contracts_group() -> None:
 )
 def contracts_validate(write: bool) -> None:
     """Validate all contracts: structural fingerprint, ODCS metadata hash, generation readiness."""
-    from fl_op.planning.runner import run_contracts_validate
+    from fl_op.planning.contracts import run_contracts_validate
 
     ok = run_contracts_validate(persist=write)
     if not ok:
@@ -29,7 +29,7 @@ def contracts_validate(write: bool) -> None:
 @contracts_group.command("canonical-validate")
 def contracts_canonical_validate() -> None:
     """Validate only the canonical optimization-model contracts and vocabulary."""
-    from fl_op.planning.runner import run_canonical_validate
+    from fl_op.planning.contracts import run_canonical_validate
 
     ok = run_canonical_validate()
     if not ok:
@@ -40,7 +40,7 @@ def contracts_canonical_validate() -> None:
 @click.option("--domain", required=True, help="Domain pack id (e.g. construction).")
 def contracts_validate_domain(domain: str) -> None:
     """Validate that a domain pack's mappings cover the canonical model completely."""
-    from fl_op.planning.runner import run_domain_validate
+    from fl_op.planning.contracts import run_domain_validate
 
     ok = run_domain_validate(domain)
     if not ok:
@@ -128,7 +128,7 @@ def snapshot_group() -> None:
 )
 def snapshot_build(data: str, mode: str, effective_at: str | None) -> None:
     """Map source data into canonical objects and build a reproducible snapshot."""
-    from fl_op.planning.runner import run_snapshot_build
+    from fl_op.planning.snapshots import run_snapshot_build
 
     run_snapshot_build(
         str(resolve_data_dir(data)),
@@ -146,7 +146,7 @@ def plan_group() -> None:
 @data_option
 def plan_periodic(data: str) -> None:
     """Periodic (batch) OR-Tools plan from an immutable snapshot."""
-    from fl_op.planning.runner import run_plan_periodic
+    from fl_op.planning.plans import run_plan_periodic
 
     run_plan_periodic(str(resolve_data_dir(data)))
 
@@ -167,7 +167,7 @@ def plan_periodic(data: str) -> None:
 )
 def plan_rolling(data: str, events: str | None, effective_at: str | None) -> None:
     """Rolling (stream) OR-Tools dispatch producing immutable plan revisions."""
-    from fl_op.planning.runner import run_plan_rolling
+    from fl_op.planning.plans import run_plan_rolling
 
     run_plan_rolling(
         str(resolve_data_dir(data)),
@@ -176,11 +176,25 @@ def plan_rolling(data: str, events: str | None, effective_at: str | None) -> Non
     )
 
 
+@plan_group.command("diff-revisions")
+@click.option(
+    "--plan",
+    default="latest",
+    show_default=True,
+    help="Rolling-plan run directory under .data/plan-rolling, or 'latest'.",
+)
+def plan_diff_revisions(plan: str) -> None:
+    """Explain why every changed assignment moved between rolling revisions."""
+    from fl_op.planning.revision_diff import run_revision_diff
+
+    run_revision_diff(plan)
+
+
 @click.command("demo")
 @data_option
 def demo(data: str) -> None:
     """Run the full contract -> snapshot -> batch + stream demonstration."""
-    from fl_op.planning.runner import run_demo
+    from fl_op.planning.demo import run_demo
 
     run_demo(str(resolve_data_dir(data)))
 

@@ -94,6 +94,9 @@ class OrToolsRollingAdapter:
     ) -> Plan:
         """Full compile -> normalize producing a revision linked to a parent."""
         config = config or {}
+        from fl_op.solver.enforcement import EnforcementPolicy
+
+        config.setdefault("enforcement", EnforcementPolicy.from_profile(profile))
         raw = self.compile(snapshot, profile, config)
         plan = self.normalize(self.solve(raw, config), snapshot, profile)
         previous_plan: Optional[Plan] = config.get("previous_plan")

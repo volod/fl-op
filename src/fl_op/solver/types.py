@@ -199,6 +199,20 @@ class DepotRow(_SolverRow):
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class ForecastRow(_SolverRow):
+    """An environmental forecast window used for weather-window enforcement."""
+
+    forecast_id: str
+    lat: float = 0.0
+    lon: float = 0.0
+    valid_from: Optional[str] = None
+    valid_to: Optional[str] = None
+    wind_speed: Optional[float] = None
+    precipitation_rate: Optional[float] = None
+    soil_moisture: Optional[float] = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class TaskRow(_SolverRow):
     """A unit of work to schedule (order)."""
 

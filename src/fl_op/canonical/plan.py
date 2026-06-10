@@ -10,7 +10,29 @@ from fl_op.canonical.common import (
     RiskSummary,
     VersionDimensions,
 )
-from fl_op.canonical.enums import PlanningMode, PlanStatus, ReasonCode, ReservationStatus
+from fl_op.canonical.enums import (
+    CorrectiveActionType,
+    PlanningMode,
+    PlanStatus,
+    ReasonCode,
+    ReservationStatus,
+)
+
+
+class CorrectiveAction(BaseModel):
+    """A self-repair a rolling revision applied: plans must survive being wrong.
+
+    Records why an in-flight assignment was released (asset loss), why a
+    derived service task was withdrawn (prognosis contradicted by newer
+    readings), or why one was escalated (asset degraded faster than forecast).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    action: CorrectiveActionType
+    task_id: str
+    detail: str = ""
+    evidence: dict[str, Any] = Field(default_factory=dict)
 
 
 class Assignment(BaseModel):
@@ -95,6 +117,7 @@ class Plan(BaseModel):
     assignments: list[Assignment] = Field(default_factory=list)
     unassigned_tasks: list[UnassignedTask] = Field(default_factory=list)
     material_reservations: list[MaterialReservation] = Field(default_factory=list)
+    corrective_actions: list[CorrectiveAction] = Field(default_factory=list)
 
     score: dict[str, Any] = Field(default_factory=dict)
     quality_summary: QualitySummary = Field(default_factory=QualitySummary)

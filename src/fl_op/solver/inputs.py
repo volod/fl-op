@@ -20,6 +20,7 @@ from fl_op.contracts.xopt import FieldBinding
 from fl_op.mapping.bindings import load_binding_table
 from fl_op.solver.types import (
     DepotRow,
+    ForecastRow,
     OperatorRow,
     PrimeMoverRow,
     RelatedRow,
@@ -43,6 +44,7 @@ SECTION_OPERATORS = "operators"
 SECTION_SITES = "sites"
 SECTION_DEPOTS = "depots"
 SECTION_TASKS = "tasks"
+SECTION_FORECASTS = "forecasts"
 
 # Canonical asset roles a prime mover / related equipment / operator plays.
 ROLE_PRIME_MOVER = "mobile-prime-mover"
@@ -110,6 +112,14 @@ _CANONICAL_KEY: dict[str, str] = {
     "task.priorityClass": "priority_class",
     "task.status": "status",
     "task.revenueValue": "revenue",
+    "forecast.forecastId": "forecast_id",
+    "forecast.location.lat": "lat",
+    "forecast.location.lon": "lon",
+    "forecast.forecastFor.from": "valid_from",
+    "forecast.forecastFor.to": "valid_to",
+    "forecast.value.windSpeed": "wind_speed",
+    "forecast.value.precipitationRate": "precipitation_rate",
+    "forecast.value.soilMoisture": "soil_moisture",
 }
 
 
@@ -158,6 +168,40 @@ def _location_value(
         return loc.polygon
     if path[:1] == ["inventory"]:
         return inv_lookup.get((loc.location_id, path[-1]), 0.0)
+    return None
+
+
+def _forecast_value(forecast: Any, binding: FieldBinding) -> Any:
+    path = binding.meta.binding.split(".")[1:]
+    if path == ["forecastId"]:
+        return forecast.forecast_id
+    if path == ["location", "lat"]:
+        return (forecast.location or {}).get("lat")
+    if path == ["location", "lon"]:
+        return (forecast.location or {}).get("lon")
+    if path == ["forecastFor", "from"]:
+        interval = forecast.forecast_for
+        return interval.from_.isoformat() if interval and interval.from_ else None
+    if path == ["forecastFor", "to"]:
+        interval = forecast.forecast_for
+        return interval.to.isoformat() if interval and interval.to else None
+    if path[:1] == ["value"]:
+        return forecast.value.get(path[-1])
+    return None
+
+
+def _table_for_entity(registry: FileRegistry, entity: str):
+    """Binding table of the first active-domain contract mapping one entity."""
+    active = registry.active_domain
+    for cid in registry.list_contracts():
+        entry = registry.get_entry(cid)
+        if active and entry.domain != active:
+            continue
+        if not entry.mapping_ref:
+            continue
+        table = load_binding_table(registry, cid)
+        if table.canonical_entity == entity:
+            return table
     return None
 
 
@@ -257,6 +301,17 @@ def build_solver_inputs(
             for t in snapshot.tasks
         ],
     }
+    forecast_table = _table_for_entity(registry, "forecast")
+    rows[SECTION_FORECASTS] = (
+        [
+            ForecastRow.from_canonical_dict(
+                _project(forecast_table.bindings, lambda b, f=f: _forecast_value(f, b))
+            )
+            for f in snapshot.forecasts
+        ]
+        if forecast_table is not None
+        else []
+    )
     logger.info(
         "Projected canonical solver inputs: %s",
         {k: len(v) for k, v in rows.items()},

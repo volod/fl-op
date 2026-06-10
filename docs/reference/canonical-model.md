@@ -36,8 +36,8 @@ entities built according to the contracts described here.
 
 - `canonicalModelRef: urn:xopt:model:canonical:0.1.0`
 - the **entity registry** (`asset`, `location`, `task`, `forecast`,
-  `execution-event`), each pointing at an ODCS contract under
-  `contracts/canonical/odcs/`;
+  `observation`, `commitment`, `execution-event`), each pointing at an ODCS
+  contract under `contracts/canonical/odcs/`;
 - the **semantic-term vocabulary**: the controlled set of meanings a mapping may
   bind to, each fixing `valueType`, `quantityKind`, and `canonicalUnit`
   (e.g. `urn:xopt:capability:rated-power -> {power, kW}`).
@@ -66,11 +66,36 @@ flattens these into a `CanonicalModel` exposing `allowed_bindings(entity)`,
 
 | Entity | Required canonical fields | Notes |
 |---|---|---|
-| `asset` | `asset.assetId` | Prime movers, related equipment, and operators are one entity with distinct roles; capabilities are optional (role-dependent). |
+| `asset` | `asset.assetId` | Prime movers, related equipment, operators, and stationary equipment are one entity with distinct roles. `asset.mobility` separates movable resources from stationary ones (sensors, fixed road/field equipment); `asset.state.*` carries maintenance master data (last service, service interval). Dynamic condition (battery, health) comes exclusively from observations. |
 | `location` | `location.locationId`, `location.lat`, `location.lon` | Work sites and depots; depot inventory is canonical `location.inventory.*`. |
 | `task` | `task.taskId`, `task.locationRef`, `task.operationType` | Units of work; revenue/penalty are domain-neutral EUR money. |
 | `forecast` | `forecast.forecastId` | Environmental forecast windows. |
-| `execution-event` | `event.eventId`, `event.eventType`, `event.observedAt`, `event.entityRef` | Rolling-dispatch replanning triggers. |
+| `observation` | `observation.observationId`, `observation.entityRef`, `observation.metric`, `observation.observedAt` | A measured value about an entity: sensor reading, telemetry sample, inspection result. One shape covers historical batches and realtime streamed readings; numeric readings bind `observation.value`, categorical readings bind `observation.stateValue`. The `metric` column carries canonical metric codes (`battery-level`, `health-status`, ...). |
+| `commitment` | `commitment.commitmentId` | Contractual obligations (deadline, lateness penalty, hardness) for domains that keep them separate from order rows. |
+| `execution-event` | `event.eventId`, `event.eventType`, `event.observedAt`, `event.entityRef` | Rolling-dispatch replanning triggers, including `task.progress` (partial completion), `inventory.adjusted`, `observation.recorded` for streamed readings, and `entity.corrected` for corrected source rows. |
+
+## Stationary-equipment monitoring
+
+Observation series are first statistically assessed
+(`fl_op/snapshot/assessment.py`): series are bounded by a retention window and
+downsampled, source-flagged-bad readings and outliers are excluded,
+fault-suspected series (battery rising without service, frozen values) are
+floored to zero confidence, and drifting metrics are flagged for calibration.
+Source quality flags fold into per-reading confidence. The monitoring policy
+(`fl_op/snapshot/monitoring.py`) then consumes the assessed series plus the
+`asset.state.*` maintenance master data and derives service tasks for
+stationary assets that need attention: battery at or below threshold, battery
+drain trend projected below threshold within the forecast horizon,
+degraded/failed health, an exceeded service interval, a drifting metric, or a
+low composite health score combining sub-critical signals. Readings below the
+policy's minimum confidence are ignored, and policies resolve per asset type
+via the profile's `assetTypeOverrides`. Derived tasks are anchored at the asset's home
+location reference and are scheduled by the same solver chain as ordered work,
+so a domain only has to declare service-capable assets (for example an
+implement whose `compatible_operations` includes the service operation type).
+Thresholds and task attributes come from the optimization profile's
+`monitoring` section (`MonitoringPolicySpec`), with constant-backed defaults
+in `fl_op/core/constants.py`.
 
 ## Validation
 
@@ -86,4 +111,6 @@ flattens these into a `CanonicalModel` exposing `allowed_bindings(entity)`,
 the canonical model in isolation.
 
 See [domain-mapping.md](domain-mapping.md) for how a physical domain projects onto
-this model, using the agricultural and construction packs as worked examples.
+this model, using the agricultural and construction packs as worked examples, and
+[optimization-ontology.md](optimization-ontology.md) for the full entity
+ontology, use-case coverage, and further reading.

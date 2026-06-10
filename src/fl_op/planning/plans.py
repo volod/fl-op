@@ -25,7 +25,10 @@ def run_plan_periodic(
     registry = FileRegistry()
     if snapshot is None:
         snapshot = SnapshotBuilder(registry).build(data_dir, PlanningMode.PERIODIC)
-    profile = registry.get_profile("agricultural-custom-services")
+    profile_id = registry.active_profile_id
+    if profile_id is None:
+        raise ValueError("Registry declares no active domain profile")
+    profile = registry.get_profile(profile_id)
     plan = OrToolsPeriodicAdapter().plan(snapshot, profile)
 
     out_dir = DATA_ROOT / "plan-periodic" / run_timestamp()
@@ -78,6 +81,9 @@ def run_plan_rolling(
             {
                 "revision": n,
                 "trigger": rev.event.event_type if rev.event else "baseline",
+                "trigger_entity_ref": rev.event.entity_ref if rev.event else "",
+                "trigger_event_id": rev.event.event_id if rev.event else "",
+                "n_coalesced_events": rev.n_coalesced_events,
                 "revision_id": rev.plan.revision_id,
                 "parent_revision_id": rev.plan.parent_revision_id,
                 "n_assignments": len(rev.plan.assignments),

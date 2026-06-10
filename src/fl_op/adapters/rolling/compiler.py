@@ -8,6 +8,12 @@ from fl_op.canonical.plan import Assignment, Plan
 from fl_op.core.constants import FREEZE_WINDOW_MINUTES
 from fl_op.solver.chain import run_solver_chain
 
+from fl_op.adapters.rolling.corrective import (
+    carried_asset_loss_actions,
+    escalated_service_tasks,
+    release_lost_asset_assignments,
+    withdrawn_service_actions,
+)
 from fl_op.adapters.rolling.state import RollingSolveResult
 
 if TYPE_CHECKING:
@@ -43,15 +49,20 @@ def compile_rolling_state(
 
     To minimize avoidable disruption, only tasks actually affected
     by events since the last plan are re-optimized:
-      - started or freeze-window tasks are frozen (preserved verbatim);
+      - started or freeze-window tasks are frozen (preserved verbatim), unless
+        their assignment lost an asset mid-execution: then the task is
+        released and re-solved with a corrective-action record;
       - non-frozen prior assignments whose task and assets still exist are
-        carried forward unchanged;
+        carried forward unchanged, unless their service task was escalated;
       - new tasks and assignments whose asset disappeared are re-solved.
 
+    Corrective actions (asset-loss repairs, withdrawn service prognoses,
+    escalations) are detected here and recorded on the revision.
     On a baseline build with no previous plan, every task is re-solved.
     """
     now = config.get("now") or snapshot.effective_at
     previous_plan: Optional[Plan] = config.get("previous_plan")
+    previous_service_reasons: dict[str, str] = config.get("previous_service_reasons") or {}
     previous_assignments = list(previous_plan.assignments) if previous_plan else []
     previous_by_task: dict[str, Assignment] = {
         a.task_id: a for a in previous_assignments
@@ -61,6 +72,24 @@ def compile_rolling_state(
     available_asset_ids = {a.asset_id for a in snapshot.assets}
 
     frozen_ids = frozen_task_ids(snapshot, previous_by_task, now)
+    frozen_ids, corrective_actions = release_lost_asset_assignments(
+        frozen_ids, previous_by_task, available_asset_ids, current_task_ids
+    )
+    corrective_actions.extend(
+        carried_asset_loss_actions(
+            previous_assignments, frozen_ids, current_task_ids, available_asset_ids
+        )
+    )
+    force_resolve_ids, escalation_actions = escalated_service_tasks(
+        snapshot, previous_service_reasons, previous_by_task
+    )
+    corrective_actions.extend(escalation_actions)
+    corrective_actions.extend(
+        withdrawn_service_actions(
+            previous_plan, current_task_ids, snapshot, previous_service_reasons
+        )
+    )
+
     frozen_assignments = [
         previous_by_task[tid].model_copy(update={"is_frozen": True})
         for tid in frozen_ids
@@ -71,22 +100,26 @@ def compile_rolling_state(
         frozen_ids,
         current_task_ids,
         available_asset_ids,
+        force_resolve_ids,
     )
 
     preserved = frozen_ids | {a.task_id for a in carried_forward}
     tasks_to_resolve = {t.task_id for t in snapshot.tasks if t.task_id not in preserved}
     from fl_op.solver.inputs import build_solver_inputs
 
-    chain_result = _resolve_tasks(build_solver_inputs(snapshot), tasks_to_resolve, [
-        *frozen_assignments,
-        *carried_forward,
-    ])
+    chain_result = _resolve_tasks(
+        build_solver_inputs(snapshot),
+        tasks_to_resolve,
+        [*frozen_assignments, *carried_forward],
+        enforcement=config.get("enforcement"),
+    )
 
     logger.info(
-        "Rolling replan: %d frozen, %d carried forward, %d re-solved",
+        "Rolling replan: %d frozen, %d carried forward, %d re-solved, %d corrective actions",
         len(frozen_assignments),
         len(carried_forward),
         len(tasks_to_resolve),
+        len(corrective_actions),
     )
     return RollingSolveResult(
         chain_result=chain_result,
@@ -94,6 +127,7 @@ def compile_rolling_state(
         carried_forward=carried_forward,
         previous_by_task=previous_by_task,
         now=now,
+        corrective_actions=corrective_actions,
     )
 
 
@@ -102,11 +136,14 @@ def _carried_forward_assignments(
     frozen_ids: set[str],
     current_task_ids: set[str],
     available_asset_ids: set[str],
+    force_resolve_ids: set[str],
 ) -> list[Assignment]:
     carried_forward: list[Assignment] = []
     for assignment in previous_assignments:
         task_id = assignment.task_id
         if task_id in frozen_ids or task_id not in current_task_ids:
+            continue
+        if task_id in force_resolve_ids:
             continue
         if not set(assignment.asset_ids).issubset(available_asset_ids):
             continue
@@ -118,6 +155,7 @@ def _resolve_tasks(
     solver_rows: dict[str, Any],
     tasks_to_resolve: set[str],
     held_assignments: list[Assignment],
+    enforcement: Any = None,
 ):
     if not tasks_to_resolve:
         return None
@@ -165,4 +203,4 @@ def _resolve_tasks(
         for op in payload.get(SECTION_OPERATORS, [])
         if op.asset_id not in held_operators
     ]
-    return run_solver_chain(payload)
+    return run_solver_chain(payload, enforcement=enforcement)

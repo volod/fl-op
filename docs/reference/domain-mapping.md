@@ -48,6 +48,36 @@ the same `FieldBinding` shape the mapping engine consumes. The registry exposes
 `FileRegistry.get_mapping(contract_id)`; `fl_op/mapping/bindings.py`
 (`load_binding_table`) sources its bindings from the mapping document.
 
+Use `missingValuePolicy: accept-optional` for fields that are optional by
+design (for example an observation row carries either a numeric `value` or a
+categorical `state_value`): the field is skipped silently, without a quality
+finding and without dropping the row.
+
+Observation mappings may declare a `metricCodes` table in their metadata to
+normalize raw source metric vocabularies onto the canonical metric codes the
+engine's monitoring policy interprets; unmapped codes pass through unchanged
+(retained for analysis, not interpreted):
+
+```yaml
+metadata:
+  canonicalEntity: observation
+  metricCodes:
+    battery_pct: battery-level
+    health_state: health-status
+```
+
+## Adaptive dataset discovery
+
+Which datasets feed a snapshot is derived from the registry, not hardcoded: the
+snapshot builder maps every active-domain contract whose mapping targets a
+snapshot-input canonical entity (`asset`, `location`, `task`, `forecast`,
+`observation`, `commitment`), in registry declaration order. Adding a dataset to
+a domain therefore means adding the ODCS + mapping + registry entry; the engine
+picks it up automatically. The same holds in the stream layer: execution events
+resolve their target collection and key column from the mapping documents
+(canonical entity + identity binding), so `task.started`, `asset.unavailable`,
+or `observation.recorded` work for any domain without column-name knowledge.
+
 ## Extra (analytical) fields
 
 A physical ODCS schema may declare **more fields than the optimizer needs**.

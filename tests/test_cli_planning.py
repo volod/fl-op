@@ -1,4 +1,4 @@
-"""Smoke tests for the contracts/snapshot/plan command wiring and runner functions."""
+"""Smoke tests for the contracts/snapshot/plan command wiring."""
 
 import pathlib
 
@@ -6,7 +6,7 @@ from click.testing import CliRunner
 
 from fl_op.canonical.enums import PlanningMode
 from fl_op.main import cli
-from fl_op.planning.runner import run_contracts_validate
+from fl_op.planning.contracts import run_contracts_validate
 from fl_op.snapshot.builder import SnapshotBuilder
 
 

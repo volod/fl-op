@@ -24,6 +24,14 @@ class ImplementType(str, Enum):
     SEEDER = "SEEDER"
     COMBINE_HEADER = "COMBINE_HEADER"
     FERTILIZER_SPREADER = "FERTILIZER_SPREADER"
+    # Tool kit enabling a prime mover to perform stationary-equipment service
+    # visits (the canonical EQUIPMENT_SERVICE operation type).
+    SERVICE_KIT = "SERVICE_KIT"
+
+
+class SensorType(str, Enum):
+    SOIL_MOISTURE_PROBE = "SOIL_MOISTURE_PROBE"
+    WEATHER_STATION = "WEATHER_STATION"
 
 
 class VehicleType(str, Enum):

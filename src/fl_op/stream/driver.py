@@ -13,10 +13,17 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fl_op.adapters.ortools_rolling import OrToolsRollingAdapter
-from fl_op.canonical.enums import PlanningMode, TaskStatus
+from fl_op.canonical.enums import PlanningMode
 from fl_op.canonical.plan import Plan
 from fl_op.contracts.registry import FileRegistry
+from fl_op.core.constants import STREAM_CONVERGENCE_WINDOW_S
 from fl_op.snapshot.builder import SnapshotBuilder
+from fl_op.stream.apply import EventApplicator
+from fl_op.stream.prognosis import (
+    log_threshold_recommendations,
+    prognosis_accuracy,
+    record_prognosis_outcomes,
+)
 from fl_op.stream.source import ExecutionEvent
 
 logger = logging.getLogger(__name__)
@@ -24,11 +31,16 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Revision:
-    """One rolling revision plus the triggering event."""
+    """One rolling revision plus the triggering event.
+
+    When events are coalesced (convergence window), ``event`` is the last
+    event of the converged batch and ``n_coalesced_events`` its size.
+    """
 
     event: Optional[ExecutionEvent]
     plan: Plan
     snapshot_id: str
+    n_coalesced_events: int = 1
 
 
 @dataclass
@@ -36,34 +48,13 @@ class StreamResult:
     revisions: list[Revision] = field(default_factory=list)
 
 
-def _apply_event(sources: dict[str, list[dict[str, Any]]], event: ExecutionEvent) -> None:
-    """Mutate the in-memory source rows in response to one execution event.
-
-    These are raw physical source rows (keyed by domain column names) that are fed
-    to the SnapshotBuilder's mapping engine, so they use the active domain's
-    physical identifiers (order_id, vehicle_id), not canonical solver-row keys.
-    """
-    if event.event_type == "task.started":
-        for o in sources["orders"]:
-            if o["order_id"] == event.entity_ref:
-                o["status"] = TaskStatus.STARTED.value
-    elif event.event_type == "order.cancelled":
-        sources["orders"] = [
-            o for o in sources["orders"] if o["order_id"] != event.entity_ref
-        ]
-    elif event.event_type == "order.created":
-        sources["orders"].append(dict(event.payload))
-    elif event.event_type == "asset.unavailable":
-        sources["vehicles"] = [
-            v for v in sources["vehicles"] if v["vehicle_id"] != event.entity_ref
-        ]
-    elif event.event_type == "forecast.updated":
-        # Structural no-op for the MVP: triggers a replan without changing inputs.
-        logger.info("forecast.updated for %s triggers replan", event.entity_ref)
-
-
 class StreamDriver:
-    """Drives rolling replanning from an execution-event stream."""
+    """Drives rolling replanning from an execution-event stream.
+
+    Event application is binding-driven (see stream/apply.py): collections and
+    key columns come from the active domain's mapping documents, so the driver
+    has no knowledge of domain-specific physical column names.
+    """
 
     def __init__(
         self,
@@ -73,7 +64,11 @@ class StreamDriver:
         self.registry = registry or FileRegistry()
         self.builder = SnapshotBuilder(self.registry)
         self.adapter = adapter or OrToolsRollingAdapter()
-        self.profile = self.registry.get_profile("agricultural-custom-services")
+        self.applicator = EventApplicator(self.registry)
+        profile_id = self.registry.active_profile_id
+        if profile_id is None:
+            raise ValueError("Registry declares no active domain profile")
+        self.profile = self.registry.get_profile(profile_id)
 
     def initial_revision(
         self,
@@ -81,47 +76,106 @@ class StreamDriver:
         effective_at: Optional[datetime] = None,
     ) -> Revision:
         """Build the baseline rolling revision before any events are applied."""
-        effective_at = effective_at or datetime.now(tz=timezone.utc)
+        revision, _ = self._baseline(sources, effective_at or datetime.now(tz=timezone.utc))
+        return revision
+
+    def _baseline(
+        self,
+        sources: dict[str, list[dict[str, Any]]],
+        effective_at: datetime,
+    ) -> tuple[Revision, dict[str, str]]:
         snapshot = self.builder.build_from_sources(
             sources, PlanningMode.ROLLING, effective_at, lineage_ref="stream://initial"
         )
         plan = self.adapter.plan(snapshot, self.profile, {"now": effective_at})
-        return Revision(event=None, plan=plan, snapshot_id=snapshot.snapshot_id)
+        revision = Revision(event=None, plan=plan, snapshot_id=snapshot.snapshot_id)
+        return revision, _service_reasons(snapshot)
 
     def run(
         self,
         sources: dict[str, list[dict[str, Any]]],
         events: list[ExecutionEvent],
         effective_at: Optional[datetime] = None,
+        convergence_window_s: float = STREAM_CONVERGENCE_WINDOW_S,
     ) -> StreamResult:
-        """Produce a baseline revision plus one revision per triggering event."""
+        """Produce a baseline revision plus one revision per converged batch.
+
+        Events whose observed times fall within ``convergence_window_s`` of
+        each other are coalesced into one rebuild/re-solve, so a partition
+        flushing its backlog converges before replanning. With the window at 0
+        every event yields its own revision. Replayed event ids are applied
+        idempotently and never produce a revision.
+        """
         effective_at = effective_at or datetime.now(tz=timezone.utc)
         working = copy.deepcopy(sources)
 
         result = StreamResult()
-        baseline = self.initial_revision(working, effective_at)
+        baseline, previous_service_reasons = self._baseline(working, effective_at)
         result.revisions.append(baseline)
         previous_plan = baseline.plan
 
-        for event in events:
-            _apply_event(working, event)
-            now = _event_now(event, effective_at)
+        for batch in _coalesce(events, convergence_window_s, effective_at):
+            applied = [self.applicator.apply(working, event) for event in batch]
+            if not any(applied):
+                continue
+            last_event = batch[-1]
+            now = _event_now(last_event, effective_at)
             snapshot = self.builder.build_from_sources(
                 working, PlanningMode.ROLLING, effective_at,
-                lineage_ref=f"stream://{event.event_id}",
+                lineage_ref=f"stream://{last_event.event_id}",
             )
             plan = self.adapter.plan(
                 snapshot,
                 self.profile,
-                {"now": now, "previous_plan": previous_plan},
+                {
+                    "now": now,
+                    "previous_plan": previous_plan,
+                    "previous_service_reasons": previous_service_reasons,
+                },
             )
             result.revisions.append(
-                Revision(event=event, plan=plan, snapshot_id=snapshot.snapshot_id)
+                Revision(
+                    event=last_event,
+                    plan=plan,
+                    snapshot_id=snapshot.snapshot_id,
+                    n_coalesced_events=sum(applied),
+                )
             )
+            record_prognosis_outcomes(plan)
             previous_plan = plan
+            previous_service_reasons = _service_reasons(snapshot)
 
+        log_threshold_recommendations(prognosis_accuracy())
         logger.info("Stream produced %d revisions", len(result.revisions))
         return result
+
+
+def _coalesce(
+    events: list[ExecutionEvent],
+    window_s: float,
+    fallback: datetime,
+) -> list[list[ExecutionEvent]]:
+    """Group consecutive events whose observed times lie within the window."""
+    if window_s <= 0 or not events:
+        return [[event] for event in events]
+    batches: list[list[ExecutionEvent]] = [[events[0]]]
+    for event in events[1:]:
+        gap = (_event_now(event, fallback) - _event_now(batches[-1][-1], fallback)).total_seconds()
+        if abs(gap) <= window_s:
+            batches[-1].append(event)
+        else:
+            batches.append([event])
+    return batches
+
+
+def _service_reasons(snapshot: Any) -> dict[str, str]:
+    """Monitoring-derived task reasons of a snapshot, for the next revision's
+    corrective reconciliation (withdrawal and escalation records)."""
+    return {
+        t.task_id: t.source_ref
+        for t in snapshot.tasks
+        if t.order_id.startswith("monitoring-")
+    }
 
 
 def _event_now(event: ExecutionEvent, fallback: datetime) -> datetime:

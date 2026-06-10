@@ -39,6 +39,9 @@ _SUPPORTED_CONSTRAINTS = {
     "no-double-booking",
     "respect-contract-time-window",
     "protect-frozen-tasks",
+    "operator-qualified",
+    "required-material-available",
+    "respect-weather-window",
 }
 _SUPPORTED_FEATURES = {
     "periodic-planning",
@@ -81,7 +84,7 @@ class OrToolsPeriodicAdapter:
         return build_solver_inputs(snapshot)
 
     def solve(self, solver_input: dict[str, Any], config: dict[str, Any]) -> SolverChainResult:
-        return run_solver_chain(solver_input)
+        return run_solver_chain(solver_input, enforcement=config.get("enforcement"))
 
     def normalize(
         self,
@@ -110,6 +113,9 @@ class OrToolsPeriodicAdapter:
         report = self.validate_profile(profile)
         if not report.ok:
             raise ValueError(f"profile incompatible with adapter: {report.messages}")
+        from fl_op.solver.enforcement import EnforcementPolicy
+
+        config.setdefault("enforcement", EnforcementPolicy.from_profile(profile))
         compiled = self.compile(snapshot, profile, config)
         raw = self.solve(compiled, config)
         return self.normalize(raw, snapshot, profile)

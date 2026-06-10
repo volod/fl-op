@@ -1,0 +1,63 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+# Projects the agricultural physical 'sensors' schema onto the canonical Asset
+# entity as stationary equipment. Stations are anchored to their field via
+# asset.homeDepotRef, which the monitoring policy uses as the service-visit
+# location.
+metadata:
+  domain: agricultural
+  sourceContract: sensors
+  canonicalEntity: asset
+  assetRole: stationary-equipment
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: stationaryEquipmentMaster
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+
+fieldMappings:
+  - sourceField: sensor_id
+    binding: asset.assetId
+    semanticTerm: urn:xopt:identity:asset-id
+    planningUse: [identity]
+  - sourceField: sensor_type
+    binding: asset.assetType
+    semanticTerm: urn:xopt:attribute:asset-type
+    planningUse: [classification]
+  - sourceField: field_id
+    binding: asset.homeDepotRef
+    semanticTerm: urn:xopt:relationship:home-depot
+    planningUse: [assignment]
+    missingValuePolicy: reject-for-planning
+  - sourceField: lat
+    binding: asset.location.lat
+    semanticTerm: urn:xopt:attribute:latitude
+    canonicalUnit: deg
+    quantityKind: angle
+    planningUse: [geospatial]
+    missingValuePolicy: reject-for-planning
+  - sourceField: lon
+    binding: asset.location.lon
+    semanticTerm: urn:xopt:attribute:longitude
+    canonicalUnit: deg
+    quantityKind: angle
+    planningUse: [geospatial]
+    missingValuePolicy: reject-for-planning
+  - sourceField: mobility
+    binding: asset.mobility
+    semanticTerm: urn:xopt:attribute:mobility
+    planningUse: [classification, compatibility-filter]
+    missingValuePolicy: reject-for-planning
+  - sourceField: last_service_at
+    binding: asset.state.lastServiceAt
+    semanticTerm: urn:xopt:maintenance:last-service-at
+    quantityKind: timestamp
+    planningUse: [monitoring]
+    missingValuePolicy: accept-with-warning
+  - sourceField: service_interval_days
+    binding: asset.state.serviceIntervalDays
+    semanticTerm: urn:xopt:maintenance:service-interval
+    canonicalUnit: d
+    quantityKind: duration
+    planningUse: [monitoring]
+    missingValuePolicy: accept-with-warning

@@ -1,10 +1,10 @@
 """Plain state object passed from rolling compile/solve to normalization."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from fl_op.canonical.plan import Assignment
+from fl_op.canonical.plan import Assignment, CorrectiveAction
 from fl_op.solver.chain import SolverChainResult
 
 
@@ -17,3 +17,4 @@ class RollingSolveResult:
     carried_forward: list[Assignment]
     previous_by_task: dict[str, Assignment]
     now: datetime
+    corrective_actions: list[CorrectiveAction] = field(default_factory=list)

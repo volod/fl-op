@@ -27,6 +27,23 @@ def compute_bundle_id(
     return f"bundle-{digest}"
 
 
+class BundleDiagnostics(BaseModel):
+    """How complete the snapshot's materialized bundle list is.
+
+    The solver performs its own compatibility filtering, so a truncated bundle
+    list only limits the explanation artifact, never assignment results; this
+    record lets downstream consumers tell the difference.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    n_prime_movers: int = 0
+    n_related_equipment: int = 0
+    n_generated: int = 0
+    generation_cap: int = 0
+    truncated: bool = False
+
+
 class OperationalBundle(BaseModel):
     """A schedulable combination of resources (prime mover + implement + operator)."""
 

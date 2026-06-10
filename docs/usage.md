@@ -42,6 +42,7 @@ Output written to `.data/generate-data/<timestamp>/`:
 ```
 depots.avro        implements.avro   operators.avro
 fields.avro        orders.avro       vehicles.avro
+sensors.avro       sensor-readings.jsonl
 contracts.json     weather.json      metadata.json
 ```
 
@@ -263,6 +264,9 @@ See [`docs/current-implementation.md`](current-implementation.md).
 # freeze window protecting started/imminent tasks and a plan-instability penalty.
 .venv/bin/fl-op plan rolling --data latest --events events.jsonl
 
+# Explain why every changed assignment moved between rolling revisions.
+.venv/bin/fl-op plan diff-revisions --plan latest
+
 # Full story end to end (contracts -> snapshot -> batch -> stream).
 .venv/bin/fl-op demo --data latest      # or: make demo
 ```
@@ -313,6 +317,9 @@ $DATA_DIR/                       # default: .data/ -- override via DATA_DIR env 
   snapshot/<timestamp>/          # snapshot.json (canonical + reproducible hash)
   plan-periodic/<timestamp>/     # plan.json + snapshot.json (batch plan)
   plan-rolling/<timestamp>/      # revisions/<n>/plan.json + revisions_summary.json
+  revision-diff/<timestamp>/     # revision_diff.json + revision_diff.txt
+  quality/observation-error-rates.jsonl   # append-only cross-run error-rate trend
+  quality/service-prognosis.jsonl         # per-revision service-prognosis outcomes
 ```
 
 All solve/reschedule JSON files include `schema_version: "1.0"`, `run_metadata`

@@ -129,9 +129,6 @@ SUPPORTED_DATA_FORMATS: frozenset[str] = frozenset({"csv", "avro", "parquet"})
 # x-optimization extension namespace
 # ---------------------------------------------------------------------------
 
-# Canonical extension namespace key embedded in ODCS metadata.
-XOPT_NAMESPACE: str = "x-optimization"
-
 # ODCS custom-property name for optimization semantics (camelCase per ODCS convention).
 XOPT_ODCS_PROPERTY: str = "xOptimization"
 
@@ -148,9 +145,6 @@ XOPT_EXTENSION_VERSION: str = "0.1.0"
 # apiVersion stamped on OptimizationProfile documents.
 XOPT_API_VERSION: str = "x-optimization/v0.1.0"
 
-# Semantic-model URN for the agricultural custom-services domain.
-URN_MODEL: str = "urn:xopt:model:agricultural-custom-services:0.1.0"
-
 # Semantic-model URN for the domain-agnostic canonical optimization model. Domain
 # mapping packs project their physical schemas onto this model.
 URN_MODEL_CANONICAL: str = "urn:xopt:model:canonical:0.1.0"
@@ -162,10 +156,8 @@ CANONICAL_BINDING_PROPERTY: str = "canonicalBinding"
 # Filename of the canonical-model index inside the canonical contract root.
 CANONICAL_MODEL_FILENAME: str = "model.yaml"
 
-# URN prefixes used by semantic terms and bindings.
+# URN prefix for capability semantic terms.
 URN_CAPABILITY_PREFIX: str = "urn:xopt:capability:"
-URN_RELATIONSHIP_PREFIX: str = "urn:xopt:relationship:"
-URN_ENTITY_PREFIX: str = "urn:xopt:entity:"
 
 # ---------------------------------------------------------------------------
 # Planning horizons and rolling-dispatch windows
@@ -222,3 +214,230 @@ BUNDLE_GENERATION_CAP: int = int(os.environ.get("BUNDLE_GENERATION_CAP", "2000")
 # Version dimensions stamped onto snapshots and plans for governance/lineage.
 MAPPING_VERSION: str = "1.0.0"
 OPTIMIZATION_PROFILE_VERSION: str = "0.1.0"
+
+# ---------------------------------------------------------------------------
+# Canonical snapshot inputs
+# ---------------------------------------------------------------------------
+
+# Canonical entities that constitute planning-snapshot state. The snapshot
+# builder maps every active-domain contract whose mapping targets one of these;
+# event-envelope entities (execution-event) drive the stream layer instead.
+SNAPSHOT_INPUT_ENTITIES: tuple[str, ...] = (
+    "asset",
+    "location",
+    "task",
+    "forecast",
+    "observation",
+    "commitment",
+)
+
+# ---------------------------------------------------------------------------
+# Stationary-equipment monitoring policy
+# ---------------------------------------------------------------------------
+# Thresholds the monitoring policy applies to derive service tasks for
+# stationary assets (sensor stations, fixed road/field equipment) from their
+# latest observations and maintenance state.
+
+# Canonical metric codes observations must carry for the engine to interpret
+# them; domain sources normalize their metric vocabulary to these values.
+METRIC_BATTERY_LEVEL: str = "battery-level"
+METRIC_HEALTH_STATUS: str = "health-status"
+
+# Battery level (percent) at or below which a service visit is required.
+BATTERY_LOW_THRESHOLD_PCT: float = float(os.environ.get("BATTERY_LOW_THRESHOLD_PCT", "20.0"))
+
+# Battery level (percent) at or below which the asset has effectively failed:
+# the derived service task is escalated (the prognosis was too optimistic).
+BATTERY_CRITICAL_THRESHOLD_PCT: float = float(
+    os.environ.get("BATTERY_CRITICAL_THRESHOLD_PCT", "5.0")
+)
+
+# Predictive horizon: if the battery drain trend projects the level to cross
+# the low threshold within this many days, a service task is derived early.
+BATTERY_FORECAST_HORIZON_DAYS: float = float(
+    os.environ.get("BATTERY_FORECAST_HORIZON_DAYS", "3.0")
+)
+
+# Canonical operation type stamped on monitoring-derived service tasks. Domains
+# that want such tasks solvable must declare assets compatible with it.
+EQUIPMENT_SERVICE_OPERATION: str = "EQUIPMENT_SERVICE"
+
+# Scheduling attributes of derived service tasks.
+SERVICE_TASK_PRIORITY_CLASS: int = int(os.environ.get("SERVICE_TASK_PRIORITY_CLASS", "2"))
+SERVICE_TASK_DEADLINE_DAYS: int = int(os.environ.get("SERVICE_TASK_DEADLINE_DAYS", "3"))
+SERVICE_TASK_PENALTY_EUR_PER_DAY: float = float(
+    os.environ.get("SERVICE_TASK_PENALTY_EUR_PER_DAY", "150.0")
+)
+
+# Scheduling attributes of escalated service tasks (asset failed earlier than
+# the prognosis: critical battery or failed health).
+SERVICE_TASK_ESCALATED_PRIORITY_CLASS: int = int(
+    os.environ.get("SERVICE_TASK_ESCALATED_PRIORITY_CLASS", "1")
+)
+SERVICE_TASK_ESCALATED_DEADLINE_DAYS: int = int(
+    os.environ.get("SERVICE_TASK_ESCALATED_DEADLINE_DAYS", "1")
+)
+
+# Nominal work-area equivalent assigned to a service visit so duration/cost
+# estimation (which is area-driven for field work) yields a small fixed effort.
+SERVICE_TASK_NOMINAL_AREA_HA: float = float(
+    os.environ.get("SERVICE_TASK_NOMINAL_AREA_HA", "1.0")
+)
+
+# ---------------------------------------------------------------------------
+# Statistical observation assessment
+# ---------------------------------------------------------------------------
+# Parameters for separating sensor faults from real signals before the
+# monitoring policy derives service tasks from observation series.
+
+# Modified z-score (MAD-based) above which a reading is treated as an outlier.
+OUTLIER_MAD_Z_THRESHOLD: float = float(os.environ.get("OUTLIER_MAD_Z_THRESHOLD", "3.5"))
+
+# Scale factor relating the median absolute deviation to the standard
+# deviation of a normal distribution (the modified z-score convention).
+MAD_NORMAL_CONSISTENCY: float = 0.6745
+
+# Minimum readings in a numeric series before outlier statistics apply.
+OUTLIER_MIN_SERIES_READINGS: int = int(os.environ.get("OUTLIER_MIN_SERIES_READINGS", "5"))
+
+# Battery level rising by more than this between consecutive readings without
+# a service visit marks the series as a suspected instrument fault.
+BATTERY_RISE_FAULT_PCT: float = float(os.environ.get("BATTERY_RISE_FAULT_PCT", "5.0"))
+
+# A non-zero value repeated this many consecutive times marks a frozen sensor.
+# Constant zero is excluded: a dead battery legitimately reads zero.
+FROZEN_SERIES_MIN_READINGS: int = int(os.environ.get("FROZEN_SERIES_MIN_READINGS", "6"))
+
+# Confidence assigned to every reading of a fault-suspected series; below any
+# reasonable monitoring gate, so suspect series never derive service tasks.
+SUSPECT_SERIES_CONFIDENCE: float = 0.0
+
+# Minimum observation confidence the monitoring policy requires before acting.
+MIN_OBSERVATION_CONFIDENCE: float = float(
+    os.environ.get("MIN_OBSERVATION_CONFIDENCE", "0.5")
+)
+
+# Drift detection: mean shift between the two series halves exceeding this
+# many MADs flags the metric as drifting (calibration needed).
+DRIFT_MAD_MULTIPLIER: float = float(os.environ.get("DRIFT_MAD_MULTIPLIER", "3.0"))
+
+# Minimum readings in a series before drift statistics apply.
+DRIFT_MIN_SERIES_READINGS: int = int(os.environ.get("DRIFT_MIN_SERIES_READINGS", "8"))
+
+# Metrics expected to trend by design (state of charge drains); exempt from
+# drift detection so normal behavior is not flagged as calibration need.
+DRIFT_EXEMPT_METRICS: tuple[str, ...] = (METRIC_BATTERY_LEVEL,)
+
+# Share of bad readings (outliers + suspect) per source contract above which
+# the source is reported as degraded.
+OBSERVATION_ERROR_RATE_ALERT: float = float(
+    os.environ.get("OBSERVATION_ERROR_RATE_ALERT", "0.2")
+)
+
+# Confidence factor per source quality flag; readings whose factor is zero are
+# excluded from planning. Unknown flags are trusted (factor 1.0).
+QUALITY_FLAG_CONFIDENCE: dict[str, float] = {
+    "ok": 1.0,
+    "suspect": 0.5,
+    "bad": 0.0,
+    "error": 0.0,
+}
+
+# Observation retention: readings older than this window (relative to the
+# planning effective time) are dropped from snapshots.
+OBSERVATION_RETENTION_DAYS: float = float(
+    os.environ.get("OBSERVATION_RETENTION_DAYS", "14.0")
+)
+
+# Maximum readings kept per (entity, metric) series; longer series are
+# aggregated into time windows (one representative reading per window, oldest
+# and newest readings always preserved).
+OBSERVATION_MAX_SERIES_READINGS: int = int(
+    os.environ.get("OBSERVATION_MAX_SERIES_READINGS", "32")
+)
+
+# Clock-skew tolerance: a reading whose observed-at lies further than this
+# ahead of planning time is excluded (its station clock cannot be trusted).
+CLOCK_SKEW_TOLERANCE_S: float = float(os.environ.get("CLOCK_SKEW_TOLERANCE_S", "300.0"))
+
+# Arrival-order timestamp regression beyond this many seconds flags the series
+# (out-of-order delivery is normal; a large regression hints at clock trouble).
+TIMESTAMP_REGRESSION_TOLERANCE_S: float = float(
+    os.environ.get("TIMESTAMP_REGRESSION_TOLERANCE_S", "3600.0")
+)
+
+# Coalesce stream events whose observed times fall within this window into one
+# rolling revision (0 disables: one revision per event). Lets a partition
+# catching up converge before replanning instead of re-solving per event.
+STREAM_CONVERGENCE_WINDOW_S: float = float(
+    os.environ.get("STREAM_CONVERGENCE_WINDOW_S", "0.0")
+)
+
+# ---------------------------------------------------------------------------
+# Composite health scoring
+# ---------------------------------------------------------------------------
+# A weighted health score in [0, 1] (1 = healthy) per stationary asset,
+# combining partial signals that individually would not fire a rule. A service
+# task is derived when the score falls below the threshold.
+
+# Composite score below which a service task is derived.
+COMPOSITE_HEALTH_THRESHOLD: float = float(
+    os.environ.get("COMPOSITE_HEALTH_THRESHOLD", "0.35")
+)
+
+# Battery headroom above the low threshold that counts as fully healthy.
+COMPOSITE_BATTERY_HEADROOM_PCT: float = 30.0
+
+# Days until the planned service due date that count as fully healthy.
+COMPOSITE_SERVICE_HEADROOM_DAYS: float = 30.0
+
+# Signal weights in the composite score.
+COMPOSITE_WEIGHT_BATTERY: float = 0.35
+COMPOSITE_WEIGHT_HEALTH: float = 0.35
+COMPOSITE_WEIGHT_SERVICE: float = 0.2
+COMPOSITE_WEIGHT_DRIFT: float = 0.1
+
+# Minimum available signals before the composite score is meaningful;
+# single-signal cases are covered by the individual rules.
+COMPOSITE_MIN_SIGNALS: int = 2
+
+# Health-state subscores (1 = healthy).
+HEALTH_STATE_SCORES: dict[str, float] = {
+    "healthy": 1.0,
+    "unknown": 0.7,
+    "degraded": 0.3,
+    "failed": 0.0,
+}
+
+# ---------------------------------------------------------------------------
+# Cross-run quality trending
+# ---------------------------------------------------------------------------
+
+# Directory (under DATA_DIR) and filename of the append-only error-rate trend.
+QUALITY_TREND_DIRNAME: str = "quality"
+QUALITY_TREND_FILENAME: str = "observation-error-rates.jsonl"
+
+# Consecutive runs with strictly increasing error rate that flag a source as
+# degrading.
+ERROR_RATE_TREND_MIN_RUNS: int = int(os.environ.get("ERROR_RATE_TREND_MIN_RUNS", "3"))
+
+# ---------------------------------------------------------------------------
+# Service-prognosis accuracy feedback
+# ---------------------------------------------------------------------------
+
+# Filename (under DATA_DIR/quality) of the per-revision service-outcome log.
+PROGNOSIS_LOG_FILENAME: str = "service-prognosis.jsonl"
+
+# Share of withdrawn (false positive) service prognoses above which a looser
+# monitoring policy (shorter forecast horizon, lower composite threshold) is
+# recommended.
+PROGNOSIS_FALSE_POSITIVE_ALERT: float = float(
+    os.environ.get("PROGNOSIS_FALSE_POSITIVE_ALERT", "0.3")
+)
+
+# Share of escalated (false negative) service prognoses above which a more
+# cautious monitoring policy (longer forecast horizon, higher thresholds) is
+# recommended.
+PROGNOSIS_FALSE_NEGATIVE_ALERT: float = float(
+    os.environ.get("PROGNOSIS_FALSE_NEGATIVE_ALERT", "0.2")
+)

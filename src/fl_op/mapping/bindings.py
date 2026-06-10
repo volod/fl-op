@@ -7,7 +7,7 @@ and the reverse direction (canonical path -> source field), used by the snapshot
 solver-payload projector to reconstruct solver rows from canonical objects.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from fl_op.contracts.registry import FileRegistry
@@ -20,6 +20,8 @@ class BindingTable:
     canonical_entity: str
     asset_role: Optional[str]
     bindings: list[FieldBinding]
+    # Raw source metric code -> canonical metric code (observation mappings).
+    metric_codes: dict[str, str] = field(default_factory=dict)
 
     def by_source_field(self) -> dict[str, FieldBinding]:
         return {b.source_field: b for b in self.bindings}
@@ -50,4 +52,5 @@ def load_binding_table(registry: FileRegistry, contract_id: str) -> BindingTable
         canonical_entity=mapping.canonical_entity,
         asset_role=mapping.asset_role,
         bindings=list(mapping.bindings),
+        metric_codes=dict(mapping.metric_codes),
     )

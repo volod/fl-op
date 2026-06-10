@@ -12,7 +12,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from fl_op.canonical.asset import Asset
-from fl_op.canonical.bundle import OperationalBundle
+from fl_op.canonical.bundle import BundleDiagnostics, OperationalBundle
 from fl_op.canonical.commitment import Commitment, InventoryPosition
 from fl_op.canonical.common import (
     QualityFinding,
@@ -23,6 +23,7 @@ from fl_op.canonical.common import (
 from fl_op.canonical.enums import PlanningMode
 from fl_op.canonical.forecast import Forecast
 from fl_op.canonical.location import Location
+from fl_op.canonical.observation import Observation
 from fl_op.canonical.task import Task
 
 # Keys excluded from the reproducible snapshot hash: per-run identifiers only.
@@ -44,11 +45,18 @@ class PlanningSnapshot(BaseModel):
     assets: list[Asset] = Field(default_factory=list)
     locations: list[Location] = Field(default_factory=list)
     bundles: list[OperationalBundle] = Field(default_factory=list)
+    bundle_diagnostics: BundleDiagnostics = Field(default_factory=BundleDiagnostics)
     tasks: list[Task] = Field(default_factory=list)
     inventory: list[InventoryPosition] = Field(default_factory=list)
     forecasts: list[Forecast] = Field(default_factory=list)
+    observations: list[Observation] = Field(default_factory=list)
     commitments: list[Commitment] = Field(default_factory=list)
     manual_overrides: list[dict[str, Any]] = Field(default_factory=list)
+
+    # Per-source-contract visibility horizon: the newest observed-at this
+    # snapshot could have seen per source. Data arriving later belongs to the
+    # next revision; consumers compare watermarks to tell stale from fresh.
+    source_watermarks: dict[str, datetime] = Field(default_factory=dict)
 
     quality_findings: list[QualityFinding] = Field(default_factory=list)
     quality_summary: QualitySummary = Field(default_factory=QualitySummary)
@@ -61,6 +69,10 @@ class PlanningSnapshot(BaseModel):
         for key in HASH_EXCLUDED_FIELDS:
             data.pop(key, None)
         data.pop("snapshot_hash", None)
+        # Findings are hashed by their semantic content; the detection wall-clock
+        # is a per-run value and would break snapshot reproducibility.
+        for finding in data.get("quality_findings", []):
+            finding.pop("detected_at", None)
         return data
 
     def task_index(self) -> dict[str, Task]:

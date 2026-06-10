@@ -71,6 +71,13 @@ example inputs and outputs.
   `$DATA_DIR/` output layout.
 - **Current implementation**: [`docs/current-implementation.md`](docs/current-implementation.md)
   — contracts, snapshots, solver chain, rolling dispatch, and run-log analysis.
+- **Optimization ontology**: [`docs/reference/optimization-ontology.md`](docs/reference/optimization-ontology.md)
+  — the domain-neutral entity ontology, semantic-term vocabulary, covered
+  optimization use cases and domains, algorithms, and further reading.
+- **Model-world divergence**: [`docs/reference/model-world-divergence.md`](docs/reference/model-world-divergence.md)
+  — the effects a distributed, non-deterministic operational system produces
+  when the implemented entity model is not the world, and which mechanism
+  covers each.
 - **Canonical optimization model**: [`docs/reference/canonical-model.md`](docs/reference/canonical-model.md)
   — the three-layer architecture and the domain-neutral entity / capability /
   semantic-term contract the engine consumes.

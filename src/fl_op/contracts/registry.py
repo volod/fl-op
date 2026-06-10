@@ -93,6 +93,15 @@ class FileRegistry:
         return self.index.get("activeDomain")
 
     @property
+    def active_profile_id(self) -> Optional[str]:
+        """Profile id declared by the active domain, if any."""
+        domain = self.active_domain
+        if not domain:
+            return None
+        spec = (self.index.get("domains") or {}).get(domain) or {}
+        return spec.get("profile")
+
+    @property
     def canonical_model_ref(self) -> Optional[str]:
         return self.index.get("canonicalModelRef")
 

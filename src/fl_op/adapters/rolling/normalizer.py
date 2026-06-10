@@ -52,6 +52,7 @@ def normalize_rolling_result(
         status=PlanStatus.DRAFT,
         assignments=assignments,
         unassigned_tasks=unassigned,
+        corrective_actions=raw_result.corrective_actions,
         score=score,
         quality_summary=snapshot.quality_summary,
         risk_summary=RiskSummary(n_contract_deadlines_at_risk=len(unassigned)),
@@ -93,17 +94,30 @@ def _build_score(
     unassigned: list,
     kpis: dict[str, Any],
 ) -> dict[str, Any]:
+    from fl_op.canonical.enums import CorrectiveActionType
+
     chain = raw_result.chain_result
     n_changed = sum(1 for a in new_assignments if a.change_penalty > 0)
     n_new_tasks = sum(
         1 for a in new_assignments if a.task_id not in raw_result.previous_by_task
     )
+    by_action = {
+        action_type: sum(
+            1 for ca in raw_result.corrective_actions if ca.action == action_type
+        )
+        for action_type in CorrectiveActionType
+    }
     return {
         "n_frozen": len(raw_result.frozen_assignments),
         "n_carried_forward": len(raw_result.carried_forward),
         "n_replanned": len(new_assignments),
         "n_new_tasks": n_new_tasks,
         "n_changed_after_freeze": n_changed,
+        "n_repaired_after_asset_loss": by_action[
+            CorrectiveActionType.REASSIGNED_AFTER_ASSET_LOSS
+        ],
+        "n_service_withdrawn": by_action[CorrectiveActionType.SERVICE_WITHDRAWN],
+        "n_service_escalated": by_action[CorrectiveActionType.SERVICE_ESCALATED],
         "plan_instability_penalty": n_changed * DEFAULT_CHANGE_PENALTY,
         "total_estimated_margin_eur": kpis.get("total_estimated_margin_eur", 0.0),
         "n_unassigned": len(unassigned),

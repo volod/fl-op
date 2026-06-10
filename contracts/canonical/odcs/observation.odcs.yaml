@@ -1,0 +1,85 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: canonical-observation
+version: 0.1.0
+status: active
+name: Canonical Observation
+domain: canonical
+tenant: optimization
+description:
+  purpose: >-
+    Minimal optimization contract for a measured value reported about an entity:
+    a sensor reading, telemetry sample, or manual inspection. One contract covers
+    historical batches and realtime streamed readings alike; the metric column
+    must carry a canonical metric code (for example battery-level, health-status,
+    soil-moisture) so the engine can interpret readings domain-neutrally.
+  usage: Condition monitoring, stationary-equipment service-task derivation, replanning triggers.
+customProperties:
+  - property: canonicalEntity
+    value:
+      entity: observation
+      canonicalModelRef: urn:xopt:model:canonical:0.1.0
+      # Numeric readings bind to `value`; categorical readings (for example a
+      # health status) bind to `stateValue`. At least one of the two must be
+      # present per reading; that rule is enforced by the monitoring policy, not
+      # by this structural contract.
+schema:
+  - name: observation
+    logicalType: object
+    properties:
+      - name: observationId
+        logicalType: string
+        required: true
+        description: Stable canonical identifier of the reading.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: observation.observationId, semanticTerm: urn:xopt:identity:observation-id, planningUse: [identity]}
+      - name: entityRef
+        logicalType: string
+        required: true
+        description: Canonical id of the asset or location the reading is about.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: observation.entityRef, semanticTerm: urn:xopt:relationship:entity-ref, planningUse: [monitoring]}
+      - name: metric
+        logicalType: string
+        required: true
+        description: Canonical metric code identifying what was measured.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: observation.metric, semanticTerm: urn:xopt:observation:metric, planningUse: [monitoring]}
+      - name: value
+        logicalType: number
+        required: false
+        description: Numeric reading, normalized to the metric's canonical unit.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: observation.value, semanticTerm: urn:xopt:observation:value, quantityKind: measurement, planningUse: [monitoring]}
+      - name: stateValue
+        logicalType: string
+        required: false
+        description: Categorical reading (for example a health status code).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: observation.stateValue, semanticTerm: urn:xopt:observation:state, planningUse: [monitoring]}
+      - name: unit
+        logicalType: string
+        required: false
+        description: Unit of the numeric reading as reported by the source.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: observation.unit, semanticTerm: urn:xopt:observation:unit, planningUse: [monitoring]}
+      - name: qualityFlag
+        logicalType: string
+        required: false
+        description: Source-declared quality marker (ok, suspect, bad) folded into confidence.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: observation.qualityFlag, semanticTerm: urn:xopt:observation:quality-flag, planningUse: [monitoring]}
+      - name: observedAt
+        logicalType: string
+        required: true
+        description: Timestamp the reading was taken (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: observation.observedAt, semanticTerm: urn:xopt:time:observed-at, quantityKind: timestamp, planningUse: [monitoring]}

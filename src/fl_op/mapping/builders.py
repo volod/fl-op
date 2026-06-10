@@ -1,12 +1,20 @@
-"""Canonical object builders for accumulated mapping rows."""
+"""Canonical object builders for accumulated mapping rows.
 
-from typing import Any
+``ENTITY_EMITTERS`` is the adaptive dispatch table the mapping engine consults:
+one emitter per canonical entity, each appending built objects to the shared
+MappingResult. New canonical entities plug in via ``register_entity_emitter``
+without touching the engine.
+"""
+
+from typing import Any, Callable
 
 from fl_op.canonical.asset import Asset, GeoLocation
-from fl_op.canonical.commitment import InventoryPosition
+from fl_op.canonical.commitment import Commitment, InventoryPosition
 from fl_op.canonical.common import TimeInterval
+from fl_op.canonical.enums import AssetMobility, CommitmentHardness
 from fl_op.canonical.forecast import Forecast
 from fl_op.canonical.location import Location
+from fl_op.canonical.observation import Observation
 from fl_op.canonical.task import Task
 from fl_op.mapping.bindings import BindingTable
 from fl_op.mapping.result import MappingResult
@@ -21,6 +29,7 @@ def build_asset(table: BindingTable, acc: dict[str, Any]) -> Asset:
         asset_id=str(acc["assetId"]),
         asset_type=str(acc.get("assetType", "")),
         roles=roles,
+        mobility=str(acc.get("mobility", AssetMobility.MOBILE.value)),
         name=str(acc.get("name", "")),
         home_depot_ref=acc.get("homeDepotRef"),
         location=geoloc,
@@ -90,3 +99,91 @@ def build_forecast(table: BindingTable, acc: dict[str, Any]) -> Forecast:
         value=acc.get("value", {}),
         source_ref=f"{table.contract_id}:{acc['forecastId']}",
     )
+
+
+def build_observation(table: BindingTable, acc: dict[str, Any]) -> Observation:
+    """Build an Observation from one accumulated source row.
+
+    The raw source metric code is normalized through the mapping's
+    ``metricCodes`` table so the engine always sees canonical metric codes;
+    unmapped codes pass through unchanged (retained, not interpreted).
+    """
+    value = acc.get("value")
+    raw_metric = str(acc.get("metric", ""))
+    return Observation(
+        observation_id=str(acc["observationId"]),
+        entity_ref=str(acc.get("entityRef", "")),
+        metric=table.metric_codes.get(raw_metric, raw_metric),
+        value=float(value) if value is not None else None,
+        state_value=str(acc.get("stateValue", "")),
+        unit=acc.get("unit"),
+        observed_at=acc.get("observedAt"),
+        quality_flag=str(acc.get("qualityFlag", "")),
+        source_ref=f"{table.contract_id}:{acc['observationId']}",
+    )
+
+
+def build_commitment(table: BindingTable, acc: dict[str, Any]) -> Commitment:
+    """Build a Commitment from one accumulated source row."""
+    hardness_raw = str(acc.get("hardness", CommitmentHardness.MEDIUM.value))
+    value: dict[str, Any] = {}
+    if acc.get("deadline") is not None:
+        value["deadline"] = acc["deadline"]
+    if acc.get("latenessPenalty") is not None:
+        value["latenessPenalty"] = acc["latenessPenalty"]
+    return Commitment(
+        commitment_id=str(acc["commitmentId"]),
+        contract_id=str(acc.get("contractRef", "")),
+        task_id=acc.get("taskRef"),
+        commitment_type=str(acc.get("commitmentType", "")),
+        hardness=CommitmentHardness(hardness_raw),
+        value=value,
+        valid_from=acc.get("validFrom"),
+        valid_to=acc.get("validTo"),
+    )
+
+
+# -- adaptive entity dispatch -------------------------------------------------
+
+# An emitter consumes one accumulated row and appends canonical objects to the
+# shared MappingResult.
+EntityEmitter = Callable[[BindingTable, dict[str, Any], MappingResult], None]
+
+
+def _emit_asset(table: BindingTable, acc: dict[str, Any], result: MappingResult) -> None:
+    result.assets.append(build_asset(table, acc))
+
+
+def _emit_location(table: BindingTable, acc: dict[str, Any], result: MappingResult) -> None:
+    result.locations.append(build_location(table, acc, result))
+
+
+def _emit_task(table: BindingTable, acc: dict[str, Any], result: MappingResult) -> None:
+    result.tasks.append(build_task(table, acc))
+
+
+def _emit_forecast(table: BindingTable, acc: dict[str, Any], result: MappingResult) -> None:
+    result.forecasts.append(build_forecast(table, acc))
+
+
+def _emit_observation(table: BindingTable, acc: dict[str, Any], result: MappingResult) -> None:
+    result.observations.append(build_observation(table, acc))
+
+
+def _emit_commitment(table: BindingTable, acc: dict[str, Any], result: MappingResult) -> None:
+    result.commitments.append(build_commitment(table, acc))
+
+
+ENTITY_EMITTERS: dict[str, EntityEmitter] = {
+    "asset": _emit_asset,
+    "location": _emit_location,
+    "task": _emit_task,
+    "forecast": _emit_forecast,
+    "observation": _emit_observation,
+    "commitment": _emit_commitment,
+}
+
+
+def register_entity_emitter(entity: str, emitter: EntityEmitter) -> None:
+    """Register (or override) the emitter handling one canonical entity."""
+    ENTITY_EMITTERS[entity] = emitter

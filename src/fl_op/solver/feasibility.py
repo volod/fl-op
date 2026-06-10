@@ -1,8 +1,8 @@
 """Capability-based compatibility between prime-mover and related-equipment assets.
 
-Domain-agnostic replacement for the former models.compat_matrix: it operates on
-the generic solver rows projected from canonical assets, reading only canonical
-power capabilities, so it works for any domain (agricultural, construction, ...).
+Operates on the generic solver rows projected from canonical assets, reading
+only canonical power capabilities, so it works for any domain (agricultural,
+construction, ...).
 
 Layout: rows = prime movers (indexed 0..N_p-1), cols = related equipment
 (indexed 0..N_r-1).

@@ -1,4 +1,4 @@
-"""Legacy solve/analyse/reschedule/query CLI commands."""
+"""Batch solver CLI commands: solve, analyse, reschedule, query-contract."""
 
 import click
 
