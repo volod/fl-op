@@ -12,17 +12,17 @@ logger = logging.getLogger(__name__)
 def _compute_kpis(
     dispatch_packages: list[dict[str, Any]],
     infeasible_orders: list[dict[str, Any]],
-    orders: list[dict[str, Any]],
+    orders: list[Any],
     greedy_assignment: dict[str, tuple[int, int]],
 ) -> dict[str, Any]:
     total_margin = sum(d.get("estimated_margin_eur", 0) for d in dispatch_packages)
     total_fuel = sum(d.get("estimated_fuel_l", 0) for d in dispatch_packages)
     total_fertilizer = sum(d.get("estimated_fertilizer_kg", 0) for d in dispatch_packages)
 
-    order_map = {o["task_id"]: o for o in orders}
+    order_map = {o.task_id: o for o in orders}
     greedy_baseline = sum(
-        float(order_map[oid].get("revenue", 0))
-        - float(order_map[oid].get("area", 0)) * FUEL_COST_EUR_PER_L
+        float(order_map[oid].revenue)
+        - float(order_map[oid].area) * FUEL_COST_EUR_PER_L
         for oid in greedy_assignment
         if oid in order_map
     )

@@ -4,9 +4,12 @@ Tests verify the I/O contract and error-handling guarantees of solve_cluster().
 OR-Tools is a required dependency so these tests assume the venv is active.
 """
 
+import dataclasses
+
 import pytest
 
 from fl_op.solver.cluster_solver import solve_cluster
+from fl_op.solver.types import DepotRow, PrimeMoverRow, RelatedRow, SiteRow, TaskRow
 
 
 # ---------------------------------------------------------------------------
@@ -24,39 +27,41 @@ def _cluster(cluster_id="cl0", depot_ref="d0", task_ids=None, allocated=None):
     }
 
 
-def _order(oid, fid="f0"):
-    return {
+def _order(oid, fid="f0") -> TaskRow:
+    return TaskRow.from_canonical_dict({
         "task_id": oid, "location_ref": fid, "operation_type": "SPRAYING",
         "area": "10", "deadline": "2027-12-01T00:00:00+00:00",
         "penalty_per_day": "100", "status": "pending",
         "revenue": "2000", "order_ref": "c0",
-    }
+    })
 
 
-def _vehicle(vid, depot_ref="d0"):
-    return {
+def _vehicle(vid, depot_ref="d0") -> PrimeMoverRow:
+    return PrimeMoverRow.from_canonical_dict({
         "asset_id": vid, "asset_type": "TRACTOR", "rated_power": "150",
         "fuel_tank_volume": "400", "fuel_consumption_rate": "18",
         "lat": "48.5", "lon": "32.0",
         "home_depot_ref": depot_ref, "travel_speed": "15",
-    }
+    })
 
 
-def _implement(iid, depot_ref="d0"):
-    return {
+def _implement(iid, depot_ref="d0") -> RelatedRow:
+    return RelatedRow.from_canonical_dict({
         "asset_id": iid, "asset_type": "SPRAYER",
         "compatible_operations": "['SPRAYING']", "required_power": "100",
         "working_width": "24", "min_speed": "5", "max_speed": "12",
         "material_capacity": "500", "home_depot_ref": depot_ref,
-    }
+    })
 
 
-def _field(fid, lat=48.5, lon=32.0):
-    return {"location_id": fid, "lat": str(lat), "lon": str(lon), "area": "10"}
+def _field(fid, lat=48.5, lon=32.0) -> SiteRow:
+    return SiteRow.from_canonical_dict(
+        {"location_id": fid, "lat": str(lat), "lon": str(lon), "area": "10"})
 
 
-def _depot(did="d0", lat=48.5, lon=32.0):
-    return {"location_id": did, "lat": str(lat), "lon": str(lon)}
+def _depot(did="d0", lat=48.5, lon=32.0) -> DepotRow:
+    return DepotRow.from_canonical_dict(
+        {"location_id": did, "lat": str(lat), "lon": str(lon)})
 
 
 # ---------------------------------------------------------------------------
@@ -195,8 +200,8 @@ class TestSolverIntegration:
     def test_infeasible_order_does_not_sink_whole_cluster(self):
         cd = _cluster(task_ids=["o_ok", "o_late"], allocated={"v0": ["i0"]})
         ok = _order("o_ok", "f0")
-        late = _order("o_late", "f1")
-        late["deadline"] = "2020-01-01T00:00:00+00:00"
+        # Frozen rows are immutable; build the late variant with replace().
+        late = dataclasses.replace(_order("o_late", "f1"), deadline="2020-01-01T00:00:00+00:00")
         dispatch, infeasible = solve_cluster(
             cd, [ok, late], [_vehicle("v0")], [_implement("i0")],
             [_field("f0"), _field("f1", 48.6, 32.1)], [_depot()],

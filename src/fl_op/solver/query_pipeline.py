@@ -67,8 +67,8 @@ def run_query(data_dir: str, schedule_dir: str, order_path: str) -> None:
 
     time_index = _build_vehicle_time_index(dispatch_packages)
 
-    vehicle_index = {v["asset_id"]: i for i, v in enumerate(vehicles_raw)}
-    implement_index = {im["asset_id"]: i for i, im in enumerate(implements_raw)}
+    vehicle_index = {v.asset_id: i for i, v in enumerate(vehicles_raw)}
+    implement_index = {im.asset_id: i for i, im in enumerate(implements_raw)}
 
     compat, _ = build_compat_matrix(vehicles_raw, implements_raw)
 
@@ -76,10 +76,10 @@ def run_query(data_dir: str, schedule_dir: str, order_path: str) -> None:
         [new_order], vehicles_raw, implements_raw, compat, vehicle_index, implement_index
     )
 
-    if not feasible_pairs.get(new_order["task_id"]):
+    if not feasible_pairs.get(new_order.task_id):
         result: dict[str, Any] = {
             "schema_version": ARTIFACT_SCHEMA_VERSION,
-            "task_id": new_order.get("task_id"),
+            "task_id": new_order.task_id,
             "feasible": False,
             "reason_code": ReasonCode.NO_COMPATIBLE_BUNDLE.value,
             "candidates": [],
@@ -89,18 +89,20 @@ def run_query(data_dir: str, schedule_dir: str, order_path: str) -> None:
             [new_order], vehicles_raw, implements_raw, fields_raw,
             feasible_pairs, vehicle_index, implement_index,
         )
-        oid = new_order["task_id"]
+        oid = new_order.task_id
         scored_pairs = scored.get(oid, [])
         est_start, est_end = _estimate_operation_window(new_order)
 
-        idx_to_vehicle = {idx: v for v in vehicles_raw for idx in [vehicle_index[v["asset_id"]]]}
-        idx_to_implement = {idx: im for im in implements_raw for idx in [implement_index[im["asset_id"]]]}
+        idx_to_vehicle = {idx: v for v in vehicles_raw for idx in [vehicle_index[v.asset_id]]}
+        idx_to_implement = {idx: im for im in implements_raw for idx in [implement_index[im.asset_id]]}
 
         seen_vehicles: set[str] = set()
         candidates: list[dict[str, Any]] = []
         for score, v_idx, i_idx in scored_pairs:
-            vid = idx_to_vehicle.get(v_idx, {}).get("asset_id", "")
-            iid = idx_to_implement.get(i_idx, {}).get("asset_id", "")
+            v_row = idx_to_vehicle.get(v_idx)
+            i_row = idx_to_implement.get(i_idx)
+            vid = v_row.asset_id if v_row is not None else ""
+            iid = i_row.asset_id if i_row is not None else ""
             if vid in seen_vehicles:
                 continue
             seen_vehicles.add(vid)

@@ -67,10 +67,10 @@ def _compute_conflict_risk(
     return "high"
 
 
-def _estimate_operation_window(order: dict[str, Any]) -> tuple[str, str]:
+def _estimate_operation_window(order: Any) -> tuple[str, str]:
     """Estimate start/end for the new order based on 'now' and deadline."""
     now = datetime.now(tz=timezone.utc)
-    deadline_str = order.get("deadline", "")
+    deadline_str = order.deadline or ""
     try:
         deadline = datetime.fromisoformat(deadline_str)
     except (ValueError, TypeError):

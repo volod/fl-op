@@ -27,14 +27,10 @@ logger = logging.getLogger(__name__)
 COMPAT_FILENAME = "compat.npy"
 POWER_MARGIN_FILENAME = "power_margin.npy"
 
-# Canonical solver-row keys for the two power capabilities used by compatibility.
-RATED_POWER_KEY = "rated_power"
-REQUIRED_POWER_KEY = "required_power"
-
 
 def build_compat_matrix(
-    prime_movers: list[dict[str, Any]],
-    related_equipment: list[dict[str, Any]],
+    prime_movers: list[Any],
+    related_equipment: list[Any],
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return (compat bool ndarray, power_margin float32 ndarray), shape (N_p, N_r).
 
@@ -46,9 +42,9 @@ def build_compat_matrix(
     n_p = len(prime_movers)
     n_r = len(related_equipment)
 
-    rated = np.array([p[RATED_POWER_KEY] for p in prime_movers], dtype=np.float32)  # (N_p,)
+    rated = np.array([p.rated_power for p in prime_movers], dtype=np.float32)  # (N_p,)
     required = np.array(
-        [r[REQUIRED_POWER_KEY] for r in related_equipment], dtype=np.float32
+        [r.required_power for r in related_equipment], dtype=np.float32
     )  # (N_r,)
 
     # power_margin[p, r] = (rated[p] - required[r]) / rated[p] * 100, via broadcast.

@@ -38,11 +38,11 @@ def prepare_cluster_context(
     if not task_ids:
         return None, ([], [])
 
-    order_map = {o["task_id"]: o for o in all_orders}
-    field_map = {f["location_id"]: f for f in all_fields}
-    depot_map = {d["location_id"]: d for d in all_depots}
-    vehicle_map = {v["asset_id"]: v for v in all_vehicles}
-    implement_map = {im["asset_id"]: im for im in all_implements}
+    order_map = {o.task_id: o for o in all_orders}
+    field_map = {f.location_id: f for f in all_fields}
+    depot_map = {d.location_id: d for d in all_depots}
+    vehicle_map = {v.asset_id: v for v in all_vehicles}
+    implement_map = {im.asset_id: im for im in all_implements}
 
     cluster_orders = [order_map[oid] for oid in task_ids if oid in order_map]
     if not cluster_orders:
@@ -71,8 +71,8 @@ def prepare_cluster_context(
         cluster_orders=cluster_orders,
         field_map=field_map,
         routing_vehicles=routing_vehicles,
-        depot_lat=float(depot["lat"]),
-        depot_lon=float(depot["lon"]),
+        depot_lat=float(depot.lat),
+        depot_lon=float(depot.lon),
     ), None
 
 

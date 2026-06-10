@@ -148,21 +148,21 @@ def _resolve_tasks(
 
     payload = dict(solver_rows)
     payload[SECTION_TASKS] = [
-        o for o in payload.get(SECTION_TASKS, []) if o["task_id"] in tasks_to_resolve
+        o for o in payload.get(SECTION_TASKS, []) if o.task_id in tasks_to_resolve
     ]
     payload[SECTION_PRIME_MOVERS] = [
         v
         for v in payload.get(SECTION_PRIME_MOVERS, [])
-        if v["asset_id"] not in held_vehicles
+        if v.asset_id not in held_vehicles
     ]
     payload[SECTION_RELATED] = [
         im
         for im in payload.get(SECTION_RELATED, [])
-        if im["asset_id"] not in held_implements
+        if im.asset_id not in held_implements
     ]
     payload[SECTION_OPERATORS] = [
         op
         for op in payload.get(SECTION_OPERATORS, [])
-        if op["asset_id"] not in held_operators
+        if op.asset_id not in held_operators
     ]
     return run_solver_chain(payload)

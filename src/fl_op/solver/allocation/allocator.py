@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 
 def allocate_resources(
     clusters: list[ClusterSpec],
-    orders: list[dict[str, Any]],
-    operators: list[dict[str, Any]],
+    orders: list[Any],
+    operators: list[Any],
     power_margin: np.ndarray,
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
@@ -36,7 +36,7 @@ def allocate_resources(
         clusters,
         key=lambda c: (-c["total_penalty_per_day"], c["cluster_id"]),
     )
-    order_map = {o["task_id"]: o for o in orders}
+    order_map = {o.task_id: o for o in orders}
     idx_to_vehicle = {idx: vehicle_id for vehicle_id, idx in vehicle_index.items()}
     idx_to_implement = {
         idx: implement_id for implement_id, idx in implement_index.items()

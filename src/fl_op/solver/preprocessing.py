@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 
 
 def filter_feasible_vehicle_implement_pairs(
-    orders: list[dict[str, Any]],
-    vehicles: list[dict[str, Any]],
-    implements: list[dict[str, Any]],
+    orders: list[Any],
+    vehicles: list[Any],
+    implements: list[Any],
     compat: np.ndarray,
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
@@ -42,7 +42,7 @@ def filter_feasible_vehicle_implement_pairs(
     # Build a lookup: implement_id -> set of OperationType values
     impl_ops: dict[str, set[str]] = {}
     for im in implements:
-        ops_raw = im.get("compatible_operations", [])
+        ops_raw = im.compatible_operations
         if isinstance(ops_raw, str):
             # CSV stores lists as stringified Python lists; parse conservatively
             import ast
@@ -51,21 +51,21 @@ def filter_feasible_vehicle_implement_pairs(
                 ops_raw = ast.literal_eval(ops_raw)
             except Exception:
                 ops_raw = [ops_raw]
-        impl_ops[im["asset_id"]] = set(ops_raw)
+        impl_ops[im.asset_id] = set(ops_raw)
 
     feasible: dict[str, list[tuple[int, int]]] = {}
     for order in orders:
-        op = order["operation_type"]
-        oid = order["task_id"]
+        op = order.operation_type
+        oid = order.task_id
         pairs: list[tuple[int, int]] = []
         for im in implements:
-            if op not in impl_ops.get(im["asset_id"], set()):
+            if op not in impl_ops.get(im.asset_id, set()):
                 continue
-            i_idx = implement_index.get(im["asset_id"])
+            i_idx = implement_index.get(im.asset_id)
             if i_idx is None:
                 continue
             for v in vehicles:
-                v_idx = vehicle_index.get(v["asset_id"])
+                v_idx = vehicle_index.get(v.asset_id)
                 if v_idx is None:
                     continue
                 if compat[v_idx, i_idx]:
@@ -87,34 +87,34 @@ def filter_feasible_vehicle_implement_pairs(
 
 
 def cluster_orders_by_depot(
-    orders: list[dict[str, Any]],
-    fields: list[dict[str, Any]],
-    depots: list[dict[str, Any]],
+    orders: list[Any],
+    fields: list[Any],
+    depots: list[Any],
 ) -> dict[str, list[str]]:
     """Assign each order to the nearest depot; return {depot_id: [task_ids]}.
 
     Uses sklearn BallTree with haversine metric on field centroids.
     """
-    field_map: dict[str, dict[str, Any]] = {f["location_id"]: f for f in fields}
+    field_map = {f.location_id: f for f in fields}
 
-    depot_ids = [d["location_id"] for d in depots]
+    depot_ids = [d.location_id for d in depots]
     depot_coords = np.radians(
-        np.array([[float(d["lat"]), float(d["lon"])] for d in depots])
+        np.array([[float(d.lat), float(d.lon)] for d in depots])
     )
     tree = BallTree(depot_coords, metric="haversine")
 
     assignment: dict[str, list[str]] = {did: [] for did in depot_ids}
     for order in orders:
-        field = field_map.get(order["location_ref"])
+        field = field_map.get(order.location_ref)
         if field is None:
-            logger.warning("Order %s has no matching field; skipping", order["task_id"])
+            logger.warning("Order %s has no matching field; skipping", order.task_id)
             continue
-        lat = float(field.get("lat", 0))
-        lon = float(field.get("lon", 0))
+        lat = float(field.lat)
+        lon = float(field.lon)
         coords = np.radians([[lat, lon]])
         _, indices = tree.query(coords, k=1)
         nearest_depot = depot_ids[indices[0][0]]
-        assignment[nearest_depot].append(order["task_id"])
+        assignment[nearest_depot].append(order.task_id)
 
     return assignment
 
@@ -139,15 +139,15 @@ def _split_into_subclusters(
 
 
 def build_cluster_specs(
-    orders: list[dict[str, Any]],
-    fields: list[dict[str, Any]],
-    depots: list[dict[str, Any]],
-    vehicles: list[dict[str, Any]],
-    implements: list[dict[str, Any]],
+    orders: list[Any],
+    fields: list[Any],
+    depots: list[Any],
+    vehicles: list[Any],
+    implements: list[Any],
     compat: np.ndarray,
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
-    order_index: dict[str, dict[str, Any]] | None = None,
+    order_index: dict[str, Any] | None = None,
 ) -> list[ClusterSpec]:
     """Produce ClusterSpec list from raw entity dicts and compat matrix.
 
@@ -158,7 +158,7 @@ def build_cluster_specs(
       4. Initialise allocated_prime_related to empty (filled by allocation).
     """
     if order_index is None:
-        order_index = {o["task_id"]: o for o in orders}
+        order_index = {o.task_id: o for o in orders}
 
     depot_assignment = cluster_orders_by_depot(orders, fields, depots)
 
@@ -170,7 +170,7 @@ def build_cluster_specs(
         subclusters = _split_into_subclusters(oid_list, CLUSTER_TARGET_SIZE)
         for sub in subclusters:
             total_penalty = sum(
-                float(order_index[oid].get("penalty_per_day", 0.0)) for oid in sub
+                float(order_index[oid].penalty_per_day) for oid in sub
             )
             spec: ClusterSpec = {
                 "cluster_id": f"cluster_{cluster_seq:06d}",

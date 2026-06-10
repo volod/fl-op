@@ -17,6 +17,7 @@ import numpy as np
 
 from fl_op.core.constants import (
     EARTH_RADIUS_KM,
+    FALLBACK_REVENUE_EUR_PER_HA,
     FUEL_COST_EUR_PER_L,
     SCORE_WEIGHT_MARGIN,
     SCORE_WEIGHT_REPOSITION,
@@ -40,38 +41,34 @@ def _haversine_km(
     return 2 * r * math.asin(math.sqrt(a))
 
 
-def _estimate_gross_margin(
-    order: dict[str, Any],
-    implement: dict[str, Any],
-) -> float:
-    """Rough gross revenue estimate for completing this order with this implement."""
-    area = float(order.get("area", 0))
-    revenue = float(order.get("revenue", 0))
-    return revenue if revenue > 0 else area * 200.0  # fallback: 200 EUR/ha
+def _estimate_gross_margin(order: Any) -> float:
+    """Rough gross revenue estimate for completing this order."""
+    revenue = float(order.revenue)
+    return revenue if revenue > 0 else float(order.area) * FALLBACK_REVENUE_EUR_PER_HA
 
 
 def _estimate_repositioning_cost(
-    vehicle: dict[str, Any],
-    field: dict[str, Any],
+    vehicle: Any,
+    field: Any,
 ) -> float:
     """Diesel cost to drive from vehicle's current position to the field centroid."""
     dist_km = _haversine_km(
-        float(vehicle.get("lat", 0)),
-        float(vehicle.get("lon", 0)),
-        float(field.get("lat", 0)),
-        float(field.get("lon", 0)),
+        float(vehicle.lat),
+        float(vehicle.lon),
+        float(field.lat),
+        float(field.lon),
     )
-    speed_kmh = float(vehicle.get("travel_speed", 15))
+    speed_kmh = float(vehicle.travel_speed)
     hours = dist_km / speed_kmh if speed_kmh > 0 else 0
-    fuel_l_per_h = float(vehicle.get("fuel_consumption_rate", 18))
+    fuel_l_per_h = float(vehicle.fuel_consumption_rate)
     return hours * fuel_l_per_h * FUEL_COST_EUR_PER_L
 
 
 def vectorized_score(
-    orders: list[dict[str, Any]],
-    vehicles: list[dict[str, Any]],
-    implements: list[dict[str, Any]],
-    fields: list[dict[str, Any]],
+    orders: list[Any],
+    vehicles: list[Any],
+    implements: list[Any],
+    fields: list[Any],
     feasible_pairs: dict[str, list[tuple[int, int]]],
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
@@ -80,27 +77,27 @@ def vectorized_score(
 
     Vectorises over all orders and their feasible pairs using numpy broadcast.
     """
-    field_map = {f["location_id"]: f for f in fields}
-    idx_to_vehicle = {idx: v for v in vehicles for idx in [vehicle_index[v["asset_id"]]]}
-    idx_to_implement = {idx: im for im in implements for idx in [implement_index[im["asset_id"]]]}
+    field_map = {f.location_id: f for f in fields}
+    idx_to_vehicle = {idx: v for v in vehicles for idx in [vehicle_index[v.asset_id]]}
+    idx_to_implement = {idx: im for im in implements for idx in [implement_index[im.asset_id]]}
 
     # Pre-compute vehicle current positions as arrays for batch distance calculation
-    v_lats = np.array([float(v.get("lat", 0)) for v in vehicles])
-    v_lons = np.array([float(v.get("lon", 0)) for v in vehicles])
-    v_speeds = np.array([float(v.get("travel_speed", 15)) for v in vehicles])
-    v_consumptions = np.array([float(v.get("fuel_consumption_rate", 18)) for v in vehicles])
+    v_lats = np.array([float(v.lat) for v in vehicles])
+    v_lons = np.array([float(v.lon) for v in vehicles])
+    v_speeds = np.array([float(v.travel_speed) for v in vehicles])
+    v_consumptions = np.array([float(v.fuel_consumption_rate) for v in vehicles])
 
     results: dict[str, list[tuple[float, int, int]]] = {}
 
     for order in orders:
-        oid = order["task_id"]
-        field = field_map.get(order.get("location_ref", ""))
+        oid = order.task_id
+        field = field_map.get(order.location_ref)
         if field is None:
             results[oid] = []
             continue
 
-        f_lat = float(field.get("lat", 0))
-        f_lon = float(field.get("lon", 0))
+        f_lat = float(field.lat)
+        f_lon = float(field.lon)
 
         pairs = feasible_pairs.get(oid, [])
         if not pairs:
@@ -123,7 +120,7 @@ def vectorized_score(
         reposition_cost = hours * v_consumptions[v_indices] * FUEL_COST_EUR_PER_L
 
         # Gross margin: per-order constant for all pairs
-        gross_margins = np.full(len(pairs), _estimate_gross_margin(order, {}))
+        gross_margins = np.full(len(pairs), _estimate_gross_margin(order))
 
         scores = (
             SCORE_WEIGHT_MARGIN * gross_margins

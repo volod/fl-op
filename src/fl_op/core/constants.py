@@ -86,6 +86,29 @@ SCORE_WEIGHT_MARGIN: float = float(os.environ.get("SCORE_WEIGHT_MARGIN", "1.0"))
 SCORE_WEIGHT_REPOSITION: float = float(os.environ.get("SCORE_WEIGHT_REPOSITION", "1.0"))
 
 # ---------------------------------------------------------------------------
+# Canonical solver-row defaults
+# ---------------------------------------------------------------------------
+# Default capability values applied when a canonical solver row does not carry a
+# field (absent from the contract projection, or from a partial query order).
+# These are the single source of truth for the defaults the solver-row
+# dataclasses apply; no solver module hard-codes these literals at the access site.
+
+# Prime-mover ground travel speed when none is projected.
+TRAVEL_SPEED_DEFAULT_KMH: float = 15.0
+
+# Prime-mover diesel burn rate when none is projected.
+FUEL_CONSUMPTION_DEFAULT_L_PER_H: float = 18.0
+
+# Fallback gross revenue per hectare when an order carries no explicit revenue.
+FALLBACK_REVENUE_EUR_PER_HA: float = 200.0
+
+# Related-equipment effective working width when none is projected.
+RELATED_WORKING_WIDTH_DEFAULT: float = 12.0
+
+# Related-equipment operating speed when none is projected.
+RELATED_OPERATING_SPEED_DEFAULT: float = 8.0
+
+# ---------------------------------------------------------------------------
 # JSON artifact schema
 # ---------------------------------------------------------------------------
 

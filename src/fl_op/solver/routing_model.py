@@ -20,10 +20,10 @@ def _build_node_geometry(
     node_lats: list[float] = [depot_lat]
     node_lons: list[float] = [depot_lon]
     for order in cluster_orders:
-        field = field_map.get(order.get("location_ref", ""))
+        field = field_map.get(order.location_ref)
         if field:
-            node_lats.append(float(field.get("lat", depot_lat)))
-            node_lons.append(float(field.get("lon", depot_lon)))
+            node_lats.append(float(field.lat))
+            node_lons.append(float(field.lon))
         else:
             node_lats.append(depot_lat)
             node_lons.append(depot_lon)
@@ -48,10 +48,10 @@ def _build_initial_routes(
     used_order_nodes: set[int] = set()
 
     for rv in routing_vehicles:
-        vid = rv["prime"]["asset_id"]
+        vid = rv["prime"].asset_id
         route: list[int] = []
         for node_idx, order in enumerate(cluster_orders, start=1):
-            oid = order["task_id"]
+            oid = order.task_id
             ga = greedy_assignment.get(oid)
             if ga is not None:
                 assigned_vid = idx_to_vid.get(ga[0])
@@ -88,8 +88,8 @@ def _extract_dispatch_packages(
     served_task_ids: set[str] = set()
 
     for rv_idx, rv in enumerate(routing_vehicles):
-        vid = rv["prime"]["asset_id"]
-        iid = rv["related"]["asset_id"]
+        vid = rv["prime"].asset_id
+        iid = rv["related"].asset_id
         index = routing.Start(rv_idx)
 
         while not routing.IsEnd(index):
@@ -99,7 +99,7 @@ def _extract_dispatch_packages(
                 continue
 
             order = cluster_orders[node - 1]
-            oid = order["task_id"]
+            oid = order.task_id
             served_task_ids.add(oid)
 
             arrival_s = solution.Value(time_dim.CumulVar(index))
@@ -121,12 +121,12 @@ def _extract_dispatch_packages(
                     "scheduled_end": datetime.fromtimestamp(end_epoch, tz=timezone.utc).isoformat(),
                     "route_waypoints": [{"lat": node_lats[node], "lon": node_lons[node]}],
                     "estimated_fuel_l": round(
-                        op_hours * float(rv["prime"].get("fuel_consumption_rate", 18)), 2
+                        op_hours * float(rv["prime"].fuel_consumption_rate), 2
                     ),
                     "estimated_fertilizer_kg": round(
-                        float(rv["related"].get("material_capacity", 0)) * _FERTILIZER_FILL_RATIO, 2
+                        float(rv["related"].material_capacity) * _FERTILIZER_FILL_RATIO, 2
                     ),
-                    "estimated_margin_eur": round(float(order.get("revenue", 0)), 2),
+                    "estimated_margin_eur": round(float(order.revenue), 2),
                 }
             )
             index = solution.Value(routing.NextVar(index))

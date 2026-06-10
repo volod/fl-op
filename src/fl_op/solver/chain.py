@@ -31,15 +31,15 @@ class SolverChainResult:
 
 
 def run_solver_chain(
-    rows: dict[str, list[dict[str, Any]]],
+    rows: dict[str, list[Any]],
     matrix_out_dir: Optional[pathlib.Path] = None,
 ) -> SolverChainResult:
-    """Run preprocess -> allocate -> greedy -> pool on canonical dict rows.
+    """Run preprocess -> allocate -> greedy -> pool on typed canonical rows.
 
     `rows` must contain the canonical sections: prime_movers, related_equipment,
-    tasks, depots, sites, operators (operators may be empty). Each row is keyed by
-    canonical field names (asset_id, rated_power, task_id, ...), never by
-    domain-specific physical column names.
+    tasks, depots, sites, operators (operators may be empty). Each row is a frozen
+    solver-row dataclass (PrimeMoverRow, RelatedRow, TaskRow, ...) read by canonical
+    field name, never by domain-specific physical column name.
     """
     from fl_op.solver.aggregator import _compute_kpis
     from fl_op.solver.cluster_pool import pool_solve
@@ -66,9 +66,9 @@ def run_solver_chain(
     fields_raw = rows[SECTION_SITES]
     operators_raw = rows.get(SECTION_OPERATORS, [])
 
-    vehicle_index = {v["asset_id"]: i for i, v in enumerate(vehicles_raw)}
-    implement_index = {im["asset_id"]: i for i, im in enumerate(implements_raw)}
-    order_index = {o["task_id"]: o for o in orders_raw}
+    vehicle_index = {v.asset_id: i for i, v in enumerate(vehicles_raw)}
+    implement_index = {im.asset_id: i for i, im in enumerate(implements_raw)}
+    order_index = {o.task_id: o for o in orders_raw}
 
     compat, power_margin = build_compat_matrix(vehicles_raw, implements_raw)
     if matrix_out_dir is not None:

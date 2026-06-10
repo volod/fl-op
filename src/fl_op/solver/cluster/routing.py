@@ -143,7 +143,7 @@ def _add_order_windows_and_disjunctions(
     now_epoch: int,
 ) -> None:
     for node_idx, order in enumerate(context.cluster_orders, start=1):
-        deadline_from_now = _deadline_from_now_s(order.get("deadline", ""), now_epoch)
+        deadline_from_now = _deadline_from_now_s(order.deadline or "", now_epoch)
         node = manager.NodeToIndex(node_idx)
         time_dim.CumulVar(node).SetRange(0, deadline_from_now)
         routing.AddDisjunction([node], order_drop_penalty_s(order))

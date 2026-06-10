@@ -18,15 +18,15 @@ def _haversine_s(lat1: float, lon1: float, lat2: float, lon2: float) -> int:
     return max(1, int(km * _SECONDS_PER_KM))
 
 
-def _estimate_operation_seconds(order: dict[str, Any], implement: dict[str, Any]) -> int:
+def _estimate_operation_seconds(order: Any, implement: Any) -> int:
     """Estimate field service duration for one order and implement."""
     _OP_HOURS_MIN = 0.5
     _OP_HOURS_MAX = 24.0
     _OP_HOURS_FALLBACK = 1.0
 
-    area = float(order.get("area", 0))
-    working_width = float(implement.get("working_width", 12))
-    op_speed = float(implement.get("max_speed", 8))
+    area = float(order.area)
+    working_width = float(implement.working_width)
+    op_speed = float(implement.max_speed)
     if working_width > 0 and op_speed > 0:
         op_hours = area / (working_width / 1000 * op_speed * 10)
         op_hours = max(_OP_HOURS_MIN, min(op_hours, _OP_HOURS_MAX))

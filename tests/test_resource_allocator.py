@@ -7,40 +7,44 @@ T13: Equal penalty sum -> tiebreak by cluster_id.
 
 from fl_op.solver.allocation import allocate_resources
 from fl_op.solver.feasibility import build_compat_matrix
-from fl_op.solver.types import ClusterSpec
+from fl_op.solver.types import ClusterSpec, OperatorRow, PrimeMoverRow, RelatedRow, TaskRow
 
 
-def _veh(vid: str, power: float = 150.0) -> dict:
-    return {"asset_id": vid, "asset_type": "TRACTOR", "rated_power": str(power),
-            "fuel_tank_volume": "400", "fuel_consumption_rate": "18",
-            "lat": "48.5", "lon": "32.0", "home_depot_ref": "d0", "travel_speed": "15"}
+def _veh(vid: str, power: float = 150.0) -> PrimeMoverRow:
+    return PrimeMoverRow.from_canonical_dict(
+        {"asset_id": vid, "asset_type": "TRACTOR", "rated_power": str(power),
+         "fuel_tank_volume": "400", "fuel_consumption_rate": "18",
+         "lat": "48.5", "lon": "32.0", "home_depot_ref": "d0", "travel_speed": "15"})
 
 
-def _impl(iid: str, power: float = 100.0) -> dict:
-    return {"asset_id": iid, "asset_type": "SPRAYER",
-            "compatible_operations": "['SPRAYING']", "required_power": str(power),
-            "working_width": "24", "min_speed": "5", "max_speed": "12",
-            "material_capacity": "0", "home_depot_ref": "d0"}
+def _impl(iid: str, power: float = 100.0) -> RelatedRow:
+    return RelatedRow.from_canonical_dict(
+        {"asset_id": iid, "asset_type": "SPRAYER",
+         "compatible_operations": "['SPRAYING']", "required_power": str(power),
+         "working_width": "24", "min_speed": "5", "max_speed": "12",
+         "material_capacity": "0", "home_depot_ref": "d0"})
 
 
-def _order(oid: str, penalty: float = 100.0) -> dict:
-    return {"task_id": oid, "operation_type": "SPRAYING", "location_ref": "f0",
-            "area": "100", "deadline": "2026-06-01T00:00:00+00:00",
-            "penalty_per_day": str(penalty), "status": "pending",
-            "revenue": "5000", "order_ref": "c0"}
+def _order(oid: str, penalty: float = 100.0) -> TaskRow:
+    return TaskRow.from_canonical_dict(
+        {"task_id": oid, "operation_type": "SPRAYING", "location_ref": "f0",
+         "area": "100", "deadline": "2026-06-01T00:00:00+00:00",
+         "penalty_per_day": str(penalty), "status": "pending",
+         "revenue": "5000", "order_ref": "c0"})
 
 
-def _operator(opid: str, depot: str = "d0") -> dict:
-    return {"asset_id": opid, "name": opid, "shift_start": "21600",
-            "shift_end": "57600", "certified_operations": "['SPRAYING']", "home_depot_ref": depot}
+def _operator(opid: str, depot: str = "d0") -> OperatorRow:
+    return OperatorRow.from_canonical_dict(
+        {"asset_id": opid, "name": opid, "shift_start": "21600",
+         "shift_end": "57600", "certified_operations": "['SPRAYING']", "home_depot_ref": depot})
 
 
 def _build_setup(n_vehicles: int = 2, n_implements: int = 2):
     vehicles_raw = [_veh(f"v{i}") for i in range(n_vehicles)]
     implements_raw = [_impl(f"i{i}") for i in range(n_implements)]
     compat, power_margin = build_compat_matrix(vehicles_raw, implements_raw)
-    vehicle_index = {v["asset_id"]: i for i, v in enumerate(vehicles_raw)}
-    implement_index = {im["asset_id"]: i for i, im in enumerate(implements_raw)}
+    vehicle_index = {v.asset_id: i for i, v in enumerate(vehicles_raw)}
+    implement_index = {im.asset_id: i for i, im in enumerate(implements_raw)}
     return vehicles_raw, implements_raw, compat, power_margin, vehicle_index, implement_index
 
 

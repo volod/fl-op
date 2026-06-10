@@ -11,14 +11,15 @@ import pytest
 
 from fl_op.data.agri_enums import ImplementType, OperationType, VehicleType
 from fl_op.solver.feasibility import build_compat_matrix
+from fl_op.solver.types import PrimeMoverRow, RelatedRow
 
 
-def _make_vehicle(power_kw: float = 150.0, vid: str = "v1") -> dict:
-    return {"asset_id": vid, "rated_power": power_kw}
+def _make_vehicle(power_kw: float = 150.0, vid: str = "v1") -> PrimeMoverRow:
+    return PrimeMoverRow.from_canonical_dict({"asset_id": vid, "rated_power": power_kw})
 
 
-def _make_implement(power_kw: float = 120.0, iid: str = "i1") -> dict:
-    return {"asset_id": iid, "required_power": power_kw}
+def _make_implement(power_kw: float = 120.0, iid: str = "i1") -> RelatedRow:
+    return RelatedRow.from_canonical_dict({"asset_id": iid, "required_power": power_kw})
 
 
 class TestEnums:

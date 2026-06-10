@@ -18,6 +18,7 @@ from fl_op.solver.inputs import (
     SECTION_TASKS,
     build_solver_inputs,
 )
+from fl_op.solver.types import PrimeMoverRow, TaskRow
 
 _EFFECTIVE = datetime(2026, 6, 5, tzinfo=timezone.utc)
 
@@ -58,19 +59,22 @@ def test_solver_inputs_have_all_sections(builder: SnapshotBuilder, dataset_dir: 
 def test_projected_rows_use_canonical_keys_and_match_entities(
     builder: SnapshotBuilder, dataset_dir: pathlib.Path
 ) -> None:
-    """Projected solver rows are keyed by canonical names and align 1:1 with entities."""
+    """Projected solver rows are typed by canonical fields and align 1:1 with entities."""
     snap = builder.build(dataset_dir, PlanningMode.PERIODIC, effective_at=_EFFECTIVE)
     rows = build_solver_inputs(snap)
 
-    # Task rows carry canonical keys and their ids match the canonical tasks.
-    task_ids_rows = {r["task_id"] for r in rows[SECTION_TASKS]}
+    # Task rows are typed TaskRows whose ids match the canonical tasks.
+    task_ids_rows = {r.task_id for r in rows[SECTION_TASKS]}
     assert task_ids_rows == {t.task_id for t in snap.tasks}
     for r in rows[SECTION_TASKS]:
-        assert "operation_type" in r and "revenue" in r
-        assert "order_id" not in r and "vehicle_id" not in r
+        assert isinstance(r, TaskRow)
+        # Canonical fields are present; physical column names never leak through.
+        assert hasattr(r, "operation_type") and hasattr(r, "revenue")
+        assert not hasattr(r, "order_id") and not hasattr(r, "vehicle_id")
 
     # Prime-mover rows align with mobile-prime-mover assets and expose rated_power.
     prime_ids = {a.asset_id for a in snap.assets if "mobile-prime-mover" in a.roles}
-    assert {r["asset_id"] for r in rows[SECTION_PRIME_MOVERS]} == prime_ids
+    assert {r.asset_id for r in rows[SECTION_PRIME_MOVERS]} == prime_ids
     for r in rows[SECTION_PRIME_MOVERS]:
-        assert "rated_power" in r
+        assert isinstance(r, PrimeMoverRow)
+        assert hasattr(r, "rated_power")

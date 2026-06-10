@@ -18,6 +18,15 @@ from typing import TYPE_CHECKING, Any, Optional
 from fl_op.contracts.registry import FileRegistry
 from fl_op.contracts.xopt import FieldBinding
 from fl_op.mapping.bindings import load_binding_table
+from fl_op.solver.types import (
+    DepotRow,
+    OperatorRow,
+    PrimeMoverRow,
+    RelatedRow,
+    SiteRow,
+    TaskRow,
+    _SolverRow,
+)
 
 if TYPE_CHECKING:
     from fl_op.canonical.asset import Asset
@@ -48,6 +57,16 @@ _CONTRACT_SECTION: dict[str, str] = {
     "fields": SECTION_SITES,
     "depots": SECTION_DEPOTS,
     "orders": SECTION_TASKS,
+}
+
+# Contract id -> frozen solver-row dataclass it projects into.
+_CONTRACT_ROW_CLASS: dict[str, type[_SolverRow]] = {
+    "vehicles": PrimeMoverRow,
+    "implements": RelatedRow,
+    "operators": OperatorRow,
+    "fields": SiteRow,
+    "depots": DepotRow,
+    "orders": TaskRow,
 }
 
 # Binding path -> canonical solver-row key. The single source of truth for the
@@ -174,8 +193,13 @@ def _project(bindings: list[FieldBinding], value_fn) -> dict[str, Any]:
 
 def build_solver_inputs(
     snapshot: "PlanningSnapshot", registry: Optional[FileRegistry] = None
-) -> dict[str, list[dict[str, Any]]]:
-    """Reconstruct the canonical dict-row payload the solver chain consumes."""
+) -> dict[str, list[Any]]:
+    """Reconstruct the typed canonical-row payload the solver chain consumes.
+
+    Each section is projected binding-by-binding into a canonical dict (the
+    declarative mapping stays the single source of projection) and then capped
+    with its frozen row dataclass via from_canonical_dict.
+    """
     registry = registry or FileRegistry()
 
     veh_t = load_binding_table(registry, "vehicles")
@@ -193,31 +217,43 @@ def build_solver_inputs(
     def assets_with_role(role: str) -> list["Asset"]:
         return [a for a in snapshot.assets if role in a.roles]
 
-    rows: dict[str, list[dict[str, Any]]] = {
+    rows: dict[str, list[Any]] = {
         SECTION_PRIME_MOVERS: [
-            _project(veh_t.bindings, lambda b, a=a: _asset_value(a, b))
+            PrimeMoverRow.from_canonical_dict(
+                _project(veh_t.bindings, lambda b, a=a: _asset_value(a, b))
+            )
             for a in assets_with_role(ROLE_PRIME_MOVER)
         ],
         SECTION_RELATED: [
-            _project(imp_t.bindings, lambda b, a=a: _asset_value(a, b))
+            RelatedRow.from_canonical_dict(
+                _project(imp_t.bindings, lambda b, a=a: _asset_value(a, b))
+            )
             for a in assets_with_role(ROLE_RELATED)
         ],
         SECTION_OPERATORS: [
-            _project(ops_t.bindings, lambda b, a=a: _asset_value(a, b))
+            OperatorRow.from_canonical_dict(
+                _project(ops_t.bindings, lambda b, a=a: _asset_value(a, b))
+            )
             for a in assets_with_role(ROLE_OPERATOR)
         ],
         SECTION_SITES: [
-            _project(fld_t.bindings, lambda b, l=l: _location_value(l, b, inv_lookup))
+            SiteRow.from_canonical_dict(
+                _project(fld_t.bindings, lambda b, l=l: _location_value(l, b, inv_lookup))
+            )
             for l in snapshot.locations
             if l.location_type == "field"
         ],
         SECTION_DEPOTS: [
-            _project(dep_t.bindings, lambda b, l=l: _location_value(l, b, inv_lookup))
+            DepotRow.from_canonical_dict(
+                _project(dep_t.bindings, lambda b, l=l: _location_value(l, b, inv_lookup))
+            )
             for l in snapshot.locations
             if l.location_type == "depot"
         ],
         SECTION_TASKS: [
-            _project(ord_t.bindings, lambda b, t=t: _task_value(t, b))
+            TaskRow.from_canonical_dict(
+                _project(ord_t.bindings, lambda b, t=t: _task_value(t, b))
+            )
             for t in snapshot.tasks
         ],
     }
@@ -230,20 +266,24 @@ def build_solver_inputs(
 
 def to_canonical_row(
     row: dict[str, Any], contract_id: str, registry: FileRegistry
-) -> dict[str, Any]:
-    """Rename one physical source row's columns to canonical keys via its mapping."""
+) -> Any:
+    """Project one physical source row into its typed canonical solver row.
+
+    Renames physical columns to canonical keys via the contract mapping, then
+    caps with the contract's row dataclass (absent fields fall to defaults).
+    """
     table = load_binding_table(registry, contract_id)
     out: dict[str, Any] = {}
     for binding in table.bindings:
         key = _CANONICAL_KEY.get(binding.meta.binding)
         if key is not None and binding.source_field in row:
             out[key] = row[binding.source_field]
-    return out
+    return _CONTRACT_ROW_CLASS[contract_id].from_canonical_dict(out)
 
 
 def to_canonical_rows(
     rows: list[dict[str, Any]], contract_id: str, registry: Optional[FileRegistry] = None
-) -> list[dict[str, Any]]:
-    """Translate raw physical rows for one contract into canonical-keyed rows."""
+) -> list[Any]:
+    """Translate raw physical rows for one contract into typed canonical rows."""
     registry = registry or FileRegistry()
     return [to_canonical_row(r, contract_id, registry) for r in rows]

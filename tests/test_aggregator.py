@@ -11,6 +11,7 @@ import pytest
 
 from fl_op.solver.aggregator import _compute_kpis, _write_json, _write_report
 from fl_op.solver.cluster_pool import pool_solve
+from fl_op.solver.types import TaskRow
 
 
 # ---------------------------------------------------------------------------
@@ -37,8 +38,8 @@ class TestComputeKpis:
         ]
         infeasible = [{"task_id": "o1", "reason_code": "OPTIMIZATION_TRADEOFF"}]
         orders = [
-            {"task_id": "o0", "revenue": "1000", "area": "10"},
-            {"task_id": "o1", "revenue": "500", "area": "5"},
+            TaskRow.from_canonical_dict({"task_id": "o0", "revenue": "1000", "area": "10"}),
+            TaskRow.from_canonical_dict({"task_id": "o1", "revenue": "500", "area": "5"}),
         ]
         kpis = _compute_kpis(dispatch, infeasible, orders, {"o0": (0, 0)})
         assert kpis["n_dispatched"] == 1
@@ -80,7 +81,7 @@ class TestComputeKpis:
             {"task_id": "o0", "estimated_margin_eur": 800.0,
              "estimated_fuel_l": 0, "estimated_fertilizer_kg": 0},
         ]
-        orders = [{"task_id": "o0", "revenue": "600", "area": "0"}]
+        orders = [TaskRow.from_canonical_dict({"task_id": "o0", "revenue": "600", "area": "0"})]
         # greedy baseline: 600 EUR revenue - 0 fuel cost = 600
         kpis = _compute_kpis(dispatch, [], orders, {"o0": (0, 0)})
         assert kpis["solver_improvement_eur"] == pytest.approx(

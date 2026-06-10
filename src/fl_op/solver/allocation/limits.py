@@ -10,7 +10,7 @@ from fl_op.core.constants import (
 )
 
 
-def cluster_resource_limit(cluster_orders: list[dict[str, Any]]) -> int:
+def cluster_resource_limit(cluster_orders: list[Any]) -> int:
     """Return the maximum V-I bundles to reserve for one cluster."""
     desired_resources = math.ceil(len(cluster_orders) / PREALLOC_ORDERS_PER_RESOURCE)
     if len(cluster_orders) > 1:
