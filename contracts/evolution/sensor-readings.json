@@ -1,0 +1,47 @@
+{
+  "contractId": "sensor-readings",
+  "fields": {
+    "metric": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "observed_at": {
+      "logicalType": "timestamp",
+      "physicalType": "string",
+      "required": true
+    },
+    "quality_flag": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "reading_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "sensor_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "state_value": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "unit": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "value": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    }
+  },
+  "odcsId": "sensor-readings",
+  "version": "1.0.0"
+}

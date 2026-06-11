@@ -1,0 +1,57 @@
+{
+  "contractId": "sensors",
+  "fields": {
+    "field_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "firmware_version": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "install_date": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "last_service_at": {
+      "logicalType": "timestamp",
+      "physicalType": "string",
+      "required": false
+    },
+    "lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "mobility": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "sensor_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "sensor_type": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "service_interval_days": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    }
+  },
+  "odcsId": "sensors",
+  "version": "1.0.0"
+}

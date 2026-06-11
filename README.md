@@ -1,6 +1,6 @@
 # fl-op
 
-Fleet optimization CLI — a decision support system for assigning
+Fleet optimization CLI -- a decision support system for assigning
 means-implement pairs to orders at production scale, with a declarative
 data-contract layer that runs the same canonical state in both batch and stream
 mode.
@@ -53,9 +53,13 @@ dispatch revisions. Artifacts land under `$DATA_DIR` (default: `.data/`).
 | `fl-op contracts check-generation` | Validate ODCS contracts have complete generation hints (`--format avro\|proto\|es\|parquet`). |
 | `fl-op contracts generate` | Generate physical schemas from ODCS contracts (`--format avro\|proto\|es\|parquet`). |
 | `fl-op contracts validate` | Validate ODCS contracts: dual fingerprints and generation-ready check. |
+| `fl-op contracts evolution-check` | Check ODCS contracts against committed schema baselines (version-bump policy). |
+| `fl-op contracts evolution-freeze` | Record reviewed schema baselines for all ODCS contracts. |
 | `fl-op snapshot build` | Map source data into canonical objects and build a reproducible snapshot. |
 | `fl-op plan periodic` | Periodic (batch) OR-Tools plan from an immutable snapshot. |
 | `fl-op plan rolling` | Rolling (stream) dispatch producing immutable plan revisions. |
+| `fl-op tune` | Optuna study over solver parameters against a recorded KPI baseline. |
+| `fl-op serve` | HTTP API: feasibility checks and published plan retrieval. |
 | `fl-op demo` | Full contract -> snapshot -> batch + stream demonstration. |
 
 All commands accept `--data latest` / `--schedule latest`. See
@@ -67,27 +71,28 @@ example inputs and outputs.
 ## Documentation
 
 - **Usage guide**: [`docs/usage.md`](docs/usage.md)
-  — command-by-command walkthrough, sample inputs/outputs, benchmarks, and the
+  -- command-by-command walkthrough, sample inputs/outputs, benchmarks, and the
   `$DATA_DIR/` output layout.
 - **Current implementation**: [`docs/current-implementation.md`](docs/current-implementation.md)
-  — contracts, snapshots, solver chain, rolling dispatch, and run-log analysis.
+  -- contracts, snapshots, solver chain, rolling dispatch, and run-log analysis.
 - **Optimization ontology**: [`docs/reference/optimization-ontology.md`](docs/reference/optimization-ontology.md)
-  — the domain-neutral entity ontology, semantic-term vocabulary, covered
+  -- the domain-neutral entity ontology, semantic-term vocabulary, covered
   optimization use cases and domains, algorithms, and further reading.
 - **Model-world divergence**: [`docs/reference/model-world-divergence.md`](docs/reference/model-world-divergence.md)
-  — the effects a distributed, non-deterministic operational system produces
+  -- the effects a distributed, non-deterministic operational system produces
   when the implemented entity model is not the world, and which mechanism
   covers each.
 - **Canonical optimization model**: [`docs/reference/canonical-model.md`](docs/reference/canonical-model.md)
-  — the three-layer architecture and the domain-neutral entity / capability /
+  -- the three-layer architecture and the domain-neutral entity / capability /
   semantic-term contract the engine consumes.
 - **Domain mapping packs**: [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md)
-  — how a physical domain (agricultural, construction) projects onto the canonical
+  -- how a physical domain (agricultural, construction) projects onto the canonical
   model, extra (analytical) fields, and how to add a new domain.
 - **Algorithms**: [`docs/algorithms/`](docs/algorithms/)
-  — problem formulation, solver pipeline, and a learning path for the math.
+  -- problem formulation, solver pipeline, and a learning path for the math.
 - **Future improvements**: [`docs/future-improvements.md`](docs/future-improvements.md)
-  — targeted improvements for solver quality, snapshot scale, contracts, and rolling dispatch.
+  -- the open improvement backlog per subsystem (solver, ontology, contracts,
+  monitoring, distribution, tuning, serving, performance).
 
 ---
 

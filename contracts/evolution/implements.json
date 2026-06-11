@@ -1,0 +1,52 @@
+{
+  "contractId": "implements",
+  "fields": {
+    "compatible_operations": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": true
+    },
+    "depot_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "fertilizer_capacity_kg": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "implement_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "implement_type": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "max_speed_kmh": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "min_speed_kmh": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "required_power_kw": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "working_width_m": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    }
+  },
+  "odcsId": "implements",
+  "version": "1.0.0"
+}

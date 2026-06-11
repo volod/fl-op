@@ -1,0 +1,52 @@
+{
+  "contractId": "canonical-commitment",
+  "fields": {
+    "commitmentId": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "commitmentType": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "contractRef": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "deadline": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "hardness": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "latenessPenalty": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "taskRef": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "validFrom": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "validTo": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    }
+  },
+  "odcsId": "canonical-commitment",
+  "version": "0.1.0"
+}

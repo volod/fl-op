@@ -108,6 +108,26 @@ def contracts_check_generation(fmt: str, contract: str | None) -> None:
         raise SystemExit(1)
 
 
+@contracts_group.command("evolution-check")
+def contracts_evolution_check() -> None:
+    """Check ODCS contracts against committed schema baselines (bump policy)."""
+    from fl_op.planning.contracts import run_evolution_check
+
+    ok = run_evolution_check()
+    if not ok:
+        raise SystemExit(1)
+
+
+@contracts_group.command("evolution-freeze")
+def contracts_evolution_freeze() -> None:
+    """Record reviewed schema baselines for all ODCS contracts."""
+    from fl_op.planning.contracts import run_evolution_freeze
+
+    ok = run_evolution_freeze()
+    if not ok:
+        raise SystemExit(1)
+
+
 @click.group("snapshot")
 def snapshot_group() -> None:
     """Immutable planning-snapshot operations."""

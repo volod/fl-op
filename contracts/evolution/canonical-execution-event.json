@@ -1,0 +1,32 @@
+{
+  "contractId": "canonical-execution-event",
+  "fields": {
+    "entityRef": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "eventId": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "eventType": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "observedAt": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "payload": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    }
+  },
+  "odcsId": "canonical-execution-event",
+  "version": "0.1.0"
+}

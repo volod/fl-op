@@ -19,6 +19,14 @@ dependencies = [
     "pyarrow>=24.0.0",
     "optuna>=4.9.0",
     "mlflow-skinny>=3.13.0",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+# Broker-backed event-bus ingestion (EVENT_SOURCE_KIND=kafka).
+broker = [
+    "confluent-kafka>=2.5",
 ]
 
 [project.scripts]
@@ -35,4 +43,5 @@ timeout = 120
 dev = [
     "pytest>=8.0",
     "pytest-timeout>=2.3",
+    "httpx2>=0.1",
 ]

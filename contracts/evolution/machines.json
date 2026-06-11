@@ -1,0 +1,57 @@
+{
+  "contractId": "machines",
+  "fields": {
+    "burn_l_per_h": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "current_lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "current_lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "engine_power_kw": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "machine_class": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "machine_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "tank_litres": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "telematics_hours": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "transit_speed_kmh": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "yard_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    }
+  },
+  "odcsId": "machines",
+  "version": "1.0.0"
+}

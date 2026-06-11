@@ -1,0 +1,87 @@
+{
+  "contractId": "canonical-task",
+  "fields": {
+    "areaHa": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "deadline": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "dependsOnTaskRef": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "loadDemand": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "locationRef": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "operationType": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "orderId": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "penaltyPerDay": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "priorityClass": {
+      "logicalType": "integer",
+      "physicalType": "",
+      "required": false
+    },
+    "revenueValue": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "serviceDurationMinutes": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "status": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "taskId": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "timeWindows": {
+      "logicalType": "array",
+      "physicalType": "",
+      "required": false
+    },
+    "workQuantity": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "workQuantityUnit": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    }
+  },
+  "odcsId": "canonical-task",
+  "version": "0.1.0"
+}

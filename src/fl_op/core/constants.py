@@ -271,6 +271,37 @@ MLFLOW_EXPERIMENT_NAME: str = os.environ.get("MLFLOW_EXPERIMENT_NAME", "fl-op")
 MLFLOW_LOCAL_DIRNAME: str = "mlruns"
 
 # ---------------------------------------------------------------------------
+# Serving (thin service API)
+# ---------------------------------------------------------------------------
+
+# Bind address and port for `fl-op serve`. The default binds loopback only;
+# set SERVE_HOST=0.0.0.0 explicitly to expose the API beyond the host.
+SERVE_HOST: str = os.environ.get("SERVE_HOST", "127.0.0.1")
+SERVE_PORT: int = int(os.environ.get("SERVE_PORT", "8000"))
+
+# ---------------------------------------------------------------------------
+# Event-bus ingestion (broker-backed execution events)
+# ---------------------------------------------------------------------------
+
+# Execution-event source for rolling planning: "jsonl" reads the --events
+# file (the development default); "kafka" consumes the configured broker
+# topic instead, for deployments with a real event bus.
+EVENT_SOURCE_KIND: str = os.environ.get("EVENT_SOURCE_KIND", "jsonl")
+EVENT_BROKER_BOOTSTRAP_SERVERS: str = os.environ.get(
+    "EVENT_BROKER_BOOTSTRAP_SERVERS", "localhost:9092"
+)
+EVENT_BROKER_TOPIC: str = os.environ.get("EVENT_BROKER_TOPIC", "fl-op.execution-events")
+EVENT_BROKER_GROUP_ID: str = os.environ.get("EVENT_BROKER_GROUP_ID", "fl-op-rolling")
+# Poll timeout per broker fetch, and how many consecutive empty polls end a
+# bounded consumption (a rolling run drains the visible backlog, then stops).
+EVENT_BROKER_POLL_TIMEOUT_S: float = float(
+    os.environ.get("EVENT_BROKER_POLL_TIMEOUT_S", "1.0")
+)
+EVENT_BROKER_MAX_EMPTY_POLLS: int = int(
+    os.environ.get("EVENT_BROKER_MAX_EMPTY_POLLS", "3")
+)
+
+# ---------------------------------------------------------------------------
 # JSON artifact schema
 # ---------------------------------------------------------------------------
 

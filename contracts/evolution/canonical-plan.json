@@ -1,0 +1,122 @@
+{
+  "contractId": "canonical-plan",
+  "fields": {
+    "assetRefs": {
+      "logicalType": "array",
+      "physicalType": "",
+      "required": false
+    },
+    "assignmentId": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "effectiveFrom": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "effectiveTo": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "expectedCost": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "expectedMargin": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "expectedRevenue": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "generatedAt": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "inventoryLocationRef": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "materialType": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "operatorRefs": {
+      "logicalType": "array",
+      "physicalType": "",
+      "required": false
+    },
+    "parentRevisionId": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "planId": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "plannedFinish": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "plannedStart": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "planningMode": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "quantity": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": true
+    },
+    "reasonCode": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "reservationId": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "revisionId": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "snapshotRef": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "status": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
+    "taskRef": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    }
+  },
+  "odcsId": "canonical-plan",
+  "version": "0.1.0"
+}

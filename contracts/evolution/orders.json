@@ -1,0 +1,77 @@
+{
+  "contractId": "orders",
+  "fields": {
+    "area_ha": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "contract_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "deadline": {
+      "logicalType": "timestamp",
+      "physicalType": "string",
+      "required": true
+    },
+    "depends_on_order_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "estimated_revenue_eur": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "field_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "material_load_kg": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "operation_type": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "order_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "penalty_per_day_eur": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "priority": {
+      "logicalType": "integer",
+      "physicalType": "int",
+      "required": false
+    },
+    "service_duration_minutes": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "status": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "workable_windows": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": false
+    }
+  },
+  "odcsId": "orders",
+  "version": "1.0.0"
+}

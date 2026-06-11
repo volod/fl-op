@@ -13,7 +13,7 @@ never overwrites a previous run.
 
 ## Batch solver workflow
 
-### Step 1 — Generate data
+### Step 1 - Generate data
 
 ```bash
 .venv/bin/fl-op generate-data \
@@ -73,7 +73,7 @@ ACTIVE_DOMAIN=construction .venv/bin/fl-op plan periodic --data latest
 
 ---
 
-### Step 2 — Solve
+### Step 2 - Solve
 
 ```bash
 .venv/bin/fl-op solve --data latest
@@ -85,7 +85,7 @@ Or point to a specific dataset directory:
 .venv/bin/fl-op solve --data .data/generate-data/<timestamp>/
 ```
 
-**Example output** (small run — 50 vehicles / 200 implements / 20 orders):
+**Example output** (small run -- 50 vehicles / 200 implements / 20 orders):
 
 ```
 Fleet Optimization Schedule Report
@@ -161,7 +161,7 @@ economic KPIs, top-used resources, and ASCII bar charts by cluster/day.
 
 ---
 
-### Step 3 — Reschedule after field events
+### Step 3 - Reschedule after field events
 
 Create an events file describing what changed in the field:
 
@@ -189,7 +189,7 @@ summary of what changed vs. the previous schedule).
 
 ---
 
-### Step 4 — Query a new contract
+### Step 4 - Query a new contract
 
 Before accepting a new order, check feasibility and get margin estimates without
 running the full solver:
@@ -265,6 +265,14 @@ See [`docs/current-implementation.md`](current-implementation.md).
 .venv/bin/fl-op contracts validate
 # or: make contracts
 
+# Schema evolution: check every ODCS contract against its committed baseline
+# (contracts/evolution/), enforcing the version-bump policy: added optional
+# fields need a minor bump, anything breaking needs a major bump.
+.venv/bin/fl-op contracts evolution-check     # or: make evolution-check
+# After a reviewed contract change (with the policy-required version bump),
+# record the new baselines:
+.venv/bin/fl-op contracts evolution-freeze    # or: make evolution-freeze
+
 # Build an immutable, reproducibly-hashed planning snapshot from source data.
 .venv/bin/fl-op snapshot build --data latest --mode periodic
 
@@ -290,6 +298,62 @@ and uses the same solver chain as periodic planning.
 
 Artifacts land under `.data/snapshot/`, `.data/plan-periodic/`, and
 `.data/plan-rolling/<ts>/revisions/<n>/`.
+
+---
+
+## Parameter tuning and experiment tracking
+
+`fl-op tune` runs a seeded Optuna TPE study over the tunable solver
+parameters (cluster target size, greedy score weights, per-cluster time
+limit) against a recorded KPI baseline built from the same snapshot:
+
+```bash
+.venv/bin/fl-op tune --data latest --trials 20 --seed 7
+```
+
+Artifacts land under `.data/tune/<timestamp>/`: `baseline.json`,
+`trials.json`, and `best_params.json` (best parameters plus the improvement
+over the baseline objective). With `MLFLOW_LOGGING_ENABLED=1`, every trial,
+the tuning baseline, and every periodic/rolling plan run are logged as MLflow
+runs (KPIs, version dimensions, solve-telemetry summary) to a local SQLite
+store under `.data/mlruns` -- or to `MLFLOW_TRACKING_URI` if set -- so
+parameter experiments are comparable across datasets.
+
+---
+
+## Serving API
+
+`fl-op serve` exposes the published planning state over HTTP (loopback by
+default; FastAPI + uvicorn):
+
+```bash
+.venv/bin/fl-op serve            # or: make serve
+```
+
+| Endpoint | Meaning |
+|----------|---------|
+| `GET /health` | liveness probe |
+| `GET /plans/{periodic\|rolling}` | published run ids, newest last |
+| `GET /plans/{mode}/{run_id}` | plan document (`latest` allowed; rolling returns the newest revision) |
+| `GET /plans/rolling/{run_id}/revisions` | rolling revision summary |
+| `GET /plans/rolling/{run_id}/revisions/{n}` | one revision's plan |
+| `POST /feasibility` | query-contract evaluation for a new order |
+
+`POST /feasibility` takes `{"order": {...}, "data": "latest", "schedule":
+"latest"}` and returns the same feasibility/candidate result as
+`fl-op query-contract`, without writing run artifacts.
+
+---
+
+## Event-bus ingestion
+
+Rolling planning reads execution events from the source selected by
+`EVENT_SOURCE_KIND`: `jsonl` (default) reads the `--events` file; `kafka`
+consumes `EVENT_BROKER_TOPIC` from `EVENT_BROKER_BOOTSTRAP_SERVERS` instead
+(requires the broker extra: `uv sync --extra broker`). Both sources validate
+events identically, and a rolling run drains the visible backlog
+(`EVENT_BROKER_MAX_EMPTY_POLLS` consecutive empty polls) before publishing
+revisions.
 
 ---
 
@@ -329,6 +393,8 @@ $DATA_DIR/                       # default: .data/ -- override via DATA_DIR env 
   plan-periodic/<timestamp>/     # plan.json + snapshot.json (batch plan)
   plan-rolling/<timestamp>/      # revisions/<n>/plan.json + revisions_summary.json
   revision-diff/<timestamp>/     # revision_diff.json + revision_diff.txt
+  tune/<timestamp>/              # baseline.json, trials.json, best_params.json
+  mlruns/                        # local MLflow store (MLFLOW_LOGGING_ENABLED=1)
   quality/observation-error-rates.jsonl   # append-only cross-run error-rate trend
   quality/service-prognosis.jsonl         # per-revision service-prognosis outcomes
 ```

@@ -53,7 +53,7 @@ def run_plan_periodic(
     return out_dir
 
 
-def _log_plan_to_mlflow(plan) -> None:
+def _log_plan_to_mlflow(plan, extra_tags: Optional[dict[str, str]] = None) -> None:
     """Opt-in experiment tracking: KPIs, version dimensions, solve telemetry."""
     from fl_op.tuning.mlflow_logger import log_solver_run
 
@@ -81,6 +81,7 @@ def _log_plan_to_mlflow(plan) -> None:
             "planning_mode": plan.planning_mode.value,
             "snapshot_hash": plan.snapshot_hash,
             "snapshot_id": plan.snapshot_id,
+            **(extra_tags or {}),
         },
     )
 
@@ -91,15 +92,17 @@ def run_plan_rolling(
     effective_at: Optional[str] = None,
 ) -> pathlib.Path:
     """Drive rolling dispatch from an event stream, writing one revision per event."""
+    from fl_op.stream.broker import open_event_source
     from fl_op.stream.driver import StreamDriver
-    from fl_op.stream.source import JsonlEventSource
 
     registry = FileRegistry()
     builder = SnapshotBuilder(registry)
     sources = builder.load_sources(data_dir)
     eff = datetime.fromisoformat(effective_at) if effective_at else datetime.now(tz=timezone.utc)
 
-    events = list(JsonlEventSource(events_path)) if events_path else []
+    # EVENT_SOURCE_KIND selects JSONL (development default) or broker-backed
+    # ingestion; both yield the same validated ExecutionEvents.
+    events = list(open_event_source(events_path))
 
     driver = StreamDriver(registry)
     result = driver.run(sources, events, effective_at=eff)
@@ -134,5 +137,12 @@ def run_plan_rolling(
         {"schema_version": ARTIFACT_SCHEMA_VERSION, "revisions": summary},
         out_dir / "revisions_summary.json",
     )
+    # One experiment-tracking run per rolling invocation: the final revision
+    # carries the converged KPIs, version dimensions, and solve telemetry.
+    if result.revisions:
+        _log_plan_to_mlflow(
+            result.revisions[-1].plan,
+            extra_tags={"n_revisions": str(len(result.revisions))},
+        )
     logger.info("Rolling dispatch: %d revisions -> %s", len(result.revisions), out_dir)
     return out_dir

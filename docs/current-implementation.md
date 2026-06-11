@@ -115,7 +115,9 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    hash (a content hash of the power capabilities and margin), so a repeated
    solve over the same fleet skips the rebuild.
 3. Filter candidates per task by operation type.
-4. Cluster tasks by nearest depot; split large groups.
+4. Cluster tasks by nearest depot; split large groups. Clustering is
+   chain-aware: tasks linked by `depends-on` precedence stay in one cluster
+   so their ordering can be enforced in-model.
 5. Pre-allocate prime movers, related equipment, and operators with a small
    CP-SAT global assignment model (`solver/allocation/global_model.py`): all
    clusters are decided at once, maximizing allocated bundles first and
@@ -139,7 +141,12 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    the location pair, with a reverse-direction and haversine fallback
    (`solver/travel_time.py`). Task
    starts are constrained into their admissible intervals (workable windows
-   minus location restriction windows). When any task demands a load, a
+   minus location restriction windows), and `depends-on` precedence is
+   enforced in-model (a dependent cannot start before its predecessor
+   finishes). Service durations are quantity-driven: the generic work
+   quantity plus its unit feed the duration estimate (area is the legacy
+   alias), and a declared `service-duration` overrides it. When any task
+   demands a load, a
    capacity dimension bounds each route's cumulative delivered mass by the
    vehicle's `load-capacity` (single-trip delivery semantics; vehicles
    declaring no capacity are unconstrained). With `CLUSTER_LNS_ENABLED=1`,
@@ -149,8 +156,10 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    bounded by `CLUSTER_LNS_TIME_LIMIT_S`; the first solution is kept unless
    strictly improved.
 9. Aggregate dispatch packages, canonical reason codes, KPIs (priced with the
-   resolved cost rates), and reports. Every cluster solve yields a
-   machine-readable telemetry record (`solver/solve_telemetry.py`: status,
+   resolved cost rates), and reports. A task whose predecessor went unserved
+   in the solve is withdrawn post-solve (`PREDECESSOR_UNSERVED`), so no plan
+   dispatches work whose precondition was dropped. Every cluster solve yields
+   a machine-readable telemetry record (`solver/solve_telemetry.py`: status,
    wall time, OR-Tools search status, time-limit flag, objective values, LNS
    delta); batch runs write `solve_telemetry.json` and plan scores carry the
    summary.
@@ -195,7 +204,9 @@ Reuses the solver chain on a filtered canonical payload:
   frozen/carried assignments stay available to the re-solve with their busy
   intervals passed as vehicle time-window breaks in the routing model, so a
   held vehicle is reused only in a real non-overlapping gap; held implements
-  and operators are excluded for the hold duration.
+  and operators are excluded for the hold duration. Held assets are
+  classified by solver-row section membership, not id prefixes, so the
+  mechanism is domain-neutral.
 - Each event yields an immutable plan revision with churn and plan-instability
   metrics.
 - `fl-op plan diff-revisions` compares consecutive revisions of a rolling run
@@ -250,3 +261,48 @@ is recorded as a `CorrectiveAction` on the revision and counted in its score:
 - Dataset builds append their error rates to
   `$DATA_DIR/quality/observation-error-rates.jsonl`; a source whose rate
   strictly increases over the last recorded runs is reported as degrading.
+
+## Parameter tuning and experiment tracking
+
+- `fl-op tune` (`tuning/optuna_tuner.py`) runs a seeded Optuna TPE study over
+  the tunable solver parameters (`solver/parameters.py:SolverParameters`:
+  cluster target size, greedy score weights, per-cluster time limit) against
+  a recorded KPI baseline built from the same snapshot at the trial-scale
+  time budget. The objective is total estimated margin minus the
+  lateness-penalty exposure of unassigned tasks. Artifacts: `baseline.json`,
+  `trials.json`, `best_params.json` under `$DATA_DIR/tune/<ts>/`.
+- Opt-in MLflow logging (`tuning/mlflow_logger.py`, MLFLOW_LOGGING_ENABLED):
+  tuning trials, the baseline, periodic plans, and the final revision of
+  each rolling run are logged with KPIs, version dimensions, and the
+  solve-telemetry summary; local SQLite store under `$DATA_DIR/mlruns` by
+  default, MLFLOW_TRACKING_URI for a real server. Best-effort only: a
+  tracking failure degrades to a warning, never a failed run.
+
+## Schema evolution and CI
+
+- Every ODCS contract (registered domain contracts plus the canonical entity
+  and plan contracts) has a committed baseline snapshot of its field schema
+  under `contracts/evolution/` (`contracts/evolution.py`). The
+  `evolution-check` gate classifies the current schema against the baseline
+  and enforces the version-bump policy: added optional fields require at
+  least a minor bump; removals, type changes, requiredness changes, and
+  added required fields require a major bump; any change without a bump
+  fails. `evolution-freeze` records reviewed baselines.
+- CI (`.github/workflows/ci.yml`, `make ci`) regenerates all physical
+  schemas from ODCS before any validation, then runs the suite validation,
+  domain validations, the evolution gate, and the tests.
+
+## Serving
+
+- `fl-op serve` (`serving/api.py`, FastAPI + uvicorn, loopback by default)
+  exposes published plan retrieval (`/plans/{periodic|rolling}` listing,
+  per-run and `latest` plan documents, rolling revision summaries and
+  per-revision plans) and `POST /feasibility`, the query-contract evaluation
+  for a new order; the evaluation core (`solver/query_pipeline.py:
+  evaluate_query`) is shared with the CLI pipeline. The API reads
+  `$DATA_DIR` and never mutates it.
+- Rolling planning ingests execution events from the source selected by
+  EVENT_SOURCE_KIND (`stream/broker.py:open_event_source`): the JSONL file
+  source, or a Kafka consumer (broker extra) that validates messages through
+  the same `parse_event` and drains the visible backlog before the run
+  publishes revisions.

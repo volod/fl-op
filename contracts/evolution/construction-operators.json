@@ -1,0 +1,37 @@
+{
+  "contractId": "construction-operators",
+  "fields": {
+    "full_name": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "licensed_operations": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": true
+    },
+    "operator_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "shift_end_s": {
+      "logicalType": "integer",
+      "physicalType": "int",
+      "required": true
+    },
+    "shift_start_s": {
+      "logicalType": "integer",
+      "physicalType": "int",
+      "required": true
+    },
+    "yard_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    }
+  },
+  "odcsId": "operators",
+  "version": "1.0.0"
+}

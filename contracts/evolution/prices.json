@@ -1,0 +1,37 @@
+{
+  "contractId": "prices",
+  "fields": {
+    "per_unit": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "price_eur": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "price_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "resource_type": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "valid_from": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "valid_to": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    }
+  },
+  "odcsId": "prices",
+  "version": "1.0.0"
+}

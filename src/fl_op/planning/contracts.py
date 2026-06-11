@@ -53,6 +53,40 @@ def run_canonical_validate() -> bool:
     return report.ok
 
 
+def run_evolution_check() -> bool:
+    """Check all ODCS contracts against committed schema baselines. Returns ok."""
+    from fl_op.contracts.evolution import check_evolution
+
+    report = check_evolution()
+    logger.info("Schema evolution: %s", "OK" if report.ok else "FAILED")
+    logger.info("%-28s %10s %10s  change", "contract", "baseline", "current")
+    for c in report.contracts:
+        logger.info(
+            "%-28s %10s %10s  %s",
+            c.contract_id,
+            c.baseline_version or "n/a",
+            c.current_version,
+            c.change_class,
+        )
+        for detail in c.details:
+            logger.info("    %s", detail)
+        for err in c.errors:
+            logger.error("  %s", err)
+    for err in report.stale_baselines:
+        logger.error("  %s", err)
+    return report.ok
+
+
+def run_evolution_freeze() -> bool:
+    """Record schema baselines for all ODCS contracts. Returns ok."""
+    from fl_op.contracts.evolution import freeze_baselines
+
+    written = freeze_baselines()
+    for path in written:
+        logger.info("  baseline %s", path.name)
+    return bool(written)
+
+
 def run_contracts_validate(persist: bool = False) -> bool:
     """Validate the contract suite; optionally persist fingerprints. Returns ok."""
     registry = FileRegistry()
