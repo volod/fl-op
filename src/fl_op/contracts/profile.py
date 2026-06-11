@@ -21,6 +21,7 @@ from fl_op.core.constants import (
     EQUIPMENT_SERVICE_OPERATION,
     MIN_OBSERVATION_CONFIDENCE,
     SERVICE_TASK_DEADLINE_DAYS,
+    SERVICE_TASK_DURATION_MINUTES,
     SERVICE_TASK_ESCALATED_DEADLINE_DAYS,
     SERVICE_TASK_ESCALATED_PRIORITY_CLASS,
     SERVICE_TASK_NOMINAL_AREA_HA,
@@ -76,6 +77,7 @@ class MonitoringPolicyOverride(BaseModel):
     serviceDeadlineDays: Optional[int] = None
     servicePenaltyPerDayEur: Optional[float] = None
     serviceNominalAreaHa: Optional[float] = None
+    serviceDurationMinutes: Optional[float] = None
     escalatedPriorityClass: Optional[int] = None
     escalatedDeadlineDays: Optional[int] = None
 
@@ -100,6 +102,7 @@ class MonitoringPolicySpec(BaseModel):
     serviceDeadlineDays: int = SERVICE_TASK_DEADLINE_DAYS
     servicePenaltyPerDayEur: float = SERVICE_TASK_PENALTY_EUR_PER_DAY
     serviceNominalAreaHa: float = SERVICE_TASK_NOMINAL_AREA_HA
+    serviceDurationMinutes: float = SERVICE_TASK_DURATION_MINUTES
     escalatedPriorityClass: int = SERVICE_TASK_ESCALATED_PRIORITY_CLASS
     escalatedDeadlineDays: int = SERVICE_TASK_ESCALATED_DEADLINE_DAYS
     assetTypeOverrides: dict[str, MonitoringPolicyOverride] = Field(default_factory=dict)

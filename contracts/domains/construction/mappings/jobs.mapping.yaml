@@ -38,6 +38,15 @@ fieldMappings:
     quantityKind: area
     planningUse: [duration-estimation]
     missingValuePolicy: reject-for-planning
+  # Construction work demand projects onto the generic work-quantity term too,
+  # proving the duration semantics are not area-specific.
+  - sourceField: plot_ha
+    binding: task.workQuantity
+    semanticTerm: urn:xopt:attribute:work-quantity
+    canonicalUnit: ha
+    quantityKind: work
+    planningUse: [duration-estimation]
+    missingValuePolicy: accept-optional
   - sourceField: deadline
     binding: task.deadline
     semanticTerm: urn:xopt:commitment:deadline

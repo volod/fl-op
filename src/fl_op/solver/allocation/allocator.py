@@ -1,18 +1,26 @@
-"""Global pre-allocation pass: reserves implements and operators to clusters."""
+"""Global pre-allocation pass: reserves implements and operators to clusters.
+
+The default path is the CP-SAT global assignment model
+(allocation/global_model.py), which decides all clusters at once. The greedy
+penalty-ordered reservation loop below remains as the fallback when the model
+is disabled (GLOBAL_ASSIGNMENT_ENABLED=0), oversized, or finds no solution.
+"""
 
 import logging
 from typing import Any
 
 import numpy as np
 
+from fl_op.core import constants
 from fl_op.solver.types import ClusterSpec
 from fl_op.solver.allocation.candidates import (
     collect_pair_candidates,
     reserve_best_candidates,
 )
+from fl_op.solver.allocation.global_model import allocate_resources_global
 from fl_op.solver.allocation.limits import cluster_resource_limit
 from fl_op.solver.allocation.operators import assign_operator, index_operators_by_depot
-from fl_op.solver.allocation.scoring import build_scored_lookup
+from fl_op.solver.allocation.scoring import ScoredLookup, build_scored_lookup
 from fl_op.solver.allocation.state import (
     MAX_VEHICLE_ASSIGNMENTS,
     AllocationState,
@@ -32,6 +40,36 @@ def allocate_resources(
     scored_pairs: dict[str, list[tuple[float, int, int]]] | None = None,
 ) -> list[ClusterSpec]:
     """Mutate clusters with allocated_prime_related; return sorted list."""
+    scored_lookup = build_scored_lookup(scored_pairs)
+    if constants.GLOBAL_ASSIGNMENT_ENABLED:
+        allocated_clusters = allocate_resources_global(
+            clusters, orders, operators, power_margin,
+            vehicle_index, implement_index, feasible_pairs, scored_lookup,
+        )
+        if allocated_clusters is not None:
+            for cluster in allocated_clusters:
+                _log_cluster_allocation(cluster, cluster["allocated_prime_related"])
+            return allocated_clusters
+        logger.warning(
+            "[warn] global assignment unavailable; using greedy pre-allocation"
+        )
+    return _allocate_resources_greedy(
+        clusters, orders, operators, power_margin,
+        vehicle_index, implement_index, feasible_pairs, scored_lookup,
+    )
+
+
+def _allocate_resources_greedy(
+    clusters: list[ClusterSpec],
+    orders: list[Any],
+    operators: list[Any],
+    power_margin: np.ndarray,
+    vehicle_index: dict[str, int],
+    implement_index: dict[str, int],
+    feasible_pairs: dict[str, list[tuple[int, int]]],
+    scored_lookup: ScoredLookup | None,
+) -> list[ClusterSpec]:
+    """Penalty-ordered greedy reservation (fallback path)."""
     sorted_clusters = sorted(
         clusters,
         key=lambda c: (-c["total_penalty_per_day"], c["cluster_id"]),
@@ -41,7 +79,6 @@ def allocate_resources(
     idx_to_implement = {
         idx: implement_id for implement_id, idx in implement_index.items()
     }
-    scored_lookup = build_scored_lookup(scored_pairs)
     depot_operators = index_operators_by_depot(operators)
     state = AllocationState()
 

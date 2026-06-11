@@ -6,10 +6,11 @@ destroyed inside helper modules; no shared OR-Tools state persists between calls
 """
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from fl_op.canonical.enums import ReasonCode
 from fl_op.solver.cluster.infeasible import mark_all_infeasible
+from fl_op.solver.cluster.routing import HeldWindows
 from fl_op.solver.cluster.solve import solve_cluster_inner
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ def solve_cluster(
     greedy_assignment: dict[str, tuple[int, int]],
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
+    held_windows: Optional[HeldWindows] = None,
 ) -> tuple[list[dict], list[dict]]:
     """Solve one geographic cluster; return (dispatch_packages, infeasible_orders).
 
@@ -40,6 +42,7 @@ def solve_cluster(
             depots,
             greedy_assignment,
             vehicle_index,
+            held_windows,
         )
     except Exception as exc:
         logger.error(

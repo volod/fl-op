@@ -160,15 +160,13 @@ def _resolve_tasks(
     if not tasks_to_resolve:
         return None
 
-    # Held resources are excluded from the incremental re-solve. The filtered
-    # solver input does not include the preserved assignments as time-window
-    # constraints, so leaving a held vehicle available could double-book it.
-    held_vehicles = {
-        aid
-        for assignment in held_assignments
-        for aid in assignment.asset_ids
-        if aid.startswith("vehicle")
-    }
+    # Held vehicles stay available to the incremental re-solve: their
+    # frozen/carried assignment windows travel along as busy time windows
+    # (vehicle break intervals in the routing model), so a held vehicle is
+    # reused only in a real non-overlapping gap, never double-booked. Held
+    # implements and operators are bound to their assignment for its whole
+    # duration and remain excluded.
+    held_vehicle_windows = _held_vehicle_windows(held_assignments)
     held_implements = {
         aid
         for assignment in held_assignments
@@ -179,7 +177,6 @@ def _resolve_tasks(
 
     from fl_op.solver.inputs import (
         SECTION_OPERATORS,
-        SECTION_PRIME_MOVERS,
         SECTION_RELATED,
         SECTION_TASKS,
     )
@@ -187,11 +184,6 @@ def _resolve_tasks(
     payload = dict(solver_rows)
     payload[SECTION_TASKS] = [
         o for o in payload.get(SECTION_TASKS, []) if o.task_id in tasks_to_resolve
-    ]
-    payload[SECTION_PRIME_MOVERS] = [
-        v
-        for v in payload.get(SECTION_PRIME_MOVERS, [])
-        if v.asset_id not in held_vehicles
     ]
     payload[SECTION_RELATED] = [
         im
@@ -203,4 +195,20 @@ def _resolve_tasks(
         for op in payload.get(SECTION_OPERATORS, [])
         if op.asset_id not in held_operators
     ]
-    return run_solver_chain(payload, enforcement=enforcement)
+    return run_solver_chain(
+        payload, enforcement=enforcement, held_windows=held_vehicle_windows
+    )
+
+
+def _held_vehicle_windows(
+    held_assignments: list[Assignment],
+) -> dict[str, list[tuple[int, int]]]:
+    """Map each held vehicle to its busy [start, end) epoch-second intervals."""
+    windows: dict[str, list[tuple[int, int]]] = {}
+    for assignment in held_assignments:
+        start = int(assignment.planned_start.timestamp())
+        end = int(assignment.planned_finish.timestamp())
+        for aid in assignment.asset_ids:
+            if aid.startswith("vehicle"):
+                windows.setdefault(aid, []).append((start, end))
+    return windows

@@ -26,9 +26,11 @@ gate distribution, solver enforcement gates new ontology surface):
    inventory.adjusted, forecast upserts, operator unavailability via
    asset.unavailable, `fl-op plan diff-revisions` explaining every moved
    assignment; follow-up findings below).
-6. Solver Quality - IN PROGRESS (declared-constraint enforcement DONE:
-   weather windows, operator qualification, material availability; global
-   assignment model, LNS, and held time-windows remain below).
+6. Solver Quality - DONE (declared-constraint enforcement: weather windows,
+   operator qualification, material availability; CP-SAT global assignment
+   pre-allocation with greedy fallback; optional LNS improvement pass for
+   high-value clusters; held rolling assignments as vehicle time-window
+   breaks; follow-up findings below).
 7. Ontology Coverage (add surface only once the solver can consume it).
 8. Multi-Domain.
 9. Snapshot Scale and Performance.
@@ -36,13 +38,44 @@ gate distribution, solver enforcement gates new ontology surface):
 
 ## Solver Quality
 
-- Replace greedy cluster pre-allocation with a small global assignment model for
-  scarce vehicles, implements, and operators.
-- Add optional Large Neighbourhood Search for high-value clusters after the
-  OR-Tools first solution.
-- Track held rolling assignments as vehicle time-window constraints so
-  incremental replans can safely reuse a held vehicle when there is a real
-  non-overlapping gap.
+All three remaining items are implemented:
+
+- Greedy cluster pre-allocation is replaced by a small CP-SAT global
+  assignment model (`solver/allocation/global_model.py`): scarce vehicles,
+  implements, and operators are decided across all clusters at once, so a
+  high-penalty cluster can no longer starve a later cluster when an
+  alternative resource mix serves both. The greedy reservation loop remains
+  as the fallback (`GLOBAL_ASSIGNMENT_ENABLED=0`, oversized model, or no
+  CP-SAT solution in time).
+- An optional Large Neighbourhood Search improvement pass
+  (`CLUSTER_LNS_ENABLED=1`) re-solves high-value clusters (total lateness
+  penalty at or above `CLUSTER_LNS_MIN_PENALTY_EUR_PER_DAY`) from the first
+  OR-Tools solution with guided local search and path/inactive LNS operators,
+  bounded by `CLUSTER_LNS_TIME_LIMIT_S`.
+- Held rolling assignments are tracked as vehicle time-window constraints: a
+  frozen/carried vehicle re-enters the incremental re-solve with its busy
+  intervals modelled as break intervals on the routing time dimension, so it
+  is reused only in a real non-overlapping gap instead of being excluded
+  outright.
+
+Follow-up findings from the global assignment, LNS, and held-window work:
+
+- Pre-allocation is hold-unaware: the assignment model may reserve a held
+  vehicle for a cluster whose work cannot fit the vehicle's free gaps;
+  discounting candidate scores by remaining gap capacity would avoid wasted
+  reservations.
+- The assignment objective is count-first (allocate as many bundles as the
+  limits admit, scores only break ties); a profile-tunable tradeoff would let
+  a domain prefer fewer, higher-margin allocations.
+- Held windows cover vehicles only; held implements and operators are still
+  excluded for the whole hold duration. Modelling them as resource calendars
+  would unlock the same gap reuse.
+- Held-window offsets are computed against wall-clock now, consistent with
+  deadline handling in the routing model; basing both on the snapshot
+  effective time would make replayed/synthetic timelines exact.
+- The LNS pass is a fixed second solve; budgets proportional to cluster value
+  and recording the objective delta in machine-readable solve telemetry
+  remain open (see Performance).
 
 Follow-up findings from the implemented constraint enforcement (weather
 windows, operator qualification, material availability):

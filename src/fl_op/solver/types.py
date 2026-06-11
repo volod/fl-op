@@ -221,6 +221,15 @@ class TaskRow(_SolverRow):
     location_ref: str = ""
     operation_type: str = ""
     area: float = 0.0
+    # Generic work demand; preferred over area for duration estimation.
+    work_quantity: float = 0.0
+    work_quantity_unit: str = ""
+    # Explicit effort override in minutes; wins over any quantity estimate.
+    service_duration_min: float = 0.0
+    # Workable ISO-8601 "from/to" interval strings the execution must start in.
+    time_windows: Any = dataclasses.field(default_factory=list)
+    # Predecessor task id that must be served before this task.
+    depends_on_task_ref: str = ""
     deadline: Optional[str] = None
     penalty_per_day: float = 0.0
     priority_class: str = ""

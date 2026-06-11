@@ -81,8 +81,8 @@ contracts:
     sourceFile: orders.csv
     sourceFormat: csv
     fingerprints:
-      avroParsingFingerprint: 2fd8be6ff927640833bf932dd15f8370fd4ea2c8dc8968af290f4253fff44ced
-      optimizationMetadataHash: 5f49b9c548ffcc6a90a91ec2f7f4c8886a347d60c2cf74a323e43faf2bf31d9a
+      avroParsingFingerprint: eb6d36325c5719d75a335ee897cdad239054f0b105de008e34996e63f40b3282
+      optimizationMetadataHash: 26abcc564eab1c8987ff95f64d777784cfbc2fb0ef9630b0040861f31f46e51a
   weather:
     domain: agricultural
     odcs: domains/agricultural/odcs/weather.odcs.yaml

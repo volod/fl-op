@@ -38,6 +38,33 @@ fieldMappings:
     quantityKind: area
     planningUse: [duration-estimation]
     missingValuePolicy: reject-for-planning
+  # The same physical area also projects onto the generic work-quantity term,
+  # so the engine's duration estimation is quantity-driven, not area-specific.
+  - sourceField: area_ha
+    binding: task.workQuantity
+    semanticTerm: urn:xopt:attribute:work-quantity
+    canonicalUnit: ha
+    quantityKind: work
+    planningUse: [duration-estimation]
+    missingValuePolicy: accept-optional
+  - sourceField: service_duration_minutes
+    binding: task.serviceDurationMinutes
+    semanticTerm: urn:xopt:attribute:service-duration
+    canonicalUnit: min
+    quantityKind: duration
+    planningUse: [duration-estimation]
+    missingValuePolicy: accept-optional
+  - sourceField: depends_on_order_id
+    binding: task.dependsOnTaskRef
+    semanticTerm: urn:xopt:relationship:depends-on
+    planningUse: [precedence]
+    missingValuePolicy: accept-optional
+  - sourceField: workable_windows
+    binding: task.timeWindows
+    semanticTerm: urn:xopt:time:workable-windows
+    quantityKind: interval-set
+    planningUse: [time-window]
+    missingValuePolicy: accept-optional
   - sourceField: deadline
     binding: task.deadline
     semanticTerm: urn:xopt:commitment:deadline

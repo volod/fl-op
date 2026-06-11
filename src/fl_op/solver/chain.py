@@ -34,6 +34,7 @@ def run_solver_chain(
     rows: dict[str, list[Any]],
     matrix_out_dir: Optional[pathlib.Path] = None,
     enforcement: Optional[Any] = None,
+    held_windows: Optional[dict[str, list[tuple[int, int]]]] = None,
 ) -> SolverChainResult:
     """Run preprocess -> allocate -> greedy -> pool on typed canonical rows.
 
@@ -47,6 +48,11 @@ def run_solver_chain(
     activates the declared profile constraints: weather windows, operator
     qualification, and material availability. Without it the chain behaves as
     before, so the raw batch pipeline is unaffected.
+
+    ``held_windows`` maps a vehicle asset_id to busy [start, end) epoch-second
+    intervals held by frozen/carried rolling assignments; the routing model
+    blocks those intervals as vehicle breaks so a held vehicle is reused only
+    in a real non-overlapping gap.
     """
     from fl_op.solver.aggregator import _compute_kpis
     from fl_op.solver.cluster_pool import pool_solve
@@ -72,6 +78,12 @@ def run_solver_chain(
         filter_feasible_vehicle_implement_pairs,
     )
     from fl_op.solver.allocation import allocate_resources
+    from fl_op.solver.task_relations import (
+        apply_dependency_filter,
+        apply_time_window_filter,
+        enforce_dependency_outcomes,
+    )
+    from datetime import datetime, timezone
 
     enforcement = enforcement or EnforcementPolicy()
     vehicles_raw = rows[SECTION_PRIME_MOVERS]
@@ -85,6 +97,14 @@ def run_solver_chain(
     orders_raw, enforcement_infeasible = apply_weather_filter(
         orders_raw, fields_raw, forecasts_raw, enforcement.weather
     )
+    orders_raw, window_infeasible = apply_time_window_filter(
+        orders_raw, now=datetime.now(tz=timezone.utc)
+    )
+    enforcement_infeasible.extend(window_infeasible)
+    orders_raw, dependency_infeasible = apply_dependency_filter(
+        orders_raw, {record["task_id"] for record in enforcement_infeasible}
+    )
+    enforcement_infeasible.extend(dependency_infeasible)
 
     vehicle_index = {v.asset_id: i for i, v in enumerate(vehicles_raw)}
     implement_index = {im.asset_id: i for i, im in enumerate(implements_raw)}
@@ -121,9 +141,11 @@ def run_solver_chain(
 
     all_dispatch, all_infeasible = pool_solve(
         clusters, orders_raw, vehicles_raw, implements_raw, fields_raw, depots_raw,
-        greedy_assignment, vehicle_index, implement_index,
+        greedy_assignment, vehicle_index, implement_index, held_windows,
     )
-    all_infeasible = [*enforcement_infeasible, *all_infeasible]
+    all_dispatch, all_infeasible = enforce_dependency_outcomes(
+        all_dispatch, [*enforcement_infeasible, *all_infeasible], orders_raw
+    )
     kpis = _compute_kpis(all_dispatch, all_infeasible, orders_raw, greedy_assignment)
 
     return SolverChainResult(

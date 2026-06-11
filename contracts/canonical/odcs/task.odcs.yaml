@@ -53,6 +53,41 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: task.areaHa, semanticTerm: urn:xopt:attribute:service-area, canonicalUnit: ha, quantityKind: area, planningUse: [duration-estimation]}
+      - name: workQuantity
+        logicalType: number
+        required: false
+        description: Generic work demand driving duration estimation; unit declared by workQuantityUnit.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.workQuantity, semanticTerm: urn:xopt:attribute:work-quantity, quantityKind: work, planningUse: [duration-estimation]}
+      - name: workQuantityUnit
+        logicalType: string
+        required: false
+        description: Unit the work quantity counts (ha, m3, items, ...).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.workQuantityUnit, semanticTerm: urn:xopt:attribute:work-quantity-unit, planningUse: [duration-estimation]}
+      - name: serviceDurationMinutes
+        logicalType: number
+        required: false
+        description: Explicit effort override; wins over any quantity-driven estimate.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.serviceDurationMinutes, semanticTerm: urn:xopt:attribute:service-duration, canonicalUnit: min, quantityKind: duration, planningUse: [duration-estimation]}
+      - name: dependsOnTaskRef
+        logicalType: string
+        required: false
+        description: Predecessor task that must be served before this one.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.dependsOnTaskRef, semanticTerm: urn:xopt:relationship:depends-on, planningUse: [precedence]}
+      - name: timeWindows
+        logicalType: array
+        required: false
+        description: Workable ISO-8601 "from/to" intervals the execution must start within.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.timeWindows, semanticTerm: urn:xopt:time:workable-windows, quantityKind: interval-set, planningUse: [time-window]}
       - name: deadline
         logicalType: string
         required: false

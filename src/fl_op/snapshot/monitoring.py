@@ -305,6 +305,7 @@ def derive_service_tasks(
                 operation_type=effective.serviceOperationType,
                 location_ref=asset.home_depot_ref,
                 area_ha=effective.serviceNominalAreaHa,
+                service_duration_minutes=int(effective.serviceDurationMinutes),
                 deadline=now + timedelta(days=deadline_days),
                 priority_class=priority,
                 penalty_per_day_eur=effective.servicePenaltyPerDayEur,

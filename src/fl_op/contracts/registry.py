@@ -28,6 +28,10 @@ from fl_op.core.paths import CONTRACTS_ROOT
 
 logger = logging.getLogger(__name__)
 
+# Marker shared with the validation CLI so a reviewed metadata change can be
+# acknowledged (--write) while any other validation error still fails the run.
+METADATA_DRIFT_MARKER = "optimizationMetadataHash changed"
+
 
 class MetadataLossError(RuntimeError):
     """Raised when stored and computed optimization metadata hashes diverge."""
@@ -146,7 +150,7 @@ class FileRegistry:
         current = computed.get("optimizationMetadataHash")
         if prior and current and prior != current:
             raise MetadataLossError(
-                f"Contract {contract_id}: optimizationMetadataHash changed from "
+                f"Contract {contract_id}: {METADATA_DRIFT_MARKER} from "
                 f"{prior} to {current}; rerun validation with --write after reviewing the change"
             )
         return computed

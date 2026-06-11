@@ -136,3 +136,87 @@ class TestScoredPreallocation:
             [cluster], orders, operators, pm, v_idx, i_idx, feasible, scored,
         )
         assert result[0]["allocated_prime_related"] == {"v1": ["i1"]}
+
+
+def _starved_cluster_inputs():
+    """Two clusters contesting i0; the high cluster has an i1 alternative.
+
+    Greedy lets the high-penalty cluster grab its best pair (v0, i0) and
+    starves the low cluster (whose only option is i0). The global model must
+    route the high cluster to (v1, i1) so both clusters are served.
+    """
+    setup = _build_setup(2, 2)
+    orders = [_order("o_high", 1000), _order("o_low", 10)]
+    operators = [_operator("op0"), _operator("op1")]
+    feasible = {"o_high": [(0, 0), (1, 1)], "o_low": [(0, 0)]}
+    scored = {"o_high": [(100.0, 0, 0), (90.0, 1, 1)], "o_low": [(50.0, 0, 0)]}
+    clusters = [
+        _cluster("c_high", ["o_high"], 1000.0),
+        _cluster("c_low", ["o_low"], 10.0),
+    ]
+    return setup, orders, operators, feasible, scored, clusters
+
+
+class TestGlobalAssignmentModel:
+    def test_global_model_recovers_greedy_starved_cluster(self):
+        setup, orders, operators, feasible, scored, clusters = _starved_cluster_inputs()
+        _vr, _ir, _compat, pm, v_idx, i_idx = setup
+        result = allocate_resources(
+            clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+        )
+        by_id = {c["cluster_id"]: c for c in result}
+        assert by_id["c_high"]["allocated_prime_related"] == {"v1": ["i1"]}
+        assert by_id["c_low"]["allocated_prime_related"] == {"v0": ["i0"]}
+
+    def test_greedy_fallback_starves_low_cluster(self, monkeypatch):
+        from fl_op.core import constants
+
+        monkeypatch.setattr(constants, "GLOBAL_ASSIGNMENT_ENABLED", False)
+        setup, orders, operators, feasible, scored, clusters = _starved_cluster_inputs()
+        _vr, _ir, _compat, pm, v_idx, i_idx = setup
+        result = allocate_resources(
+            clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+        )
+        by_id = {c["cluster_id"]: c for c in result}
+        assert by_id["c_high"]["allocated_prime_related"] == {"v0": ["i0"]}
+        assert by_id["c_low"]["allocated_prime_related"] == {}
+
+    def test_oversized_model_falls_back_to_greedy(self, monkeypatch):
+        from fl_op.core import constants
+
+        monkeypatch.setattr(constants, "GLOBAL_ASSIGNMENT_MAX_MODEL_CANDIDATES", 1)
+        setup, orders, operators, feasible, scored, clusters = _starved_cluster_inputs()
+        _vr, _ir, _compat, pm, v_idx, i_idx = setup
+        result = allocate_resources(
+            clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+        )
+        by_id = {c["cluster_id"]: c for c in result}
+        # Greedy semantics: the high-penalty cluster takes its best pair.
+        assert by_id["c_high"]["allocated_prime_related"] == {"v0": ["i0"]}
+
+    def test_global_model_is_deterministic(self):
+        results = []
+        for _ in range(2):
+            setup, orders, operators, feasible, scored, clusters = (
+                _starved_cluster_inputs()
+            )
+            _vr, _ir, _compat, pm, v_idx, i_idx = setup
+            result = allocate_resources(
+                clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+            )
+            results.append(
+                [
+                    (c["cluster_id"], c["allocated_prime_related"], c.get("operator_ref"))
+                    for c in result
+                ]
+            )
+        assert results[0] == results[1]
+
+    def test_global_model_assigns_qualified_operator(self):
+        setup, orders, operators, feasible, scored, clusters = _starved_cluster_inputs()
+        _vr, _ir, _compat, pm, v_idx, i_idx = setup
+        result = allocate_resources(
+            clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+        )
+        assigned = [c.get("operator_ref") for c in result]
+        assert sorted(a for a in assigned if a) == ["op0", "op1"]

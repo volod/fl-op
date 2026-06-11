@@ -61,6 +61,14 @@ semanticTerms:
   urn:xopt:attribute:longitude: {valueType: number, quantityKind: angle, canonicalUnit: deg}
   urn:xopt:attribute:area: {valueType: number, quantityKind: area, canonicalUnit: ha}
   urn:xopt:attribute:service-area: {valueType: number, quantityKind: area, canonicalUnit: ha}
+  # Generic work demand: the quantity drives duration estimation; the unit term
+  # declares what the quantity counts (ha, m3, items, ...). Domains whose work
+  # is not area-shaped bind these instead of service-area.
+  urn:xopt:attribute:work-quantity: {valueType: number, quantityKind: work}
+  urn:xopt:attribute:work-quantity-unit: {valueType: string, quantityKind: categorical}
+  # Explicit effort override: when present it wins over any quantity-driven
+  # duration estimate (fixed-effort visits, externally estimated jobs).
+  urn:xopt:attribute:service-duration: {valueType: number, quantityKind: duration, canonicalUnit: min}
   urn:xopt:attribute:polygon: {valueType: array, quantityKind: geometry}
   urn:xopt:attribute:soil-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:operation-type: {valueType: string, quantityKind: categorical}
@@ -105,6 +113,10 @@ semanticTerms:
   urn:xopt:relationship:contract: {valueType: string, quantityKind: identifier}
   urn:xopt:relationship:location: {valueType: string, quantityKind: identifier}
   urn:xopt:relationship:entity-ref: {valueType: string, quantityKind: identifier}
+  # Predecessor task that must be served before this one (multi-stage work
+  # sequences). A reference to a task absent from the planning input is treated
+  # as already satisfied (the predecessor completed in an earlier revision).
+  urn:xopt:relationship:depends-on: {valueType: string, quantityKind: identifier}
   # -- inventory -------------------------------------------------------------
   urn:xopt:inventory:fuel: {valueType: number, quantityKind: volume, canonicalUnit: L}
   urn:xopt:inventory:fertilizer: {valueType: number, quantityKind: mass, canonicalUnit: kg}
@@ -118,3 +130,6 @@ semanticTerms:
   urn:xopt:time:observed-at: {valueType: string, quantityKind: timestamp}
   urn:xopt:time:valid-from: {valueType: string, quantityKind: timestamp}
   urn:xopt:time:valid-to: {valueType: string, quantityKind: timestamp}
+  # Workable windows the task execution must start within: a list of ISO-8601
+  # "from/to" interval strings. Absent or empty means any time up to the deadline.
+  urn:xopt:time:workable-windows: {valueType: array, quantityKind: interval-set}

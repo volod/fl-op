@@ -134,6 +134,93 @@ def _split_into_subclusters(
 
 
 # ---------------------------------------------------------------------------
+# Task precedence units
+# ---------------------------------------------------------------------------
+
+
+def _dependency_units(orders: list[Any]) -> dict[str, list[str]]:
+    """Group task ids into precedence units keyed by their root task id.
+
+    A unit is a root task plus all its (transitive) dependents present in the
+    input. References to absent tasks are treated as satisfied; cyclic
+    references are broken (logged) so bad data cannot hang clustering.
+    """
+    present = {o.task_id for o in orders}
+    parent: dict[str, str] = {}
+    for order in orders:
+        dep = str(order.depends_on_task_ref or "")
+        parent[order.task_id] = dep if dep in present and dep != order.task_id else ""
+
+    def root_of(task_id: str) -> str:
+        seen: set[str] = set()
+        current = task_id
+        while parent.get(current):
+            if current in seen:
+                logger.warning(
+                    "Cyclic task dependency at %s; treating as independent", current
+                )
+                return task_id
+            seen.add(current)
+            current = parent[current]
+        return current
+
+    units: dict[str, list[str]] = {}
+    for order in orders:
+        units.setdefault(root_of(order.task_id), []).append(order.task_id)
+    return units
+
+
+def _regroup_units_by_root_depot(
+    depot_assignment: dict[str, list[str]],
+    units: dict[str, list[str]],
+) -> dict[str, list[list[str]]]:
+    """Return {depot_id: [unit, ...]} with every chain kept whole.
+
+    Each multi-task unit moves to the depot of its root task, so the whole
+    chain is solved by one cluster and the routing model can order it.
+    """
+    depot_of = {
+        tid: depot for depot, tids in depot_assignment.items() for tid in tids
+    }
+    unit_of_task = {tid: root for root, tids in units.items() for tid in tids}
+
+    grouped: dict[str, list[list[str]]] = {depot: [] for depot in depot_assignment}
+    emitted_roots: set[str] = set()
+    for depot, task_ids in depot_assignment.items():
+        for tid in task_ids:
+            root = unit_of_task.get(tid, tid)
+            if root in emitted_roots:
+                continue
+            members = units.get(root, [tid])
+            if len(members) == 1:
+                grouped[depot].append([tid])
+                continue
+            emitted_roots.add(root)
+            home = depot_of.get(root, depot)
+            grouped.setdefault(home, []).append(
+                [m for m in members if m in depot_of]
+            )
+    return grouped
+
+
+def _split_units_into_subclusters(
+    unit_list: list[list[str]],
+    target_size: int,
+) -> list[list[str]]:
+    """Chunk units to approximately target_size without splitting any unit."""
+    chunks: list[list[str]] = []
+    current: list[str] = []
+    for unit in unit_list:
+        if current and len(current) + len(unit) > target_size:
+            chunks.append(current)
+            current = []
+        current.extend(unit)
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -162,12 +249,23 @@ def build_cluster_specs(
 
     depot_assignment = cluster_orders_by_depot(orders, fields, depots)
 
+    units = _dependency_units(orders)
+    has_chains = any(len(members) > 1 for members in units.values())
+    depot_units = (
+        _regroup_units_by_root_depot(depot_assignment, units) if has_chains else None
+    )
+
     clusters: list[ClusterSpec] = []
     cluster_seq = 0
     for depot_id, oid_list in depot_assignment.items():
-        if not oid_list:
+        if depot_units is not None:
+            subclusters = _split_units_into_subclusters(
+                depot_units.get(depot_id, []), CLUSTER_TARGET_SIZE
+            )
+        elif oid_list:
+            subclusters = _split_into_subclusters(oid_list, CLUSTER_TARGET_SIZE)
+        else:
             continue
-        subclusters = _split_into_subclusters(oid_list, CLUSTER_TARGET_SIZE)
         for sub in subclusters:
             total_penalty = sum(
                 float(order_index[oid].penalty_per_day) for oid in sub

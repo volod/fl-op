@@ -197,6 +197,37 @@ class TestSolverIntegration:
                           "task_id", "depot_ref", "scheduled_start", "scheduled_end"):
                 assert field in pkg, f"dispatch package missing {field}"
 
+    def test_lns_improvement_pass_keeps_result_valid(self, monkeypatch):
+        """High-value cluster with LNS enabled: every task stays accounted for."""
+        from fl_op.core import constants
+
+        monkeypatch.setattr(constants, "CLUSTER_LNS_ENABLED", True)
+        monkeypatch.setattr(constants, "CLUSTER_LNS_TIME_LIMIT_S", 1)
+        monkeypatch.setattr(constants, "CLUSTER_LNS_MIN_PENALTY_EUR_PER_DAY", 50.0)
+        cd = _cluster(task_ids=["o0", "o1"], allocated={"v0": ["i0"]})
+        orders = [_order("o0", "f0"), _order("o1", "f1")]
+        dispatch, infeasible = solve_cluster(
+            cd, orders, [_vehicle("v0")], [_implement("i0")],
+            [_field("f0"), _field("f1", 48.6, 32.1)], [_depot()],
+            {}, {"v0": 0}, {"i0": 0},
+        )
+        covered = {d["task_id"] for d in dispatch} | {i["task_id"] for i in infeasible}
+        assert covered == {"o0", "o1"}
+        assert len(dispatch) == 2
+
+    def test_lns_skipped_below_value_threshold(self, monkeypatch):
+        """A cluster under the high-value threshold solves without the LNS pass."""
+        from fl_op.core import constants
+
+        monkeypatch.setattr(constants, "CLUSTER_LNS_ENABLED", True)
+        monkeypatch.setattr(constants, "CLUSTER_LNS_MIN_PENALTY_EUR_PER_DAY", 1.0e9)
+        cd = _cluster(task_ids=["o0"], allocated={"v0": ["i0"]})
+        dispatch, _ = solve_cluster(
+            cd, [_order("o0")], [_vehicle("v0")], [_implement("i0")],
+            [_field("f0")], [_depot()], {}, {"v0": 0}, {"i0": 0},
+        )
+        assert {d["task_id"] for d in dispatch} == {"o0"}
+
     def test_infeasible_order_does_not_sink_whole_cluster(self):
         cd = _cluster(task_ids=["o_ok", "o_late"], allocated={"v0": ["i0"]})
         ok = _order("o_ok", "f0")

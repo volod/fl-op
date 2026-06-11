@@ -23,6 +23,86 @@ PREALLOC_MIN_RESOURCES_PER_MULTI_ORDER_CLUSTER: int = int(
 )
 
 # ---------------------------------------------------------------------------
+# Global pre-allocation assignment model
+# ---------------------------------------------------------------------------
+# A small CP-SAT assignment model replaces the greedy per-cluster reservation
+# loop: scarce vehicles, implements, and operators are assigned across all
+# clusters at once. Greedy remains the fallback when the model is disabled,
+# oversized, or fails to return a solution within its time budget.
+
+# Master switch for the CP-SAT pre-allocation model (1 = on, 0 = greedy only).
+GLOBAL_ASSIGNMENT_ENABLED: bool = bool(int(os.environ.get("GLOBAL_ASSIGNMENT_ENABLED", "1")))
+
+# Wall-clock budget for the CP-SAT assignment solve.
+GLOBAL_ASSIGNMENT_TIME_LIMIT_S: float = float(
+    os.environ.get("GLOBAL_ASSIGNMENT_TIME_LIMIT_S", "10.0")
+)
+
+# Stop the assignment solve when within this relative gap of the bound. One
+# allocation is worth about 1/n_allocations of the objective (count-first
+# rewards), so a 0.1% gap never sacrifices an allocation, only tie-break
+# score polish.
+GLOBAL_ASSIGNMENT_RELATIVE_GAP: float = float(
+    os.environ.get("GLOBAL_ASSIGNMENT_RELATIVE_GAP", "0.001")
+)
+
+# Best-scoring candidate (vehicle, implement) pairs kept per cluster; bounds
+# the model so it stays a small assignment problem, not a full matching.
+GLOBAL_ASSIGNMENT_CANDIDATES_PER_CLUSTER: int = int(
+    os.environ.get("GLOBAL_ASSIGNMENT_CANDIDATES_PER_CLUSTER", "100")
+)
+
+# Diversity caps inside one cluster's truncated candidate list. Without them
+# the nearest vehicle scores best across every implement and floods the
+# top-K, leaving the model no alternative vehicles when neighbouring
+# clusters contest the same machine.
+GLOBAL_ASSIGNMENT_PAIRS_PER_VEHICLE: int = int(
+    os.environ.get("GLOBAL_ASSIGNMENT_PAIRS_PER_VEHICLE", "2")
+)
+GLOBAL_ASSIGNMENT_PAIRS_PER_IMPLEMENT: int = int(
+    os.environ.get("GLOBAL_ASSIGNMENT_PAIRS_PER_IMPLEMENT", "2")
+)
+
+# Total candidate count above which the model is skipped in favour of greedy.
+GLOBAL_ASSIGNMENT_MAX_MODEL_CANDIDATES: int = int(
+    os.environ.get("GLOBAL_ASSIGNMENT_MAX_MODEL_CANDIDATES", "20000")
+)
+
+# Integer objective units per score unit (CP-SAT needs integer coefficients).
+GLOBAL_ASSIGNMENT_SCORE_SCALE: int = int(
+    os.environ.get("GLOBAL_ASSIGNMENT_SCORE_SCALE", "1000")
+)
+
+# Fixed seed so equal-objective assignments resolve identically across runs.
+GLOBAL_ASSIGNMENT_RANDOM_SEED: int = int(
+    os.environ.get("GLOBAL_ASSIGNMENT_RANDOM_SEED", "7")
+)
+
+# Objective reward per cluster operation type the assigned operator is
+# certified for, and the smaller tiebreak bonus for an operator whose home
+# depot matches the cluster depot.
+OPERATOR_COVERAGE_REWARD: int = 100
+OPERATOR_DEPOT_MATCH_REWARD: int = 1
+
+# ---------------------------------------------------------------------------
+# Large Neighbourhood Search improvement pass
+# ---------------------------------------------------------------------------
+# Optional second routing solve for high-value clusters: continues from the
+# first OR-Tools solution with guided local search and LNS operators.
+
+# Opt-in switch for the per-cluster LNS improvement pass (1 = on).
+CLUSTER_LNS_ENABLED: bool = bool(int(os.environ.get("CLUSTER_LNS_ENABLED", "0")))
+
+# Additional wall-clock budget for the improvement solve, per cluster.
+CLUSTER_LNS_TIME_LIMIT_S: int = int(os.environ.get("CLUSTER_LNS_TIME_LIMIT_S", "10"))
+
+# A cluster qualifies as high-value when the sum of its tasks' lateness
+# penalties (EUR/day) reaches this threshold.
+CLUSTER_LNS_MIN_PENALTY_EUR_PER_DAY: float = float(
+    os.environ.get("CLUSTER_LNS_MIN_PENALTY_EUR_PER_DAY", "1000.0")
+)
+
+# ---------------------------------------------------------------------------
 # Weather restriction thresholds (hard safety constraints — not env-tunable)
 # ---------------------------------------------------------------------------
 
@@ -282,6 +362,12 @@ SERVICE_TASK_ESCALATED_DEADLINE_DAYS: int = int(
 # estimation (which is area-driven for field work) yields a small fixed effort.
 SERVICE_TASK_NOMINAL_AREA_HA: float = float(
     os.environ.get("SERVICE_TASK_NOMINAL_AREA_HA", "1.0")
+)
+
+# Explicit effort of a service visit; consumed through the canonical
+# service-duration term, overriding any quantity-driven duration estimate.
+SERVICE_TASK_DURATION_MINUTES: float = float(
+    os.environ.get("SERVICE_TASK_DURATION_MINUTES", "45.0")
 )
 
 # ---------------------------------------------------------------------------

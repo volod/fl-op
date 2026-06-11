@@ -6,6 +6,7 @@ MappingResult. New canonical entities plug in via ``register_entity_emitter``
 without touching the engine.
 """
 
+import logging
 from typing import Any, Callable
 
 from fl_op.canonical.asset import Asset, GeoLocation
@@ -18,6 +19,8 @@ from fl_op.canonical.observation import Observation
 from fl_op.canonical.task import Task
 from fl_op.mapping.bindings import BindingTable
 from fl_op.mapping.result import MappingResult
+
+logger = logging.getLogger(__name__)
 
 
 def build_asset(table: BindingTable, acc: dict[str, Any]) -> Asset:
@@ -69,12 +72,18 @@ def build_location(
 
 def build_task(table: BindingTable, acc: dict[str, Any]) -> Task:
     """Build a Task from one accumulated source row."""
+    duration = acc.get("serviceDurationMinutes")
     return Task(
         task_id=str(acc["taskId"]),
         order_id=str(acc.get("orderId", "")),
         operation_type=str(acc["operationType"]),
         location_ref=str(acc["locationRef"]),
         area_ha=float(acc["areaHa"]) if "areaHa" in acc else None,
+        work_quantity=float(acc["workQuantity"]) if "workQuantity" in acc else None,
+        work_quantity_unit=str(acc.get("workQuantityUnit", "")),
+        service_duration_minutes=int(float(duration)) if duration else None,
+        time_windows=parse_time_intervals(acc.get("timeWindows")),
+        depends_on_task_ref=str(acc.get("dependsOnTaskRef") or "") or None,
         deadline=acc.get("deadline"),
         priority_class=int(acc.get("priorityClass", 5)),
         revenue_value_eur=float(acc.get("revenueValue", 0.0)),
@@ -82,6 +91,28 @@ def build_task(table: BindingTable, acc: dict[str, Any]) -> Task:
         status=str(acc.get("status", "pending")),
         source_ref=f"{table.contract_id}:{acc['taskId']}",
     )
+
+
+def parse_time_intervals(raw: Any) -> list[TimeInterval]:
+    """Parse ISO-8601 "from/to" interval strings into TimeInterval objects.
+
+    Accepts a list of interval strings (the coerced interval-set value) or
+    None; malformed items are skipped so one bad window cannot drop the task.
+    """
+    if not raw:
+        return []
+    intervals: list[TimeInterval] = []
+    for item in raw:
+        parts = str(item).split("/", 1)
+        if len(parts) != 2 or not parts[0]:
+            continue
+        try:
+            intervals.append(
+                TimeInterval(**{"from": parts[0], "to": parts[1] or None})
+            )
+        except Exception:
+            logger.warning("Skipping malformed time window %r", item)
+    return intervals
 
 
 def build_forecast(table: BindingTable, acc: dict[str, Any]) -> Forecast:

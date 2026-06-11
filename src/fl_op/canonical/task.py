@@ -38,8 +38,15 @@ class Task(BaseModel):
     operation_type: str
     location_ref: str
     area_ha: Optional[float] = None
+    # Generic work demand; preferred over area_ha for duration estimation when
+    # present. The unit declares what the quantity counts (ha, m3, items, ...).
+    work_quantity: Optional[float] = None
+    work_quantity_unit: str = ""
     service_duration_minutes: Optional[int] = None
     time_windows: list[TimeInterval] = Field(default_factory=list)
+    # Predecessor task that must be served before this one. A reference to a
+    # task absent from the planning input is treated as already satisfied.
+    depends_on_task_ref: Optional[str] = None
     deadline: Optional[datetime] = None
     priority_class: int = 5
     mandatory: bool = False

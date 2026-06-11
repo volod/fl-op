@@ -32,10 +32,12 @@ import logging
 import multiprocessing
 import os
 from concurrent.futures import Future, ProcessPoolExecutor, as_completed
-from typing import Any
+from typing import Any, Optional
 
 from fl_op.canonical.enums import ReasonCode
+from fl_op.core import constants
 from fl_op.core.constants import CLUSTER_SOLVE_TIME_LIMIT_S, SOLVER_WORKERS
+from fl_op.solver.cluster.routing import HeldWindows
 from fl_op.solver.types import ClusterSpec
 
 logger = logging.getLogger(__name__)
@@ -63,12 +65,13 @@ def _worker_fn(
     greedy_assignment: dict[str, tuple[int, int]],
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
+    held_windows: Optional[HeldWindows] = None,
 ) -> tuple[list[dict], list[dict]]:
     """Top-level worker function — module-level def required for pickling."""
     from fl_op.solver.cluster_solver import solve_cluster
     return solve_cluster(
         cluster_dict, orders, vehicles, implements, fields, depots,
-        greedy_assignment, vehicle_index, implement_index,
+        greedy_assignment, vehicle_index, implement_index, held_windows,
     )
 
 
@@ -82,6 +85,7 @@ def pool_solve(
     greedy_assignment: dict[str, tuple[int, int]],
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
+    held_windows: Optional[HeldWindows] = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Solve all clusters in parallel; return (all_dispatch, all_infeasible)."""
     if not clusters:
@@ -93,7 +97,11 @@ def pool_solve(
         SOLVER_WORKERS if SOLVER_WORKERS > 0 else cpu_count,
     ))
 
-    task_cap_s = CLUSTER_SOLVE_TIME_LIMIT_S + _SOLVER_GRACE_S
+    # The optional LNS improvement pass adds its own per-cluster budget.
+    lns_budget_s = (
+        constants.CLUSTER_LNS_TIME_LIMIT_S if constants.CLUSTER_LNS_ENABLED else 0
+    )
+    task_cap_s = CLUSTER_SOLVE_TIME_LIMIT_S + lns_budget_s + _SOLVER_GRACE_S
     n_rounds = (len(clusters) + n_workers - 1) // n_workers
     overall_timeout = (n_rounds + 1) * task_cap_s
 
@@ -112,7 +120,7 @@ def pool_solve(
             executor.submit(
                 _worker_fn,
                 cd, orders, vehicles, implements, fields, depots,
-                greedy_assignment, vehicle_index, implement_index,
+                greedy_assignment, vehicle_index, implement_index, held_windows,
             ): cd
             for cd in cluster_dicts
         }

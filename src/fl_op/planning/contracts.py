@@ -90,7 +90,22 @@ def run_contracts_validate(persist: bool = False) -> bool:
         for err in report.profile_errors:
             logger.error("  profile: %s", err)
 
-    if persist and report.ok:
+    # A metadata-hash drift is exactly what --write exists to acknowledge: a
+    # reviewed mapping change. Persist when drift is the only kind of error;
+    # any other validation failure still blocks persistence.
+    from fl_op.contracts.registry import METADATA_DRIFT_MARKER
+
+    only_drift_errors = (
+        report.profile_ok
+        and report.canonical_model.ok
+        and any(c.errors for c in report.contracts)
+        and all(
+            c.generation_ready
+            and all(METADATA_DRIFT_MARKER in err for err in c.errors)
+            for c in report.contracts
+        )
+    )
+    if persist and (report.ok or only_drift_errors):
         fps = {
             c.contract_id: {
                 k: v
@@ -103,4 +118,9 @@ def run_contracts_validate(persist: bool = False) -> bool:
             for c in report.contracts
         }
         registry.persist_fingerprints(fps)
+        if only_drift_errors:
+            logger.info(
+                "[ok] acknowledged optimization-metadata change; fingerprints persisted"
+            )
+            return True
     return report.ok

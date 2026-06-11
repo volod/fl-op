@@ -127,3 +127,33 @@ schema:
             value:
               avro: {default: 0.0}
               proto: {fieldNumber: 10}
+      - name: depends_on_order_id
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Order that must be served first (multi-stage field work).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 11}
+      - name: workable_windows
+        logicalType: array
+        physicalType: string
+        required: false
+        description: Workable ISO-8601 "from/to" intervals (stringified list).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: "[]"}
+              proto: {fieldNumber: 12}
+      - name: service_duration_minutes
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Explicit effort override in minutes; 0 means estimate from area.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: 0.0}
+              proto: {fieldNumber: 13}

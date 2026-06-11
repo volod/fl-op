@@ -1,10 +1,10 @@
 """Top-level inner solve flow for one prepared cluster."""
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from fl_op.solver.cluster.context import prepare_cluster_context
-from fl_op.solver.cluster.routing import solve_routing_context
+from fl_op.solver.cluster.routing import HeldWindows, solve_routing_context
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ def solve_cluster_inner(
     all_depots: list[dict[str, Any]],
     greedy_assignment: dict[str, tuple[int, int]],
     vehicle_index: dict[str, int],
+    held_windows: Optional[HeldWindows] = None,
 ) -> tuple[list[dict], list[dict]]:
     """Prepare and solve one cluster, returning dispatch and infeasibility rows."""
     context, early_result = prepare_cluster_context(
@@ -37,6 +38,7 @@ def solve_cluster_inner(
         cluster_dict,
         greedy_assignment,
         vehicle_index,
+        held_windows,
     )
     logger.debug(
         "Cluster %s: %d dispatched, %d infeasible",

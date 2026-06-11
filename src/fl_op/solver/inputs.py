@@ -107,6 +107,11 @@ _CANONICAL_KEY: dict[str, str] = {
     "task.locationRef": "location_ref",
     "task.operationType": "operation_type",
     "task.areaHa": "area",
+    "task.workQuantity": "work_quantity",
+    "task.workQuantityUnit": "work_quantity_unit",
+    "task.serviceDurationMinutes": "service_duration_min",
+    "task.timeWindows": "time_windows",
+    "task.dependsOnTaskRef": "depends_on_task_ref",
     "task.deadline": "deadline",
     "task.penaltyPerDay": "penalty_per_day",
     "task.priorityClass": "priority_class",
@@ -213,6 +218,10 @@ def _task_value(task: "Task", binding: FieldBinding) -> Any:
         ("locationRef",): task.location_ref,
         ("operationType",): task.operation_type,
         ("areaHa",): task.area_ha,
+        ("workQuantity",): task.work_quantity,
+        ("workQuantityUnit",): task.work_quantity_unit,
+        ("serviceDurationMinutes",): task.service_duration_minutes,
+        ("dependsOnTaskRef",): task.depends_on_task_ref,
         ("penaltyPerDay",): task.penalty_per_day_eur,
         ("priorityClass",): task.priority_class,
         ("status",): task.status,
@@ -221,6 +230,11 @@ def _task_value(task: "Task", binding: FieldBinding) -> Any:
     key = tuple(path)
     if key == ("deadline",):
         return task.deadline.isoformat() if task.deadline else None
+    if key == ("timeWindows",):
+        return [
+            f"{w.from_.isoformat()}/{w.to.isoformat() if w.to else ''}"
+            for w in task.time_windows
+        ]
     return mapping.get(key)
 
 

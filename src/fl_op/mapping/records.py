@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 _NUMERIC_KINDS = {
     "power", "mass", "volume", "money", "area", "speed", "length",
-    "flow-rate", "angle", "ratio",
+    "flow-rate", "angle", "ratio", "work", "duration",
 }
 _INTEGER_KINDS = {"time"}
 
@@ -45,6 +45,8 @@ def coerce_value(meta: XOptFieldMeta, raw: Any) -> Any:
     """Coerce a raw source value into its canonical Python type per quantityKind."""
     kind = meta.quantity_kind
     if kind == "categorical-set":
+        return parse_list(raw)
+    if kind == "interval-set":
         return parse_list(raw)
     if kind == "timestamp":
         return parse_timestamp(raw)

@@ -91,16 +91,26 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    capabilities (`solver/feasibility.py`).
 3. Filter candidates per task by operation type.
 4. Cluster tasks by nearest depot; split large groups.
-5. Pre-allocate prime movers, related equipment, and operators by penalty
-   priority; each cluster gets the operator certified for the most of its
-   operation types.
+5. Pre-allocate prime movers, related equipment, and operators with a small
+   CP-SAT global assignment model (`solver/allocation/global_model.py`): all
+   clusters are decided at once, maximizing allocated bundles first and
+   breaking ties by the shared greedy score; operators maximize certified
+   coverage of cluster operation types with a depot-match tiebreak. The
+   penalty-ordered greedy reservation loop remains the fallback when the
+   model is disabled (`GLOBAL_ASSIGNMENT_ENABLED=0`), oversized, or finds no
+   solution in time.
 6. Enforce operator qualification (tasks the cluster operator is not
    certified for -> `NO_AVAILABLE_OPERATOR`) and material availability
    (cumulative per-operation demand from the profile's `materialDemand`
    charged against depot inventory, highest penalty first ->
    `INSUFFICIENT_MATERIAL`).
 7. Build a greedy margin-based warm start.
-8. Solve each cluster as an OR-Tools routing problem in a spawned process pool.
+8. Solve each cluster as an OR-Tools routing problem in a spawned process
+   pool. With `CLUSTER_LNS_ENABLED=1`, clusters whose total lateness penalty
+   reaches `CLUSTER_LNS_MIN_PENALTY_EUR_PER_DAY` get a second improvement
+   solve from the first solution (guided local search plus path/inactive LNS
+   operators) bounded by `CLUSTER_LNS_TIME_LIMIT_S`; the first solution is
+   kept unless strictly improved.
 9. Aggregate dispatch packages, canonical reason codes, KPIs, and reports.
 
 Enforcement activates only through the adapters (an `EnforcementPolicy` built
@@ -139,9 +149,11 @@ Reuses the solver chain on a filtered canonical payload:
 
 - Started tasks and tasks inside the freeze window are frozen.
 - Assignments whose task and assets still exist are carried forward unchanged.
-- Tasks affected by new or unavailable assets are re-solved; resources held by
-  frozen/carried assignments are excluded from the re-solve to avoid
-  double-booking.
+- Tasks affected by new or unavailable assets are re-solved. Vehicles held by
+  frozen/carried assignments stay available to the re-solve with their busy
+  intervals passed as vehicle time-window breaks in the routing model, so a
+  held vehicle is reused only in a real non-overlapping gap; held implements
+  and operators are excluded for the hold duration.
 - Each event yields an immutable plan revision with churn and plan-instability
   metrics.
 - `fl-op plan diff-revisions` compares consecutive revisions of a rolling run
