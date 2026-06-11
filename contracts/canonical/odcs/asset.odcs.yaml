@@ -151,6 +151,15 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: asset.capabilities.fertilizerCapacity, semanticTerm: urn:xopt:capability:fertilizer-capacity, canonicalUnit: kg, quantityKind: mass, planningUse: [capacity]}
+      - name: loadCapacity
+        logicalType: number
+        required: false
+        description: >-
+          Total mass the asset can carry on one route (pickup-and-delivery
+          flows). Absent or zero means the load is unconstrained.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.loadCapacity, semanticTerm: urn:xopt:capability:load-capacity, canonicalUnit: kg, quantityKind: mass, planningUse: [capacity]}
       - name: compatibleOperations
         logicalType: array
         required: false

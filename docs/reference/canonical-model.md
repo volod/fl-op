@@ -36,8 +36,9 @@ entities built according to the contracts described here.
 
 - `canonicalModelRef: urn:xopt:model:canonical:0.1.0`
 - the **entity registry** (`asset`, `location`, `task`, `forecast`,
-  `observation`, `commitment`, `execution-event`), each pointing at an ODCS
-  contract under `contracts/canonical/odcs/`;
+  `observation`, `commitment`, `execution-event`, `travel-link`, `cost-rate`,
+  and the output entity `plan`), each pointing at an ODCS contract under
+  `contracts/canonical/odcs/`;
 - the **semantic-term vocabulary**: the controlled set of meanings a mapping may
   bind to, each fixing `valueType`, `quantityKind`, and `canonicalUnit`
   (e.g. `urn:xopt:capability:rated-power -> {power, kW}`).
@@ -73,6 +74,9 @@ flattens these into a `CanonicalModel` exposing `allowed_bindings(entity)`,
 | `observation` | `observation.observationId`, `observation.entityRef`, `observation.metric`, `observation.observedAt` | A measured value about an entity: sensor reading, telemetry sample, inspection result. One shape covers historical batches and realtime streamed readings; numeric readings bind `observation.value`, categorical readings bind `observation.stateValue`. The `metric` column carries canonical metric codes (`battery-level`, `health-status`, ...). |
 | `commitment` | `commitment.commitmentId` | Contractual obligations (deadline, lateness penalty, hardness) for domains that keep them separate from order rows. |
 | `execution-event` | `event.eventId`, `event.eventType`, `event.observedAt`, `event.entityRef` | Rolling-dispatch replanning triggers, including `task.progress` (partial completion), `inventory.adjusted`, `observation.recorded` for streamed readings, and `entity.corrected` for corrected source rows. |
+| `travel-link` | `travelLink.linkId`, `travelLink.fromLocationRef`, `travelLink.toLocationRef`, `travelLink.travelTimeS` | Directed travel-network edges (distance-matrix entries / road-graph arcs); pairs without a link fall back to haversine estimates. |
+| `cost-rate` | `costRate.costRateId`, `costRate.rateType`, `costRate.unitPrice`, `costRate.perUnit` | Priced resource rates (fuel, materials) with optional validity windows; engine cost constants are the fallback. |
+| `plan` (output) | `plan.planId`, `plan.revisionId`, `plan.snapshotRef`, ... | The plan output contract, mirroring the input contracts; produced plans are validated against it at publication (`fl_op/contracts/plan_contract.py`). |
 
 ## Stationary-equipment monitoring
 

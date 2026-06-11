@@ -74,6 +74,13 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: task.serviceDurationMinutes, semanticTerm: urn:xopt:attribute:service-duration, canonicalUnit: min, quantityKind: duration, planningUse: [duration-estimation]}
+      - name: loadDemand
+        logicalType: number
+        required: false
+        description: Mass the bundle must carry to the task (delivered material).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.loadDemand, semanticTerm: urn:xopt:attribute:load-demand, canonicalUnit: kg, quantityKind: mass, planningUse: [capacity]}
       - name: dependsOnTaskRef
         logicalType: string
         required: false

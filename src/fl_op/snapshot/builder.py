@@ -35,7 +35,7 @@ from fl_op.contracts.registry import FileRegistry
 from fl_op.io import detect_format, get_codec, locate_source
 from fl_op.mapping.engine import MappingEngine, MappingResult
 from fl_op.snapshot.assessment import assess_observations
-from fl_op.snapshot.bundles import generate_bundles
+from fl_op.snapshot.bundles import summarize_bundles
 from fl_op.snapshot.hashing import compute_snapshot_hash
 from fl_op.snapshot.monitoring import derive_service_tasks
 from fl_op.snapshot.quality_trend import degrading_sources, record_error_rates
@@ -190,9 +190,7 @@ class SnapshotBuilder:
         result.findings.extend(
             _missing_source_findings(missing_sources or [], generated_at)
         )
-        bundles, bundle_diagnostics = generate_bundles(
-            result.assets, configuration_version=MAPPING_VERSION
-        )
+        bundle_summary = summarize_bundles(result.assets)
 
         # Statistical assessment: bound series by the retention window, exclude
         # outlier and source-flagged readings, floor the confidence of
@@ -243,13 +241,14 @@ class SnapshotBuilder:
             version_dimensions=self._version_dimensions(),
             assets=result.assets,
             locations=result.locations,
-            bundles=bundles,
-            bundle_diagnostics=bundle_diagnostics,
+            bundle_summary=bundle_summary,
             tasks=tasks,
             inventory=result.inventory,
             forecasts=result.forecasts,
             observations=assessment.observations,
             commitments=result.commitments,
+            travel_links=result.travel_links,
+            cost_rates=result.cost_rates,
             source_watermarks=assessment.source_watermarks,
             quality_findings=result.findings,
             quality_summary=quality_summary,
@@ -266,13 +265,13 @@ class SnapshotBuilder:
             }
         )
         logger.info(
-            "Built %s snapshot %s (hash %s): %d assets, %d tasks, %d bundles",
+            "Built %s snapshot %s (hash %s): %d assets, %d tasks, %d feasible bundle pairs",
             planning_mode.value,
             snapshot_id,
             snapshot_hash[:12],
             len(snapshot.assets),
             len(snapshot.tasks),
-            len(snapshot.bundles),
+            snapshot.bundle_summary.n_feasible_pairs,
         )
         return snapshot
 

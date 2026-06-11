@@ -46,10 +46,14 @@ a domain onto the ontology see [domain-mapping.md](domain-mapping.md).
 | `forecast` | A predicted environmental condition for a location and time interval (wind, precipitation, soil moisture). | `odcs/forecast.odcs.yaml` |
 | `observation` | A measured value about an entity at a point in time: sensor reading, telemetry sample, inspection result. One shape serves historical batches and realtime streams. | `odcs/observation.odcs.yaml` |
 | `execution-event` | The dynamics envelope: a typed trigger (`task.started`, `task.progress`, `order.created`, `order.cancelled`, `asset.unavailable`, `inventory.adjusted`, `forecast.updated`, `observation.recorded`, `entity.corrected`) that mutates state and forces a rolling re-solve. | `odcs/execution-event.odcs.yaml` |
+| `travel-link` | One directed travel-network edge between two locations with a measured travel time (distance-matrix entry / road-graph arc). The network may be sparse: pairs without a link fall back to haversine distance and asset travel speed. | `odcs/travel-link.odcs.yaml` |
+| `cost-rate` | A priced resource rate (fuel, consumable material) with an optional validity window. Engine cost constants are the fallback for unpriced resources. | `odcs/cost-rate.odcs.yaml` |
+| `plan` | The canonical OUTPUT contract: the plan/revision envelope plus assignment, unassigned-task, and material-reservation records. Produced by adapters and validated on publication (`contracts/plan_contract.py`), never consumed as snapshot input. | `odcs/plan.odcs.yaml` |
 
 Outputs (`Plan`, `Assignment`, `UnassignedTask`, `MaterialReservation`) are
-canonical Python entities (`src/fl_op/canonical/plan.py`) produced by adapters;
-they are not input contracts.
+canonical Python entities (`src/fl_op/canonical/plan.py`) produced by adapters
+and governed by the `plan` output contract above, mirroring the input entity
+contracts.
 
 ## Semantic-term vocabulary
 
@@ -70,6 +74,10 @@ one comparable scale.
 | `urn:xopt:forecast:*` | Predicted environmental values | `wind-speed` (m/s), `precipitation-rate` (mm/h) |
 | `urn:xopt:observation:*` | Measured values | `metric`, `value`, `state`, `unit` |
 | `urn:xopt:time:*` | Timestamps and intervals | `observed-at`, `forecast-from`, `valid-to` |
+| `urn:xopt:travel:*` | Travel-network edge measures | `travel-time` (s), `distance` (km) |
+| `urn:xopt:cost:*` | Priced resource rates | `rate-type`, `unit-price` (EUR), `per-unit` |
+| `urn:xopt:restriction:*` | Location restrictions | `prohibited-operations`, `restricted-windows` |
+| `urn:xopt:plan:*` | Plan output qualifiers | `planning-mode`, `status`, `reason-code` |
 
 Observation `metric` values are canonical metric codes the engine interprets
 (`battery-level`, `health-status`). Raw source vocabularies are normalized to
@@ -90,6 +98,13 @@ monitoring policy.
 | Environment-windowed operations (weather) | forecast values per location/interval, profile `weatherPolicy` sensitivity | Implemented (any-compliant-window feasibility per task) |
 | Material/inventory feasibility | location `inventory.*`, profile `materialDemand` rates | Implemented (cumulative depot charge, penalty-priority) |
 | Operator qualification | `operator-certification` capability vs task operation types | Implemented (per-cluster operator coverage) |
+| Multi-stage work sequences | task `depends-on` relation | Implemented (chain-aware clustering, in-model precedence, cascade exclusion) |
+| Multiple workable time windows | task `workable-windows` | Implemented (pre-filter + in-model start intervals) |
+| Network-based travel times | travel-link entity | Implemented (direct link lookup with reverse/haversine fallback) |
+| Capacity-constrained delivery (CVRP-style) | asset `load-capacity` vs task `load-demand` | Implemented (cumulative route-load dimension, single-trip semantics) |
+| Restricted zones / time-restricted areas | location `prohibited-operations`, `restricted-windows` | Implemented (zone exclusion + start-interval blocking) |
+| Data-driven cost rates | cost-rate entity | Implemented (fuel/material price resolution with constant fallback) |
+| Governed plan outputs | plan output contract | Implemented (publication-time binding validation) |
 | Standalone contractual commitments | commitment entity | Declared; engine consumes task-embedded deadline/penalty today |
 
 ## Domain coverage
@@ -98,23 +113,27 @@ The ontology is domain-agnostic; a domain is just a mapping pack:
 
 | Domain | Pack | What maps onto what |
 |---|---|---|
-| Agricultural custom services | `contracts/domains/agricultural/` (full: data generator + solver wiring) | vehicles/implements/operators -> asset roles; depots/fields -> location; orders -> task; weather -> forecast; sensors -> stationary asset; sensor readings -> observation |
-| Construction earthworks | `contracts/domains/construction/` (mapping pack) | machines/attachments/operators -> asset roles; yards/sites -> location; jobs -> task |
-| Road maintenance, utilities, marine, logistics | not yet authored | same entities; stationary roadside equipment is an asset with `mobility: stationary`, inspection rounds are observation sources, service visits are derived tasks |
+| Agricultural custom services | `contracts/domains/agricultural/` (full: data generator + solver wiring) | vehicles/implements/operators -> asset roles; depots/fields -> location; orders -> task; weather -> forecast; sensors -> stationary asset; sensor readings -> observation; routes -> travel-link; prices -> cost-rate |
+| Construction earthworks | `contracts/domains/construction/` (full: data generator + solver wiring; run with `ACTIVE_DOMAIN=construction`) | machines/attachments/operators -> asset roles; yards/sites -> location; jobs -> task |
+| Roadside infrastructure | `contracts/domains/roadside/` (validation-level example pack) | signage/sensors -> stationary asset (`mobility: stationary`); road segments -> location with closure-curfew restriction windows; maintenance depots -> location; inspection rounds -> observation (condition ratings normalized to canonical metric codes) |
+| Utilities, marine, logistics | not yet authored | same entities; the roadside pack is the template for monitoring-driven domains |
 
 ## Known ontology gaps
 
 Deliberately not yet modeled (tracked in
 [future-improvements.md](../future-improvements.md)):
 
-- Task precedence / dependency relations (multi-stage work sequences).
-- Multiple task time windows; only a single deadline binding exists.
-- A travel-network entity (distance/time matrices, road graphs); travel is
-  derived from haversine distance and asset travel speed.
-- A generic work-quantity term; duration estimation is area-driven (`ha`).
-- Vehicle load capacities for pickup-and-delivery flows.
-- Restricted zones and time-restricted areas beyond soil-type restrictions.
-- Cost rates as data entities (fuel/material prices are engine constants).
+- Travel links are consumed as direct pair lookups; multi-hop shortest paths
+  over a road graph are not composed, and clustering / greedy repositioning
+  stay haversine-based.
+- One aggregate load dimension per route; per-material compartments, depot
+  reloads (multi-trip), and true pickup-and-delivery pairing are absent.
+- Restriction windows block execution *start*, not occupancy, and restricted
+  zones are per-location operation lists, not geometric polygons.
+- Cost rates feed greedy scoring and KPIs; routing arc costs remain
+  time-based and dispatch margins do not yet subtract resolved costs.
+- Work-rate capabilities exist only for area-like quantities; non-area work
+  units fall back to a nominal effort.
 
 ## Algorithms
 
@@ -125,7 +144,11 @@ for the mathematical model):
 1. **Profile-constraint enforcement** (`solver/enforcement.py`): weather
    windows (per-operation sensitivity from the profile), operator
    qualification per cluster, and cumulative material availability per depot;
-   every exclusion is an explicit reason-coded record.
+   every exclusion is an explicit reason-coded record. Structural data
+   semantics are filtered alongside (`solver/task_relations.py`,
+   `solver/restrictions.py`): unmeetable workable windows, restricted zones
+   and fully-blocking restriction windows, and dependents of excluded
+   predecessors.
 2. **Compatibility matrix** (`solver/feasibility.py`): vectorised power-margin
    feasibility between prime movers and related equipment.
 3. **Operation-type filter** (`solver/preprocessing.py`): per-task candidate
@@ -140,7 +163,11 @@ for the mathematical model):
    scored construction heuristic.
 7. **OR-Tools routing per cluster** (`solver/routing_model.py`,
    `solver/cluster_pool.py`): each cluster solved as a routing problem in a
-   spawned process pool, warm-started from the greedy solution.
+   spawned process pool, warm-started from the greedy solution. Arc times
+   come from travel-link lookups with haversine fallback; admissible start
+   intervals encode workable windows minus restriction windows; a load
+   dimension bounds route mass by vehicle `load-capacity` when tasks demand
+   loads.
 8. **Aggregation** (`solver/aggregator.py`): dispatch packages, canonical
    reason codes, KPIs.
 

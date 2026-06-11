@@ -40,6 +40,24 @@ entities:
   execution-event:
     contract: odcs/execution-event.odcs.yaml
     description: An operational event envelope that triggers rolling re-solves.
+  travel-link:
+    contract: odcs/travel-link.odcs.yaml
+    description: >-
+      One directed travel-network edge between two locations with a measured
+      travel time (road graph / distance-matrix entry). Location pairs without
+      a link fall back to haversine distance and asset travel speed.
+  cost-rate:
+    contract: odcs/cost-rate.odcs.yaml
+    description: >-
+      A priced resource rate (fuel, consumable material) with a validity
+      window. Engine cost constants are the fallback when no rate is mapped.
+  plan:
+    contract: odcs/plan.odcs.yaml
+    description: >-
+      The canonical OUTPUT contract: the plan envelope with its assignment,
+      unassigned-task, and material-reservation records. Produced by solver
+      adapters, never consumed as snapshot input; declared here so outputs are
+      governed by the same contract machinery as inputs.
 
 # Controlled vocabulary of semantic terms. A domain mapping may only bind a
 # physical field to a canonical field whose semanticTerm appears here. Each term
@@ -54,6 +72,13 @@ semanticTerms:
   urn:xopt:identity:event-id: {valueType: string, quantityKind: identifier}
   urn:xopt:identity:observation-id: {valueType: string, quantityKind: identifier}
   urn:xopt:identity:commitment-id: {valueType: string, quantityKind: identifier}
+  urn:xopt:identity:travel-link-id: {valueType: string, quantityKind: identifier}
+  urn:xopt:identity:cost-rate-id: {valueType: string, quantityKind: identifier}
+  urn:xopt:identity:plan-id: {valueType: string, quantityKind: identifier}
+  urn:xopt:identity:revision-id: {valueType: string, quantityKind: identifier}
+  urn:xopt:identity:assignment-id: {valueType: string, quantityKind: identifier}
+  urn:xopt:identity:reservation-id: {valueType: string, quantityKind: identifier}
+  urn:xopt:identity:snapshot-id: {valueType: string, quantityKind: identifier}
   # -- attributes ------------------------------------------------------------
   urn:xopt:attribute:asset-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:display-name: {valueType: string, quantityKind: text}
@@ -69,6 +94,9 @@ semanticTerms:
   # Explicit effort override: when present it wins over any quantity-driven
   # duration estimate (fixed-effort visits, externally estimated jobs).
   urn:xopt:attribute:service-duration: {valueType: number, quantityKind: duration, canonicalUnit: min}
+  # Mass the bundle must carry to the task (delivered material); enforced as a
+  # cumulative route-load constraint against the prime mover's load capacity.
+  urn:xopt:attribute:load-demand: {valueType: number, quantityKind: mass, canonicalUnit: kg}
   urn:xopt:attribute:polygon: {valueType: array, quantityKind: geometry}
   urn:xopt:attribute:soil-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:operation-type: {valueType: string, quantityKind: categorical}
@@ -100,6 +128,9 @@ semanticTerms:
   urn:xopt:capability:min-operating-speed: {valueType: number, quantityKind: speed, canonicalUnit: km/h}
   urn:xopt:capability:max-operating-speed: {valueType: number, quantityKind: speed, canonicalUnit: km/h}
   urn:xopt:capability:fertilizer-capacity: {valueType: number, quantityKind: mass, canonicalUnit: kg}
+  # Total mass a prime mover can carry on one route (pickup-and-delivery
+  # flows); absent or zero means the vehicle's load is unconstrained.
+  urn:xopt:capability:load-capacity: {valueType: number, quantityKind: mass, canonicalUnit: kg}
   urn:xopt:capability:compatible-operations: {valueType: array, quantityKind: categorical-set}
   urn:xopt:capability:operator-certification: {valueType: array, quantityKind: categorical-set}
   # -- availability ----------------------------------------------------------
@@ -117,6 +148,37 @@ semanticTerms:
   # sequences). A reference to a task absent from the planning input is treated
   # as already satisfied (the predecessor completed in an earlier revision).
   urn:xopt:relationship:depends-on: {valueType: string, quantityKind: identifier}
+  # Directed travel-network edge endpoints (travel-link entity).
+  urn:xopt:relationship:from-location: {valueType: string, quantityKind: identifier}
+  urn:xopt:relationship:to-location: {valueType: string, quantityKind: identifier}
+  # Task served by a plan record (assignment, unassigned-task, reservation).
+  urn:xopt:relationship:task: {valueType: string, quantityKind: identifier}
+  # Resources participating in one plan record (asset bundle, operators).
+  urn:xopt:relationship:entity-refs: {valueType: array, quantityKind: categorical-set}
+  # -- travel network ----------------------------------------------------------
+  urn:xopt:travel:travel-time: {valueType: number, quantityKind: duration, canonicalUnit: s}
+  urn:xopt:travel:distance: {valueType: number, quantityKind: length, canonicalUnit: km}
+  # -- cost rates --------------------------------------------------------------
+  # rate-type uses canonical resource codes the engine interprets ("fuel",
+  # "fertilizer"); per-unit declares what one unit-price buys (L, kg, ...).
+  urn:xopt:cost:rate-type: {valueType: string, quantityKind: categorical}
+  urn:xopt:cost:unit-price: {valueType: number, quantityKind: money, canonicalUnit: EUR}
+  urn:xopt:cost:per-unit: {valueType: string, quantityKind: categorical}
+  # -- restrictions ------------------------------------------------------------
+  # Operation types prohibited at a location (restricted zone), and ISO-8601
+  # "from/to" intervals during which no execution may start there
+  # (time-restricted area: curfew, protection period).
+  urn:xopt:restriction:prohibited-operations: {valueType: array, quantityKind: categorical-set}
+  urn:xopt:restriction:restricted-windows: {valueType: array, quantityKind: interval-set}
+  # -- plan output -------------------------------------------------------------
+  urn:xopt:plan:planning-mode: {valueType: string, quantityKind: categorical}
+  urn:xopt:plan:status: {valueType: string, quantityKind: categorical}
+  urn:xopt:plan:reason-code: {valueType: string, quantityKind: categorical}
+  urn:xopt:plan:reservation-status: {valueType: string, quantityKind: categorical}
+  urn:xopt:plan:expected-cost: {valueType: number, quantityKind: money, canonicalUnit: EUR}
+  urn:xopt:plan:expected-margin: {valueType: number, quantityKind: money, canonicalUnit: EUR}
+  urn:xopt:inventory:material-type: {valueType: string, quantityKind: categorical}
+  urn:xopt:inventory:quantity: {valueType: number, quantityKind: measurement}
   # -- inventory -------------------------------------------------------------
   urn:xopt:inventory:fuel: {valueType: number, quantityKind: volume, canonicalUnit: L}
   urn:xopt:inventory:fertilizer: {valueType: number, quantityKind: mass, canonicalUnit: kg}
@@ -130,6 +192,9 @@ semanticTerms:
   urn:xopt:time:observed-at: {valueType: string, quantityKind: timestamp}
   urn:xopt:time:valid-from: {valueType: string, quantityKind: timestamp}
   urn:xopt:time:valid-to: {valueType: string, quantityKind: timestamp}
+  urn:xopt:time:generated-at: {valueType: string, quantityKind: timestamp}
+  urn:xopt:time:planned-start: {valueType: string, quantityKind: timestamp}
+  urn:xopt:time:planned-end: {valueType: string, quantityKind: timestamp}
   # Workable windows the task execution must start within: a list of ISO-8601
   # "from/to" interval strings. Absent or empty means any time up to the deadline.
   urn:xopt:time:workable-windows: {valueType: array, quantityKind: interval-set}

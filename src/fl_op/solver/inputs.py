@@ -19,6 +19,7 @@ from fl_op.contracts.registry import FileRegistry
 from fl_op.contracts.xopt import FieldBinding
 from fl_op.mapping.bindings import load_binding_table
 from fl_op.solver.types import (
+    CostRateRow,
     DepotRow,
     ForecastRow,
     OperatorRow,
@@ -26,14 +27,17 @@ from fl_op.solver.types import (
     RelatedRow,
     SiteRow,
     TaskRow,
+    TravelLinkRow,
     _SolverRow,
 )
 
 if TYPE_CHECKING:
     from fl_op.canonical.asset import Asset
+    from fl_op.canonical.cost import CostRate
     from fl_op.canonical.location import Location
     from fl_op.canonical.snapshot import PlanningSnapshot
     from fl_op.canonical.task import Task
+    from fl_op.canonical.travel import TravelLink
 
 logger = logging.getLogger(__name__)
 
@@ -45,13 +49,16 @@ SECTION_SITES = "sites"
 SECTION_DEPOTS = "depots"
 SECTION_TASKS = "tasks"
 SECTION_FORECASTS = "forecasts"
+SECTION_TRAVEL_LINKS = "travel_links"
+SECTION_COST_RATES = "cost_rates"
 
 # Canonical asset roles a prime mover / related equipment / operator plays.
 ROLE_PRIME_MOVER = "mobile-prime-mover"
 ROLE_RELATED = "implement"
 ROLE_OPERATOR = "operator"
+ROLE_DEPOT = "depot"
 
-# Contract id -> canonical row section.
+# Contract id -> canonical row section (agricultural and construction packs).
 _CONTRACT_SECTION: dict[str, str] = {
     "vehicles": SECTION_PRIME_MOVERS,
     "implements": SECTION_RELATED,
@@ -59,6 +66,14 @@ _CONTRACT_SECTION: dict[str, str] = {
     "fields": SECTION_SITES,
     "depots": SECTION_DEPOTS,
     "orders": SECTION_TASKS,
+    "routes": SECTION_TRAVEL_LINKS,
+    "prices": SECTION_COST_RATES,
+    "machines": SECTION_PRIME_MOVERS,
+    "attachments": SECTION_RELATED,
+    "construction-operators": SECTION_OPERATORS,
+    "sites": SECTION_SITES,
+    "yards": SECTION_DEPOTS,
+    "jobs": SECTION_TASKS,
 }
 
 # Contract id -> frozen solver-row dataclass it projects into.
@@ -69,6 +84,14 @@ _CONTRACT_ROW_CLASS: dict[str, type[_SolverRow]] = {
     "fields": SiteRow,
     "depots": DepotRow,
     "orders": TaskRow,
+    "routes": TravelLinkRow,
+    "prices": CostRateRow,
+    "machines": PrimeMoverRow,
+    "attachments": RelatedRow,
+    "construction-operators": OperatorRow,
+    "sites": SiteRow,
+    "yards": DepotRow,
+    "jobs": TaskRow,
 }
 
 # Binding path -> canonical solver-row key. The single source of truth for the
@@ -89,6 +112,7 @@ _CANONICAL_KEY: dict[str, str] = {
     "asset.capabilities.minOperatingSpeed": "min_speed",
     "asset.capabilities.maxOperatingSpeed": "max_speed",
     "asset.capabilities.fertilizerCapacity": "material_capacity",
+    "asset.capabilities.loadCapacity": "load_capacity",
     "asset.capabilities.compatibleOperations": "compatible_operations",
     "asset.capabilities.certifiedOperations": "certified_operations",
     "asset.availability.shiftStart": "shift_start",
@@ -100,6 +124,8 @@ _CANONICAL_KEY: dict[str, str] = {
     "location.areaHa": "area",
     "location.soilType": "soil_type",
     "location.polygon": "polygon",
+    "location.restrictedOperations": "restricted_operations",
+    "location.restrictionWindows": "restriction_windows",
     "location.inventory.fuel": "inventory_fuel",
     "location.inventory.fertilizer": "inventory_material",
     "task.taskId": "task_id",
@@ -112,6 +138,7 @@ _CANONICAL_KEY: dict[str, str] = {
     "task.serviceDurationMinutes": "service_duration_min",
     "task.timeWindows": "time_windows",
     "task.dependsOnTaskRef": "depends_on_task_ref",
+    "task.loadDemand": "load_demand",
     "task.deadline": "deadline",
     "task.penaltyPerDay": "penalty_per_day",
     "task.priorityClass": "priority_class",
@@ -125,6 +152,17 @@ _CANONICAL_KEY: dict[str, str] = {
     "forecast.value.windSpeed": "wind_speed",
     "forecast.value.precipitationRate": "precipitation_rate",
     "forecast.value.soilMoisture": "soil_moisture",
+    "travelLink.linkId": "link_id",
+    "travelLink.fromLocationRef": "from_location_ref",
+    "travelLink.toLocationRef": "to_location_ref",
+    "travelLink.travelTimeS": "travel_time_s",
+    "travelLink.distanceKm": "distance_km",
+    "costRate.costRateId": "rate_id",
+    "costRate.rateType": "rate_type",
+    "costRate.unitPrice": "unit_price",
+    "costRate.perUnit": "per_unit",
+    "costRate.validFrom": "valid_from",
+    "costRate.validTo": "valid_to",
 }
 
 
@@ -171,9 +209,21 @@ def _location_value(
         return loc.soil_type
     if path == ["polygon"]:
         return loc.polygon
+    if path == ["restrictedOperations"]:
+        return list(loc.restricted_operations)
+    if path == ["restrictionWindows"]:
+        return _intervals_to_strings(loc.restriction_windows)
     if path[:1] == ["inventory"]:
         return inv_lookup.get((loc.location_id, path[-1]), 0.0)
     return None
+
+
+def _intervals_to_strings(intervals: list) -> list[str]:
+    """Serialize TimeInterval objects back to ISO-8601 "from/to" strings."""
+    return [
+        f"{w.from_.isoformat()}/{w.to.isoformat() if w.to else ''}"
+        for w in intervals
+    ]
 
 
 def _forecast_value(forecast: Any, binding: FieldBinding) -> Any:
@@ -195,9 +245,43 @@ def _forecast_value(forecast: Any, binding: FieldBinding) -> Any:
     return None
 
 
-def _table_for_entity(registry: FileRegistry, entity: str):
-    """Binding table of the first active-domain contract mapping one entity."""
+def _travel_link_value(link: "TravelLink", binding: FieldBinding) -> Any:
+    path = binding.meta.binding.split(".")[1:]
+    mapping = {
+        ("linkId",): link.link_id,
+        ("fromLocationRef",): link.from_location_ref,
+        ("toLocationRef",): link.to_location_ref,
+        ("travelTimeS",): link.travel_time_s,
+        ("distanceKm",): link.distance_km,
+    }
+    return mapping.get(tuple(path))
+
+
+def _cost_rate_value(rate: "CostRate", binding: FieldBinding) -> Any:
+    path = binding.meta.binding.split(".")[1:]
+    key = tuple(path)
+    if key == ("validFrom",):
+        return rate.valid_from.isoformat() if rate.valid_from else None
+    if key == ("validTo",):
+        return rate.valid_to.isoformat() if rate.valid_to else None
+    mapping = {
+        ("costRateId",): rate.cost_rate_id,
+        ("rateType",): rate.rate_type,
+        ("unitPrice",): rate.unit_price_eur,
+        ("perUnit",): rate.per_unit,
+    }
+    return mapping.get(key)
+
+
+def _tables_for_entity(registry: FileRegistry, entity: str) -> list:
+    """Binding tables of the active-domain contracts mapping one entity.
+
+    Tables are resolved by canonical entity (and disambiguated by asset role
+    at the call site), never by contract id, so any registered domain pack
+    (agricultural, construction, ...) projects through the same code path.
+    """
     active = registry.active_domain
+    tables = []
     for cid in registry.list_contracts():
         entry = registry.get_entry(cid)
         if active and entry.domain != active:
@@ -206,8 +290,19 @@ def _table_for_entity(registry: FileRegistry, entity: str):
             continue
         table = load_binding_table(registry, cid)
         if table.canonical_entity == entity:
-            return table
-    return None
+            tables.append(table)
+    return tables
+
+
+def _table_for_entity(registry: FileRegistry, entity: str):
+    """Binding table of the first active-domain contract mapping one entity."""
+    tables = _tables_for_entity(registry, entity)
+    return tables[0] if tables else None
+
+
+def _table_for_role(tables: list, role: str):
+    """First binding table whose mapping declares the given asset role."""
+    return next((t for t in tables if t.asset_role == role), None)
 
 
 def _task_value(task: "Task", binding: FieldBinding) -> Any:
@@ -221,6 +316,7 @@ def _task_value(task: "Task", binding: FieldBinding) -> Any:
         ("workQuantity",): task.work_quantity,
         ("workQuantityUnit",): task.work_quantity_unit,
         ("serviceDurationMinutes",): task.service_duration_minutes,
+        ("loadDemand",): task.load_demand_kg,
         ("dependsOnTaskRef",): task.depends_on_task_ref,
         ("penaltyPerDay",): task.penalty_per_day_eur,
         ("priorityClass",): task.priority_class,
@@ -256,16 +352,20 @@ def build_solver_inputs(
 
     Each section is projected binding-by-binding into a canonical dict (the
     declarative mapping stays the single source of projection) and then capped
-    with its frozen row dataclass via from_canonical_dict.
+    with its frozen row dataclass via from_canonical_dict. Binding tables are
+    resolved from the active domain by canonical entity and asset role, so
+    every registered domain pack projects without engine changes.
     """
     registry = registry or FileRegistry()
 
-    veh_t = load_binding_table(registry, "vehicles")
-    imp_t = load_binding_table(registry, "implements")
-    ops_t = load_binding_table(registry, "operators")
-    fld_t = load_binding_table(registry, "fields")
-    dep_t = load_binding_table(registry, "depots")
-    ord_t = load_binding_table(registry, "orders")
+    asset_tables = _tables_for_entity(registry, "asset")
+    location_tables = _tables_for_entity(registry, "location")
+    veh_t = _table_for_role(asset_tables, ROLE_PRIME_MOVER)
+    imp_t = _table_for_role(asset_tables, ROLE_RELATED)
+    ops_t = _table_for_role(asset_tables, ROLE_OPERATOR)
+    dep_t = _table_for_role(location_tables, ROLE_DEPOT)
+    fld_t = next((t for t in location_tables if t.asset_role != ROLE_DEPOT), None)
+    ord_t = _table_for_entity(registry, "task")
 
     inv_lookup = {
         (p.inventory_location_ref, p.material_type): p.available_quantity
@@ -281,39 +381,51 @@ def build_solver_inputs(
                 _project(veh_t.bindings, lambda b, a=a: _asset_value(a, b))
             )
             for a in assets_with_role(ROLE_PRIME_MOVER)
-        ],
+        ]
+        if veh_t is not None
+        else [],
         SECTION_RELATED: [
             RelatedRow.from_canonical_dict(
                 _project(imp_t.bindings, lambda b, a=a: _asset_value(a, b))
             )
             for a in assets_with_role(ROLE_RELATED)
-        ],
+        ]
+        if imp_t is not None
+        else [],
         SECTION_OPERATORS: [
             OperatorRow.from_canonical_dict(
                 _project(ops_t.bindings, lambda b, a=a: _asset_value(a, b))
             )
             for a in assets_with_role(ROLE_OPERATOR)
-        ],
+        ]
+        if ops_t is not None
+        else [],
         SECTION_SITES: [
             SiteRow.from_canonical_dict(
                 _project(fld_t.bindings, lambda b, l=l: _location_value(l, b, inv_lookup))
             )
             for l in snapshot.locations
             if l.location_type == "field"
-        ],
+        ]
+        if fld_t is not None
+        else [],
         SECTION_DEPOTS: [
             DepotRow.from_canonical_dict(
                 _project(dep_t.bindings, lambda b, l=l: _location_value(l, b, inv_lookup))
             )
             for l in snapshot.locations
             if l.location_type == "depot"
-        ],
+        ]
+        if dep_t is not None
+        else [],
         SECTION_TASKS: [
             TaskRow.from_canonical_dict(
                 _project(ord_t.bindings, lambda b, t=t: _task_value(t, b))
             )
             for t in snapshot.tasks
-        ],
+        ]
+        if ord_t is not None
+        else [],
     }
     forecast_table = _table_for_entity(registry, "forecast")
     rows[SECTION_FORECASTS] = (
@@ -324,6 +436,28 @@ def build_solver_inputs(
             for f in snapshot.forecasts
         ]
         if forecast_table is not None
+        else []
+    )
+    travel_table = _table_for_entity(registry, "travel-link")
+    rows[SECTION_TRAVEL_LINKS] = (
+        [
+            TravelLinkRow.from_canonical_dict(
+                _project(travel_table.bindings, lambda b, l=l: _travel_link_value(l, b))
+            )
+            for l in snapshot.travel_links
+        ]
+        if travel_table is not None
+        else []
+    )
+    rate_table = _table_for_entity(registry, "cost-rate")
+    rows[SECTION_COST_RATES] = (
+        [
+            CostRateRow.from_canonical_dict(
+                _project(rate_table.bindings, lambda b, r=r: _cost_rate_value(r, b))
+            )
+            for r in snapshot.cost_rates
+        ]
+        if rate_table is not None
         else []
     )
     logger.info(

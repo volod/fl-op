@@ -1,0 +1,63 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+# Projects the roadside physical 'inspection-rounds' schema onto the canonical
+# Observation entity: inspection rounds are the observation source for
+# stationary signage assets, exactly as sensor telemetry is for agricultural
+# stations. Condition ratings normalize to canonical metric codes via
+# metricCodes; unmapped metrics (retroreflectivity) pass through and are
+# retained but not acted on by the monitoring policy.
+metadata:
+  domain: roadside
+  sourceContract: inspection-rounds
+  canonicalEntity: observation
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: equipmentTelemetry
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+  metricCodes:
+    sign_condition: health-status
+    battery_pct: battery-level
+
+fieldMappings:
+  - sourceField: finding_id
+    binding: observation.observationId
+    semanticTerm: urn:xopt:identity:observation-id
+    planningUse: [identity]
+  - sourceField: sign_id
+    binding: observation.entityRef
+    semanticTerm: urn:xopt:relationship:entity-ref
+    planningUse: [monitoring]
+    missingValuePolicy: reject-for-planning
+  - sourceField: metric
+    binding: observation.metric
+    semanticTerm: urn:xopt:observation:metric
+    planningUse: [monitoring]
+    missingValuePolicy: reject-for-planning
+  - sourceField: value
+    binding: observation.value
+    semanticTerm: urn:xopt:observation:value
+    quantityKind: measurement
+    planningUse: [monitoring]
+    missingValuePolicy: accept-optional
+  - sourceField: state_value
+    binding: observation.stateValue
+    semanticTerm: urn:xopt:observation:state
+    planningUse: [monitoring]
+    missingValuePolicy: accept-optional
+  - sourceField: unit
+    binding: observation.unit
+    semanticTerm: urn:xopt:observation:unit
+    planningUse: [monitoring]
+    missingValuePolicy: accept-optional
+  - sourceField: inspected_at
+    binding: observation.observedAt
+    semanticTerm: urn:xopt:time:observed-at
+    quantityKind: timestamp
+    planningUse: [monitoring]
+    missingValuePolicy: accept-with-warning
+  - sourceField: quality_flag
+    binding: observation.qualityFlag
+    semanticTerm: urn:xopt:observation:quality-flag
+    planningUse: [monitoring]
+    missingValuePolicy: accept-optional

@@ -96,6 +96,8 @@ def _build_score(
 ) -> dict[str, Any]:
     from fl_op.canonical.enums import CorrectiveActionType
 
+    from fl_op.solver.solve_telemetry import summarize_cluster_telemetry
+
     chain = raw_result.chain_result
     n_changed = sum(1 for a in new_assignments if a.change_penalty > 0)
     n_new_tasks = sum(
@@ -124,5 +126,8 @@ def _build_score(
         "n_clusters": chain.n_clusters if chain is not None else 0,
         "n_greedy_warm_start_assignments": (
             len(chain.greedy_assignment) if chain is not None else 0
+        ),
+        "solve_telemetry": summarize_cluster_telemetry(
+            chain.cluster_telemetry if chain is not None else []
         ),
     }

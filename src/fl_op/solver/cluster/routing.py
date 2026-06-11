@@ -1,6 +1,7 @@
 """OR-Tools routing model construction and solve for one prepared cluster."""
 
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -14,11 +15,17 @@ from fl_op.solver.routing_model import (
     _build_node_geometry,
     _extract_dispatch_packages,
 )
+from fl_op.solver.solve_telemetry import (
+    STATUS_NO_SOLUTION,
+    STATUS_SOLVED,
+    ClusterSolveTelemetry,
+    routing_status_name,
+)
 from fl_op.solver.travel_time import _estimate_operation_seconds
 
 logger = logging.getLogger(__name__)
 
-_ROUTING_HORIZON_S = 30 * 24 * 3600
+_ROUTING_HORIZON_S = constants.ROUTING_HORIZON_S
 
 # Vehicle asset_id -> [(start_epoch_s, end_epoch_s), ...] busy intervals from
 # held (frozen / carried-forward) assignments of a rolling plan.
@@ -31,8 +38,15 @@ def solve_routing_context(
     greedy_assignment: dict[str, tuple[int, int]],
     vehicle_index: dict[str, int],
     held_windows: Optional[HeldWindows] = None,
-) -> tuple[list[dict], list[dict]]:
-    """Build, solve, and extract one OR-Tools routing model."""
+    solve_time_limit_s: Optional[int] = None,
+) -> tuple[list[dict], list[dict], ClusterSolveTelemetry]:
+    """Build, solve, and extract one OR-Tools routing model.
+
+    Returns (dispatch_packages, infeasible_orders, solve_telemetry); the
+    telemetry record carries the machine-readable solve diagnostics.
+    ``solve_time_limit_s`` overrides the engine default per-cluster budget
+    (tunable via SolverParameters).
+    """
     from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
     node_lats, node_lons, time_matrix = _build_node_geometry(
@@ -40,6 +54,8 @@ def solve_routing_context(
         context.field_map,
         context.depot_lat,
         context.depot_lon,
+        context.depot_id,
+        context.travel_lookup,
     )
     manager = pywrapcp.RoutingIndexManager(
         len(node_lats),
@@ -53,16 +69,22 @@ def solve_routing_context(
 
     now_epoch = int(datetime.now(tz=timezone.utc).timestamp())
     _add_order_windows_and_disjunctions(routing, manager, time_dim, context, now_epoch)
+    _add_load_capacity_dimension(routing, manager, context)
     _add_precedence_constraints(routing, manager, time_dim, context, service_times)
     _add_held_vehicle_breaks(
         routing, time_dim, context, service_times, held_windows, now_epoch
     )
 
+    time_limit_s = (
+        solve_time_limit_s
+        if solve_time_limit_s is not None
+        else constants.CLUSTER_SOLVE_TIME_LIMIT_S
+    )
     search_params = pywrapcp.DefaultRoutingSearchParameters()
     search_params.first_solution_strategy = (
         routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION
     )
-    search_params.time_limit.seconds = constants.CLUSTER_SOLVE_TIME_LIMIT_S
+    search_params.time_limit.seconds = time_limit_s
     search_params.log_search = False
     search_params.sat_parameters.num_workers = 1
 
@@ -72,14 +94,42 @@ def solve_routing_context(
         greedy_assignment,
         vehicle_index,
     )
+    solve_started = time.perf_counter()
     solution = _solve_with_warm_start(routing, initial_routes, search_params)
+    telemetry: ClusterSolveTelemetry = {
+        "cluster_id": context.cluster_id,
+        "status": STATUS_NO_SOLUTION,
+        "n_tasks": len(context.cluster_orders),
+        "n_routing_vehicles": len(context.routing_vehicles),
+        "time_limit_s": time_limit_s,
+        "lns_attempted": False,
+        "lns_improved": False,
+        "lns_objective_delta": 0,
+    }
     if solution is None:
-        return mark_all_infeasible(
+        wall_s = time.perf_counter() - solve_started
+        telemetry.update(
+            {
+                "solve_wall_s": round(wall_s, 3),
+                "routing_status": routing_status_name(routing),
+                "hit_time_limit": wall_s >= time_limit_s,
+                "objective_value": None,
+                "first_solution_objective": None,
+                "n_dispatched": 0,
+                "n_unserved": len(context.task_ids),
+                "detail": "OR-Tools found no feasible solution within time limit",
+            }
+        )
+        dispatch, infeasible = mark_all_infeasible(
             cluster_dict,
             ReasonCode.OPTIMIZATION_TRADEOFF,
             "OR-Tools found no feasible solution within time limit",
         )
-    solution = _maybe_improve_with_lns(routing, solution, cluster_dict)
+        return dispatch, infeasible, telemetry
+
+    first_objective = solution.ObjectiveValue()
+    solution, lns_info = _maybe_improve_with_lns(routing, solution, cluster_dict)
+    wall_s = time.perf_counter() - solve_started
 
     dispatch_packages, served_task_ids = _extract_dispatch_packages(
         solution,
@@ -96,11 +146,26 @@ def solve_routing_context(
         cluster_dict,
         now_epoch,
     )
-    return dispatch_packages, unserved_orders(
+    infeasible = unserved_orders(
         context.task_ids,
         context.cluster_id,
         served_task_ids,
     )
+    status_name = routing_status_name(routing)
+    telemetry.update(
+        {
+            "status": STATUS_SOLVED,
+            "solve_wall_s": round(wall_s, 3),
+            "routing_status": status_name,
+            "hit_time_limit": "TIMEOUT" in status_name or wall_s >= time_limit_s,
+            "objective_value": int(solution.ObjectiveValue()),
+            "first_solution_objective": int(first_objective),
+            "n_dispatched": len(dispatch_packages),
+            "n_unserved": len(infeasible),
+            **lns_info,
+        }
+    )
+    return dispatch_packages, infeasible, telemetry
 
 
 def _add_arc_costs(routing: Any, manager: Any, time_matrix: list[list[int]]) -> None:
@@ -169,51 +234,98 @@ def _add_order_windows_and_disjunctions(
         node = manager.NodeToIndex(node_idx)
         cumul = time_dim.CumulVar(node)
         cumul.SetRange(0, deadline_from_now)
-        _restrict_to_workable_windows(
-            routing, cumul, node, order, now_epoch, deadline_from_now
+        _restrict_start_intervals(
+            routing, cumul, node, order, context, now_epoch, deadline_from_now
         )
         routing.AddDisjunction([node], order_drop_penalty_s(order))
 
 
-def _restrict_to_workable_windows(
+def _restrict_start_intervals(
     routing: Any,
     cumul: Any,
     node: Any,
     order: Any,
+    context: ClusterContext,
     now_epoch: int,
     deadline_from_now: int,
 ) -> None:
-    """Constrain task start into the union of its workable windows.
+    """Constrain task start into its admissible intervals.
 
-    Window semantics: execution must *start* inside a declared window. With no
-    declared windows the full [now, deadline] range stays open. When no window
-    survives clamping to [now, deadline], the node is forced inactive (the
-    chain-level pre-filter normally catches this case first).
+    Admissible means: inside the union of the task's workable windows (the
+    full [now, deadline] range when none are declared) and outside the
+    location's restriction windows. Both constrain where execution *starts*.
+    When nothing admissible survives, the node is forced inactive (the
+    chain-level pre-filters normally catch this case first).
     """
+    from fl_op.solver.restrictions import allowed_start_intervals
     from fl_op.solver.task_relations import parse_time_windows
 
-    windows = parse_time_windows(order.time_windows)
-    if not windows:
+    site = context.field_map.get(order.location_ref)
+    has_windows = bool(parse_time_windows(order.time_windows))
+    has_restrictions = bool(
+        site is not None and parse_time_windows(site.restriction_windows)
+    )
+    if not has_windows and not has_restrictions:
         return
-    offsets: list[tuple[int, int]] = []
-    for start, end in windows:
-        start_off = max(0, int(start.timestamp()) - now_epoch)
-        end_off = (
-            deadline_from_now
-            if end is None
-            else min(deadline_from_now, int(end.timestamp()) - now_epoch)
-        )
-        if end_off < start_off or start_off > deadline_from_now:
-            continue
-        offsets.append((start_off, end_off))
+
+    epoch_intervals = allowed_start_intervals(
+        order, site, now_epoch, now_epoch + deadline_from_now
+    )
+    offsets = [
+        (start - now_epoch, end - now_epoch) for start, end in epoch_intervals
+    ]
     if not offsets:
         routing.solver().Add(routing.ActiveVar(node) == 0)
         return
-    offsets.sort()
     cumul.SetRange(offsets[0][0], offsets[-1][1])
     for (_, prev_end), (next_start, _) in zip(offsets, offsets[1:]):
         if next_start > prev_end + 1:
             cumul.RemoveInterval(prev_end + 1, next_start - 1)
+
+
+def _add_load_capacity_dimension(
+    routing: Any,
+    manager: Any,
+    context: ClusterContext,
+) -> None:
+    """Bound each route's cumulative delivered mass by the vehicle's capacity.
+
+    Task load demands accumulate along the route (single-trip delivery
+    semantics, no depot reload); vehicles declaring no capacity are
+    unconstrained. Skipped entirely when no task demands a load.
+    """
+    demands_g = [0] + [
+        int(_load_kg(order.load_demand) * constants.SCALE_MASS_UNITS_PER_KG)
+        for order in context.cluster_orders
+    ]
+    if not any(demands_g):
+        return
+
+    def demand_callback(from_index: int) -> int:
+        return demands_g[manager.IndexToNode(from_index)]
+
+    capacities_g = []
+    for routing_vehicle in context.routing_vehicles:
+        capacity_kg = _load_kg(routing_vehicle["prime"].load_capacity)
+        if capacity_kg <= 0:
+            capacity_kg = constants.VEHICLE_LOAD_UNLIMITED_KG
+        capacities_g.append(int(capacity_kg * constants.SCALE_MASS_UNITS_PER_KG))
+
+    demand_cb_idx = routing.RegisterUnaryTransitCallback(demand_callback)
+    routing.AddDimensionWithVehicleCapacity(
+        demand_cb_idx,
+        0,
+        capacities_g,
+        True,
+        "Load",
+    )
+
+
+def _load_kg(value: Any) -> float:
+    try:
+        return max(0.0, float(value or 0.0))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _add_precedence_constraints(
@@ -315,18 +427,25 @@ def _maybe_improve_with_lns(
     routing: Any,
     solution: Any,
     cluster_dict: dict[str, Any],
-) -> Any:
+) -> tuple[Any, dict[str, Any]]:
     """Optionally continue search with LNS for a high-value cluster.
 
     Runs a second solve from the first solution with guided local search and
     LNS neighbourhood operators, bounded by its own time budget. The original
     solution is kept unless the improvement pass finds a strictly better one.
+    Returns (solution, lns_info) where lns_info carries the telemetry fields
+    (attempted/improved flags and the objective delta, negative = better).
     """
+    lns_info: dict[str, Any] = {
+        "lns_attempted": False,
+        "lns_improved": False,
+        "lns_objective_delta": 0,
+    }
     if not constants.CLUSTER_LNS_ENABLED:
-        return solution
+        return solution, lns_info
     total_penalty = float(cluster_dict.get("total_penalty_per_day", 0.0) or 0.0)
     if total_penalty < constants.CLUSTER_LNS_MIN_PENALTY_EUR_PER_DAY:
-        return solution
+        return solution, lns_info
 
     from ortools.constraint_solver import pywrapcp, routing_enums_pb2
     from ortools.util import optional_boolean_pb2
@@ -341,6 +460,7 @@ def _maybe_improve_with_lns(
     lns_params.log_search = False
     lns_params.sat_parameters.num_workers = 1
 
+    lns_info["lns_attempted"] = True
     improved = routing.SolveFromAssignmentWithParameters(solution, lns_params)
     if improved is not None and improved.ObjectiveValue() < solution.ObjectiveValue():
         logger.info(
@@ -349,8 +469,12 @@ def _maybe_improve_with_lns(
             solution.ObjectiveValue(),
             improved.ObjectiveValue(),
         )
-        return improved
-    return solution
+        lns_info["lns_improved"] = True
+        lns_info["lns_objective_delta"] = int(
+            improved.ObjectiveValue() - solution.ObjectiveValue()
+        )
+        return improved, lns_info
+    return solution, lns_info
 
 
 def _solve_with_warm_start(routing: Any, initial_routes: list[list[int]], search_params: Any):

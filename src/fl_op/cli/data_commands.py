@@ -61,6 +61,17 @@ _SEED_ENV: int | None = int(os.environ["SEED"]) if os.environ.get("SEED") else N
     type=click.Choice(["csv", "avro", "parquet"]),
     help="Physical format for generated tabular datasets.",
 )
+@click.option(
+    "--domain",
+    default="agricultural",
+    show_default=True,
+    type=click.Choice(["agricultural", "construction"]),
+    help=(
+        "Domain pack to generate data for. Counts map onto the domain's "
+        "entities (construction: vehicles=machines, implements=attachments, "
+        "orders=jobs, depots=yards)."
+    ),
+)
 def generate_data(
     vehicles: int,
     implements: int,
@@ -69,8 +80,22 @@ def generate_data(
     seed: int | None,
     data_path: str | None,
     fmt: str,
+    domain: str,
 ) -> None:
-    """Generate synthetic (or augmented real) fleet dataset."""
+    """Generate a synthetic (or augmented real) dataset for a domain pack."""
+    if domain == "construction":
+        from fl_op.data.generator import run_generate_construction
+
+        run_generate_construction(
+            n_machines=vehicles,
+            n_attachments=implements,
+            n_jobs=orders,
+            n_yards=depots,
+            seed=seed,
+            fmt=fmt,
+        )
+        return
+
     from fl_op.data.generator import run_generate
 
     run_generate(

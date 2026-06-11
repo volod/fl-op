@@ -42,7 +42,8 @@ Output written to `.data/generate-data/<timestamp>/`:
 ```
 depots.avro        implements.avro   operators.avro
 fields.avro        orders.avro       vehicles.avro
-sensors.avro       sensor-readings.jsonl
+sensors.avro       routes.avro       prices.avro
+sensor-readings.jsonl
 contracts.json     weather.json      metadata.json
 ```
 
@@ -59,6 +60,16 @@ To load real fleet data instead of synthetic:
 ```
 
 Real CSVs take priority; missing fields fill from synthetic distributions.
+
+To generate and plan a construction-earthworks dataset instead (counts map
+onto the domain's entities: vehicles=machines, implements=attachments,
+orders=jobs, depots=yards), select the domain at generation time and activate
+it for planning with the `ACTIVE_DOMAIN` override:
+
+```bash
+.venv/bin/fl-op generate-data --domain construction --seed 42
+ACTIVE_DOMAIN=construction .venv/bin/fl-op plan periodic --data latest
+```
 
 ---
 

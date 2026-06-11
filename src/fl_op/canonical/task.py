@@ -43,6 +43,8 @@ class Task(BaseModel):
     work_quantity: Optional[float] = None
     work_quantity_unit: str = ""
     service_duration_minutes: Optional[int] = None
+    # Mass the bundle must carry to the task (delivered material), in kg.
+    load_demand_kg: Optional[float] = None
     time_windows: list[TimeInterval] = Field(default_factory=list)
     # Predecessor task that must be served before this one. A reference to a
     # task absent from the planning input is treated as already satisfied.

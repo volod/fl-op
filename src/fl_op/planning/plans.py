@@ -8,6 +8,7 @@ from typing import Optional
 from fl_op.adapters.ortools_periodic import OrToolsPeriodicAdapter
 from fl_op.canonical.enums import PlanningMode
 from fl_op.canonical.snapshot import PlanningSnapshot
+from fl_op.contracts.plan_contract import assert_plan_conforms
 from fl_op.contracts.registry import FileRegistry
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
 from fl_op.core.paths import DATA_ROOT
@@ -30,6 +31,8 @@ def run_plan_periodic(
         raise ValueError("Registry declares no active domain profile")
     profile = registry.get_profile(profile_id)
     plan = OrToolsPeriodicAdapter().plan(snapshot, profile)
+    assert_plan_conforms(plan)
+    _log_plan_to_mlflow(plan)
 
     out_dir = DATA_ROOT / "plan-periodic" / run_timestamp()
     write_json(
@@ -48,6 +51,38 @@ def run_plan_periodic(
         out_dir,
     )
     return out_dir
+
+
+def _log_plan_to_mlflow(plan) -> None:
+    """Opt-in experiment tracking: KPIs, version dimensions, solve telemetry."""
+    from fl_op.tuning.mlflow_logger import log_solver_run
+
+    solve_summary = plan.score.get("solve_telemetry") or {}
+    version = plan.version_dimensions
+    log_solver_run(
+        run_name=f"{plan.plan_id}/{plan.revision_id}",
+        params={
+            "adapter_id": plan.adapter_id,
+            "adapter_version": plan.adapter_version,
+            "solver_version": plan.solver_version,
+            "optimization_profile_version": version.optimization_profile_version,
+            "adapter_compatibility_version": version.adapter_compatibility_version,
+        },
+        metrics={
+            **{k: v for k, v in plan.score.items() if not isinstance(v, dict)},
+            "n_clusters_hit_time_limit": solve_summary.get("n_hit_time_limit", 0),
+            "total_solve_wall_s": solve_summary.get("total_solve_wall_s", 0.0),
+            "n_lns_improved": solve_summary.get("n_lns_improved", 0),
+            "total_lns_objective_delta": solve_summary.get(
+                "total_lns_objective_delta", 0
+            ),
+        },
+        tags={
+            "planning_mode": plan.planning_mode.value,
+            "snapshot_hash": plan.snapshot_hash,
+            "snapshot_id": plan.snapshot_id,
+        },
+    )
 
 
 def run_plan_rolling(
@@ -72,6 +107,7 @@ def run_plan_rolling(
     out_dir = DATA_ROOT / "plan-rolling" / run_timestamp()
     summary = []
     for n, rev in enumerate(result.revisions):
+        assert_plan_conforms(rev.plan)
         rev_dir = out_dir / "revisions" / f"{n:03d}"
         write_json(
             {"schema_version": ARTIFACT_SCHEMA_VERSION, **model_json(rev.plan)},

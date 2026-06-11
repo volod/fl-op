@@ -235,17 +235,21 @@ def build_cluster_specs(
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
     order_index: dict[str, Any] | None = None,
+    target_size: int | None = None,
 ) -> list[ClusterSpec]:
     """Produce ClusterSpec list from raw entity dicts and compat matrix.
 
     Steps:
       1. Depot-affinity clustering via haversine BallTree.
-      2. Sub-cluster each depot group to CLUSTER_TARGET_SIZE.
+      2. Sub-cluster each depot group to target_size (default
+         CLUSTER_TARGET_SIZE; tunable via SolverParameters).
       3. Compute total_penalty_per_day for priority sorting.
       4. Initialise allocated_prime_related to empty (filled by allocation).
     """
     if order_index is None:
         order_index = {o.task_id: o for o in orders}
+    if target_size is None:
+        target_size = CLUSTER_TARGET_SIZE
 
     depot_assignment = cluster_orders_by_depot(orders, fields, depots)
 
@@ -260,10 +264,10 @@ def build_cluster_specs(
     for depot_id, oid_list in depot_assignment.items():
         if depot_units is not None:
             subclusters = _split_units_into_subclusters(
-                depot_units.get(depot_id, []), CLUSTER_TARGET_SIZE
+                depot_units.get(depot_id, []), target_size
             )
         elif oid_list:
-            subclusters = _split_into_subclusters(oid_list, CLUSTER_TARGET_SIZE)
+            subclusters = _split_into_subclusters(oid_list, target_size)
         else:
             continue
         for sub in subclusters:

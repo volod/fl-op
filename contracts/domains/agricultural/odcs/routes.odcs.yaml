@@ -1,0 +1,92 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: routes
+version: 1.0.0
+status: active
+name: Road Travel Links
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: Measured road travel times between depots and fields, mapped to canonical travel links.
+  usage: Routing travel times; pairs without a link fall back to haversine estimates.
+  # Canonical projection lives in mappings/routes.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: routes.csv
+schema:
+  - name: routes
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.routes
+            recordName: RoadTravelLink
+            recordDoc: "Directed road travel link between two locations, mapped to a canonical TravelLink. Source dataset: routes.csv."
+          proto:
+            package: org.example.agri.routes
+            messageName: RoadTravelLink
+            syntax: proto3
+          es:
+            indexName: routes
+            dynamic: strict
+    properties:
+      - name: route_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the directed link.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
+      - name: from_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Origin location (depot or field).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
+      - name: to_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Destination location (depot or field).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
+      - name: travel_time_s
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Road travel time along the link in seconds.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
+      - name: distance_km
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Road distance along the link.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: 0.0}
+              proto: {fieldNumber: 5}
+      - name: road_class
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Road classification retained for analysis (no canonical mapping).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 6}

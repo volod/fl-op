@@ -1,0 +1,63 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: service-depots
+version: 1.0.0
+status: active
+name: Road Maintenance Depots
+domain: roadside-infrastructure
+tenant: road-ops
+description:
+  purpose: >-
+    Maintenance depots dispatching service crews to roadside assets, mapped
+    to canonical depot Locations.
+  usage: Route origins and fuel inventory for service rounds.
+  # Canonical projection lives in mappings/service-depots.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: service-depots.csv
+schema:
+  - name: serviceDepots
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.roadside.network
+            recordName: ServiceDepot
+            recordDoc: "Road maintenance depot, mapped to a canonical Location. Source dataset: service-depots.csv."
+          proto:
+            package: org.example.roadside.network
+            messageName: ServiceDepot
+            syntax: proto3
+          es:
+            indexName: service-depots
+            dynamic: strict
+    properties:
+      - name: depot_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the maintenance depot.
+      - name: name
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Human-readable depot name.
+      - name: lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Depot latitude.
+      - name: lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Depot longitude.
+      - name: fuel_litres
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Available diesel inventory at the depot.

@@ -1,0 +1,85 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: signage
+version: 1.0.0
+status: active
+name: Roadside Signage and Sensor Assets
+domain: roadside-infrastructure
+tenant: road-ops
+description:
+  purpose: >-
+    Stationary signage and sensor assets installed along road segments
+    (variable-message signs, speed radars, traffic counters), mapped to
+    canonical stationary-equipment Assets.
+  usage: Condition-based maintenance; monitoring derives service visits.
+  # Canonical projection lives in mappings/signage.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: signage.csv
+schema:
+  - name: signage
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.roadside.assets
+            recordName: SignageAsset
+            recordDoc: "Stationary roadside signage/sensor asset, mapped to a canonical Asset. Source dataset: signage.csv."
+          proto:
+            package: org.example.roadside.assets
+            messageName: SignageAsset
+            syntax: proto3
+          es:
+            indexName: signage
+            dynamic: strict
+    properties:
+      - name: sign_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the signage/sensor asset.
+      - name: sign_kind
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Asset kind (vms_sign, speed_radar, traffic_counter, warning_sign).
+      - name: road_segment_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Road segment the asset is installed on (service-visit anchor).
+      - name: lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Installation latitude.
+      - name: lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Installation longitude.
+      - name: mobility
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Mobility class; always stationary for installed roadside assets.
+      - name: last_service_at
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Timestamp of the last completed service visit (ISO-8601).
+      - name: service_interval_days
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Planned service interval; overdue assets get a service task.
+      # Extra real-data field, retained for analysis; not mapped to the canonical model.
+      - name: installed_at
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Installation date (analytical, not used by the optimizer).

@@ -10,6 +10,7 @@ Fingerprint semantics:
 """
 
 import logging
+import os
 import pathlib
 from typing import Any, Optional
 
@@ -94,6 +95,21 @@ class FileRegistry:
 
     @property
     def active_domain(self) -> Optional[str]:
+        """Active domain pack: ACTIVE_DOMAIN env override, else the registry index.
+
+        The override lets one deployment switch domains per run
+        (ACTIVE_DOMAIN=construction fl-op plan periodic ...) without editing
+        registry.yaml.
+        """
+        override = os.environ.get("ACTIVE_DOMAIN")
+        if override:
+            known = set(self.index.get("domains") or {})
+            if override not in known:
+                raise KeyError(
+                    f"ACTIVE_DOMAIN '{override}' is not a registered domain; "
+                    f"known: {sorted(known)}"
+                )
+            return override
         return self.index.get("activeDomain")
 
     @property

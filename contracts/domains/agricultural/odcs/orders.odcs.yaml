@@ -157,3 +157,13 @@ schema:
             value:
               avro: {default: 0.0}
               proto: {fieldNumber: 13}
+      - name: material_load_kg
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Mass of material to deliver to the field; 0 means none.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: 0.0}
+              proto: {fieldNumber: 14}

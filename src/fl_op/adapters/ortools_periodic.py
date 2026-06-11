@@ -145,6 +145,8 @@ def _build_plan(
     assignments = [dispatch_to_assignment(dp) for dp in raw.dispatch]
     unassigned = [infeasible_to_unassigned(inf) for inf in raw.infeasible]
 
+    from fl_op.solver.solve_telemetry import summarize_cluster_telemetry
+
     kpis = raw.kpis
     score = {
         "total_estimated_margin_eur": kpis.get("total_estimated_margin_eur", 0.0),
@@ -156,6 +158,9 @@ def _build_plan(
         "n_unassigned": kpis.get("n_infeasible", len(unassigned)),
         "n_clusters": raw.n_clusters,
         "n_greedy_warm_start_assignments": len(raw.greedy_assignment),
+        # Machine-readable solve-quality summary (per-cluster records travel
+        # in the solve_telemetry.json artifact of batch runs).
+        "solve_telemetry": summarize_cluster_telemetry(raw.cluster_telemetry),
     }
     risk = RiskSummary(
         n_contract_deadlines_at_risk=len(unassigned),

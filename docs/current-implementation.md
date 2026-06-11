@@ -20,6 +20,16 @@ the system survives the gap between its entity model and the physical world see
 3. **Engine** (`src/fl_op/{snapshot,solver,adapters}`) - consumes canonical
    entities only; no dependency on any domain model layer.
 
+Three domain packs exist today: agricultural custom services and construction
+earthworks are runnable end to end (registered contracts, data generators,
+profiles), roadside infrastructure is a validation-level example pack
+(stationary signage along road segments, inspection rounds as observations).
+One domain is active per run: registry.yaml `activeDomain`, overridable with
+`ACTIVE_DOMAIN=construction`. Solver inputs resolve their binding tables by
+canonical entity and asset role, never by contract id, so switching domains
+needs no engine change (`fl-op generate-data --domain construction`, then
+`ACTIVE_DOMAIN=construction fl-op plan periodic --data latest`).
+
 ## Data and contracts
 
 `fl-op generate-data` writes one timestamped dataset under
@@ -41,9 +51,9 @@ contract's optimization-mapped vs extra (analytical) physical fields.
 
 1. Validate contracts (`fl-op contracts validate`).
 2. Map source rows into canonical assets, locations, tasks, forecasts,
-   observations, commitments, and operational bundles. Which datasets are
-   mapped is derived from the registry (active domain + mapping entity), and
-   entity dispatch is a registered emitter table
+   observations, commitments, travel links, cost rates, and operational
+   bundles. Which datasets are mapped is derived from the registry (active
+   domain + mapping entity), and entity dispatch is a registered emitter table
    (`mapping/builders.py:ENTITY_EMITTERS`), so new datasets and entities plug
    in without engine changes.
 3. Statistically assess observation series (`snapshot/assessment.py`):
@@ -76,7 +86,11 @@ contract's optimization-mapped vs extra (analytical) physical fields.
 6. An adapter projects the snapshot into canonical solver rows
    (`solver/inputs.py`) and runs the OR-Tools solver chain; derived service
    tasks are dispatched alongside ordered work.
-7. Synthesize execution events and run rolling-dispatch revisions.
+7. Validate every published plan against the canonical plan output contract
+   (`contracts/canonical/odcs/plan.odcs.yaml`, enforced by
+   `contracts/plan_contract.py`): a plan whose required bindings do not
+   resolve fails publication instead of writing a non-conforming artifact.
+8. Synthesize execution events and run rolling-dispatch revisions.
 
 ## Solver chain
 
@@ -87,8 +101,19 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    a weather-sensitive task with no compliant forecast window at its nearest
    forecast location is excluded with `NO_VALID_WEATHER_WINDOW`. Sensitivity
    per operation type and limits come from the profile's `weatherPolicy`.
+   Structural data semantics are filtered alongside: tasks none of whose
+   workable windows can still be met (`CONTRACT_WINDOW_INFEASIBLE`,
+   `solver/task_relations.py`), tasks blocked by their location's declared
+   restrictions -- prohibited operation types or restriction windows covering
+   every admissible start (`RESTRICTED_ZONE`, `solver/restrictions.py`) --
+   and, transitively, dependents of any excluded predecessor
+   (`PREDECESSOR_UNSERVED`). Fuel and material prices are resolved from the
+   snapshot's cost-rate entities (`solver/cost_rates.py`), falling back to
+   the engine cost constants for unpriced resources.
 2. Build a prime-mover / related-equipment compatibility matrix from power
-   capabilities (`solver/feasibility.py`).
+   capabilities (`solver/feasibility.py`). Matrices are cached by dataset
+   hash (a content hash of the power capabilities and margin), so a repeated
+   solve over the same fleet skips the rebuild.
 3. Filter candidates per task by operation type.
 4. Cluster tasks by nearest depot; split large groups.
 5. Pre-allocate prime movers, related equipment, and operators with a small
@@ -106,12 +131,29 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    `INSUFFICIENT_MATERIAL`).
 7. Build a greedy margin-based warm start.
 8. Solve each cluster as an OR-Tools routing problem in a spawned process
-   pool. With `CLUSTER_LNS_ENABLED=1`, clusters whose total lateness penalty
-   reaches `CLUSTER_LNS_MIN_PENALTY_EUR_PER_DAY` get a second improvement
-   solve from the first solution (guided local search plus path/inactive LNS
-   operators) bounded by `CLUSTER_LNS_TIME_LIMIT_S`; the first solution is
-   kept unless strictly improved.
-9. Aggregate dispatch packages, canonical reason codes, KPIs, and reports.
+   pool. Auto pool sizing is memory-aware: the worker count is bounded by
+   CPUs and by how many estimated worker footprints (base footprint plus the
+   largest cluster's routing-model size) fit into available memory; an
+   explicit `SOLVER_WORKERS` wins. Arc travel times come from the travel
+   network (canonical travel-link entities) where a directed link exists for
+   the location pair, with a reverse-direction and haversine fallback
+   (`solver/travel_time.py`). Task
+   starts are constrained into their admissible intervals (workable windows
+   minus location restriction windows). When any task demands a load, a
+   capacity dimension bounds each route's cumulative delivered mass by the
+   vehicle's `load-capacity` (single-trip delivery semantics; vehicles
+   declaring no capacity are unconstrained). With `CLUSTER_LNS_ENABLED=1`,
+   clusters whose total lateness penalty reaches
+   `CLUSTER_LNS_MIN_PENALTY_EUR_PER_DAY` get a second improvement solve from
+   the first solution (guided local search plus path/inactive LNS operators)
+   bounded by `CLUSTER_LNS_TIME_LIMIT_S`; the first solution is kept unless
+   strictly improved.
+9. Aggregate dispatch packages, canonical reason codes, KPIs (priced with the
+   resolved cost rates), and reports. Every cluster solve yields a
+   machine-readable telemetry record (`solver/solve_telemetry.py`: status,
+   wall time, OR-Tools search status, time-limit flag, objective values, LNS
+   delta); batch runs write `solve_telemetry.json` and plan scores carry the
+   summary.
 
 Enforcement activates only through the adapters (an `EnforcementPolicy` built
 from the profile's enforced constraints); the raw batch `solve` pipeline is
@@ -185,11 +227,14 @@ is recorded as a `CorrectiveAction` on the revision and counted in its score:
 
 ## Quality and completeness artifacts
 
-- The snapshot materializes operational bundles for inspection/explanation,
-  capped by `BUNDLE_GENERATION_CAP`. `snapshot.bundle_diagnostics` records the
-  resource counts, the cap, and whether the list was truncated. The solver
-  does its own compatibility filtering, so the cap bounds only the snapshot
-  artifact, not assignment results.
+- The snapshot carries a compact, exact bundle feasibility summary
+  (`snapshot.bundle_summary`): feasible pair counts over the full
+  prime-mover x related-equipment cross product, per-operation pair counts,
+  and unmatched-resource counts, computed vectorised so the artifact stays
+  constant-size at any fleet scale. Concrete bundles are enumerated lazily
+  on demand (`snapshot/bundles.py:iter_bundles`), never materialized into
+  the snapshot. The solver does its own compatibility filtering, so both are
+  explanation artifacts, not assignment inputs.
 - A mapped contract whose declared source file is absent from the data
   directory yields a `dq://dataset/source-file-missing` warning finding on the
   snapshot, so an incomplete entity set is visible instead of silent.

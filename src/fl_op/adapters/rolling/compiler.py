@@ -160,26 +160,33 @@ def _resolve_tasks(
     if not tasks_to_resolve:
         return None
 
-    # Held vehicles stay available to the incremental re-solve: their
+    from fl_op.solver.inputs import (
+        SECTION_OPERATORS,
+        SECTION_PRIME_MOVERS,
+        SECTION_RELATED,
+        SECTION_TASKS,
+    )
+
+    # Held assets are classified by canonical solver-row section membership
+    # (never by domain-specific id prefixes), so any domain pack's rolling
+    # re-solve treats its prime movers and related equipment correctly.
+    prime_mover_ids = {r.asset_id for r in solver_rows.get(SECTION_PRIME_MOVERS, [])}
+    related_ids = {r.asset_id for r in solver_rows.get(SECTION_RELATED, [])}
+
+    # Held prime movers stay available to the incremental re-solve: their
     # frozen/carried assignment windows travel along as busy time windows
     # (vehicle break intervals in the routing model), so a held vehicle is
     # reused only in a real non-overlapping gap, never double-booked. Held
-    # implements and operators are bound to their assignment for its whole
-    # duration and remain excluded.
-    held_vehicle_windows = _held_vehicle_windows(held_assignments)
+    # related equipment and operators are bound to their assignment for its
+    # whole duration and remain excluded.
+    held_vehicle_windows = _held_vehicle_windows(held_assignments, prime_mover_ids)
     held_implements = {
         aid
         for assignment in held_assignments
         for aid in assignment.asset_ids
-        if aid.startswith("implement")
+        if aid in related_ids
     }
     held_operators = {op for assignment in held_assignments for op in assignment.operator_ids}
-
-    from fl_op.solver.inputs import (
-        SECTION_OPERATORS,
-        SECTION_RELATED,
-        SECTION_TASKS,
-    )
 
     payload = dict(solver_rows)
     payload[SECTION_TASKS] = [
@@ -202,13 +209,14 @@ def _resolve_tasks(
 
 def _held_vehicle_windows(
     held_assignments: list[Assignment],
+    prime_mover_ids: set[str],
 ) -> dict[str, list[tuple[int, int]]]:
-    """Map each held vehicle to its busy [start, end) epoch-second intervals."""
+    """Map each held prime mover to its busy [start, end) epoch-second intervals."""
     windows: dict[str, list[tuple[int, int]]] = {}
     for assignment in held_assignments:
         start = int(assignment.planned_start.timestamp())
         end = int(assignment.planned_finish.timestamp())
         for aid in assignment.asset_ids:
-            if aid.startswith("vehicle"):
+            if aid in prime_mover_ids:
                 windows.setdefault(aid, []).append((start, end))
     return windows

@@ -27,21 +27,28 @@ def compute_bundle_id(
     return f"bundle-{digest}"
 
 
-class BundleDiagnostics(BaseModel):
-    """How complete the snapshot's materialized bundle list is.
+class BundleFeasibilitySummary(BaseModel):
+    """Compact, exact summary of the snapshot's feasible bundle space.
 
-    The solver performs its own compatibility filtering, so a truncated bundle
-    list only limits the explanation artifact, never assignment results; this
-    record lets downstream consumers tell the difference.
+    Replaces the formerly capped materialized bundle list: counts are computed
+    vectorised over the full prime-mover x related-equipment cross product, so
+    they are exact at any fleet size while the snapshot stays small. Full
+    bundles are enumerated lazily on demand (`snapshot.bundles.iter_bundles`).
+    The solver performs its own compatibility filtering, so this summary is an
+    explanation artifact, never an assignment input.
     """
 
     model_config = ConfigDict(frozen=True)
 
     n_prime_movers: int = 0
     n_related_equipment: int = 0
-    n_generated: int = 0
-    generation_cap: int = 0
-    truncated: bool = False
+    # Exact count of power-feasible (prime mover, related equipment) pairs.
+    n_feasible_pairs: int = 0
+    # Feasible pair count per operation type the pair can perform.
+    pairs_by_operation: dict[str, int] = Field(default_factory=dict)
+    # Resources no feasible pair can use (explanation: dead capacity).
+    n_unmatched_prime_movers: int = 0
+    n_unmatched_related_equipment: int = 0
 
 
 class OperationalBundle(BaseModel):

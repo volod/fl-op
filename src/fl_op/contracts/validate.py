@@ -301,13 +301,13 @@ def validate_domain(
 
 def validate_suite(
     registry: FileRegistry | None = None,
-    profile_id: str = "agricultural-custom-services",
 ) -> SuiteReport:
-    """Validate the canonical model, all registered contracts, and the profile."""
+    """Validate the canonical model, all registered contracts, and all profiles."""
     from fl_op.contracts.canonical_model import load_canonical_model
 
     registry = registry or FileRegistry()
-    report = SuiteReport(profile_id=profile_id)
+    profile_ids = sorted((registry.index.get("profiles") or {}).keys())
+    report = SuiteReport(profile_id=",".join(profile_ids) or None)
 
     report.canonical_model = validate_canonical_model()
 
@@ -339,15 +339,17 @@ def validate_suite(
                     f"bindings: {sorted(missing)}"
                 )
 
-    try:
-        profile = registry.get_profile(profile_id)
-        known = set(registry.list_contracts())
-        missing = [c for c in profile.inputContracts if c not in known]
-        if missing:
-            report.profile_errors.append(f"profile references unknown contracts: {missing}")
-        report.profile_ok = not report.profile_errors
-    except Exception as exc:  # noqa: BLE001
-        report.profile_errors.append(str(exc))
-        report.profile_ok = False
+    known = set(registry.list_contracts())
+    for pid in profile_ids:
+        try:
+            profile = registry.get_profile(pid)
+            missing = [c for c in profile.inputContracts if c not in known]
+            if missing:
+                report.profile_errors.append(
+                    f"profile {pid} references unknown contracts: {missing}"
+                )
+        except Exception as exc:  # noqa: BLE001
+            report.profile_errors.append(f"profile {pid}: {exc}")
+    report.profile_ok = not report.profile_errors
 
     return report

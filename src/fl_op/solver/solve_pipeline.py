@@ -85,6 +85,17 @@ def run_solve(data_dir: str) -> None:
     kpis = result.kpis
     telemetry.mark_phase("cluster_solving")
 
+    from fl_op.solver.solve_telemetry import summarize_cluster_telemetry
+
+    _write_json(
+        {
+            "schema_version": ARTIFACT_SCHEMA_VERSION,
+            "summary": summarize_cluster_telemetry(result.cluster_telemetry),
+            "clusters": result.cluster_telemetry,
+        },
+        out_dir / "solve_telemetry.json",
+    )
+
     _check_cross_cluster_vehicle_overlap(all_dispatch)
 
     run_metadata = {

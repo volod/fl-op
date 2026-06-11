@@ -39,23 +39,43 @@ schema:
         physicalType: string
         required: true
         description: Stable identifier of the yard.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
       - name: label
         logicalType: string
         physicalType: string
         required: false
         description: Human-readable yard name.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
       - name: lat
         logicalType: number
         physicalType: double
         required: true
         description: Yard latitude.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
       - name: lon
         logicalType: number
         physicalType: double
         required: true
         description: Yard longitude.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
       - name: diesel_litres
         logicalType: number
         physicalType: double
         required: true
         description: Available diesel inventory.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}

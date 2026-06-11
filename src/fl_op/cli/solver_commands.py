@@ -49,6 +49,31 @@ def reschedule(data: str, schedule: str, events: str | None) -> None:
     )
 
 
+@click.command("tune")
+@data_option
+@click.option(
+    "--trials",
+    default=None,
+    type=int,
+    help="Optuna trials to run (default: TUNE_N_TRIALS).",
+)
+@click.option(
+    "--seed",
+    default=None,
+    type=int,
+    help="TPE sampler seed for reproducibility (default: TUNE_SEED).",
+)
+def tune(data: str, trials: int | None, seed: int | None) -> None:
+    """Tune solver parameters with Optuna against a recorded KPI baseline."""
+    from fl_op.tuning.optuna_tuner import run_tune
+
+    run_tune(
+        data_dir=str(resolve_data_dir(data)),
+        n_trials=trials,
+        seed=seed,
+    )
+
+
 @click.command("query-contract")
 @data_option
 @schedule_option
@@ -70,5 +95,5 @@ def query_contract(data: str, schedule: str, order: str) -> None:
 
 
 def register_solver_commands(cli: click.Group) -> None:
-    for command in (solve, analyse, reschedule, query_contract):
+    for command in (solve, analyse, reschedule, tune, query_contract):
         cli.add_command(command)

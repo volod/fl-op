@@ -133,10 +133,19 @@ def _held_assignment(now: datetime) -> Assignment:
 class TestRollingResolveWithHeldVehicle:
     def test_held_vehicle_windows_collects_per_vehicle_intervals(self):
         now = datetime.now(tz=timezone.utc)
-        windows = _held_vehicle_windows([_held_assignment(now)])
+        windows = _held_vehicle_windows([_held_assignment(now)], {"vehicle_h"})
         assert list(windows) == ["vehicle_h"]
         start, end = windows["vehicle_h"][0]
         assert end - start == 2 * 3600
+
+    def test_held_assets_classified_by_section_not_id_prefix(self):
+        """Domain-neutral classification: any id works when it is a prime mover."""
+        now = datetime.now(tz=timezone.utc)
+        held = _held_assignment(now).model_copy(
+            update={"asset_ids": ["machine_00001", "attachment_000002"]}
+        )
+        windows = _held_vehicle_windows([held], {"machine_00001"})
+        assert list(windows) == ["machine_00001"]
 
     def test_held_vehicle_reused_in_gap(self):
         """The only vehicle is held later today; the new task fits before it.

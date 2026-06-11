@@ -12,7 +12,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from fl_op.canonical.asset import Asset
-from fl_op.canonical.bundle import BundleDiagnostics, OperationalBundle
+from fl_op.canonical.bundle import BundleFeasibilitySummary
 from fl_op.canonical.commitment import Commitment, InventoryPosition
 from fl_op.canonical.common import (
     QualityFinding,
@@ -20,11 +20,13 @@ from fl_op.canonical.common import (
     TimeInterval,
     VersionDimensions,
 )
+from fl_op.canonical.cost import CostRate
 from fl_op.canonical.enums import PlanningMode
 from fl_op.canonical.forecast import Forecast
 from fl_op.canonical.location import Location
 from fl_op.canonical.observation import Observation
 from fl_op.canonical.task import Task
+from fl_op.canonical.travel import TravelLink
 
 # Keys excluded from the reproducible snapshot hash: per-run identifiers only.
 HASH_EXCLUDED_FIELDS = ("snapshot_id", "generated_at")
@@ -44,13 +46,18 @@ class PlanningSnapshot(BaseModel):
 
     assets: list[Asset] = Field(default_factory=list)
     locations: list[Location] = Field(default_factory=list)
-    bundles: list[OperationalBundle] = Field(default_factory=list)
-    bundle_diagnostics: BundleDiagnostics = Field(default_factory=BundleDiagnostics)
+    # Compact, exact feasibility summary of the bundle space; concrete bundles
+    # are enumerated lazily via snapshot.bundles.iter_bundles, never stored.
+    bundle_summary: BundleFeasibilitySummary = Field(
+        default_factory=BundleFeasibilitySummary
+    )
     tasks: list[Task] = Field(default_factory=list)
     inventory: list[InventoryPosition] = Field(default_factory=list)
     forecasts: list[Forecast] = Field(default_factory=list)
     observations: list[Observation] = Field(default_factory=list)
     commitments: list[Commitment] = Field(default_factory=list)
+    travel_links: list[TravelLink] = Field(default_factory=list)
+    cost_rates: list[CostRate] = Field(default_factory=list)
     manual_overrides: list[dict[str, Any]] = Field(default_factory=list)
 
     # Per-source-contract visibility horizon: the newest observed-at this

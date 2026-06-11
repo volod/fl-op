@@ -1,0 +1,66 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: canonical-cost-rate
+version: 0.1.0
+status: active
+name: Canonical Cost Rate
+domain: canonical
+tenant: optimization
+description:
+  purpose: >-
+    Minimal optimization contract for a priced resource rate (fuel price,
+    consumable-material price) with an optional validity window.
+  usage: >-
+    Cost estimation in scoring and KPIs. The engine's cost constants remain
+    the fallback for rate types no mapped source prices.
+customProperties:
+  - property: canonicalEntity
+    value:
+      entity: cost-rate
+      canonicalModelRef: urn:xopt:model:canonical:0.1.0
+schema:
+  - name: costRate
+    logicalType: object
+    properties:
+      - name: costRateId
+        logicalType: string
+        required: true
+        description: Stable canonical identifier of the rate row.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: costRate.costRateId, semanticTerm: urn:xopt:identity:cost-rate-id, planningUse: [identity]}
+      - name: rateType
+        logicalType: string
+        required: true
+        description: Canonical resource code the rate prices (fuel, fertilizer, ...).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: costRate.rateType, semanticTerm: urn:xopt:cost:rate-type, planningUse: [cost]}
+      - name: unitPrice
+        logicalType: number
+        required: true
+        description: Price of one per-unit of the resource.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: costRate.unitPrice, semanticTerm: urn:xopt:cost:unit-price, canonicalUnit: EUR, quantityKind: money, planningUse: [cost]}
+      - name: perUnit
+        logicalType: string
+        required: true
+        description: Unit one unit-price buys (L, kg, ...).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: costRate.perUnit, semanticTerm: urn:xopt:cost:per-unit, planningUse: [cost]}
+      - name: validFrom
+        logicalType: string
+        required: false
+        description: Rate validity start (ISO-8601); absent means always valid.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: costRate.validFrom, semanticTerm: urn:xopt:time:valid-from, quantityKind: timestamp, planningUse: [cost]}
+      - name: validTo
+        logicalType: string
+        required: false
+        description: Rate validity end (ISO-8601, exclusive); absent means open-ended.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: costRate.validTo, semanticTerm: urn:xopt:time:valid-to, quantityKind: timestamp, planningUse: [cost]}

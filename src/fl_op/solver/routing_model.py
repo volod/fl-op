@@ -2,9 +2,13 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
-from fl_op.solver.travel_time import _haversine_s, _estimate_operation_seconds
+from fl_op.solver.travel_time import (
+    TravelLookup,
+    _estimate_operation_seconds,
+    travel_seconds,
+)
 
 
 def _build_node_geometry(
@@ -12,13 +16,18 @@ def _build_node_geometry(
     field_map: dict[str, dict[str, Any]],
     depot_lat: float,
     depot_lon: float,
+    depot_id: str = "",
+    travel_lookup: Optional[TravelLookup] = None,
 ) -> tuple[list[float], list[float], list[list[int]]]:
     """Return (node_lats, node_lons, time_matrix) for the routing model.
 
     Node 0 is the depot; nodes 1..N are orders in cluster_orders order.
+    Arc times come from the travel network where a link exists for the
+    location pair, otherwise from the haversine estimate.
     """
     node_lats: list[float] = [depot_lat]
     node_lons: list[float] = [depot_lon]
+    node_refs: list[str] = [depot_id]
     for order in cluster_orders:
         field = field_map.get(order.location_ref)
         if field:
@@ -27,10 +36,18 @@ def _build_node_geometry(
         else:
             node_lats.append(depot_lat)
             node_lons.append(depot_lon)
+        node_refs.append(str(order.location_ref or ""))
 
     n_nodes = len(node_lats)
     time_matrix: list[list[int]] = [
-        [_haversine_s(node_lats[i], node_lons[i], node_lats[j], node_lons[j]) for j in range(n_nodes)]
+        [
+            travel_seconds(
+                node_refs[i], node_refs[j],
+                node_lats[i], node_lons[i], node_lats[j], node_lons[j],
+                travel_lookup,
+            )
+            for j in range(n_nodes)
+        ]
         for i in range(n_nodes)
     ]
     return node_lats, node_lons, time_matrix

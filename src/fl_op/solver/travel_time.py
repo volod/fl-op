@@ -1,11 +1,33 @@
-"""Travel time and field service duration calculations for OR-Tools routing."""
+"""Travel time and field service duration calculations for OR-Tools routing.
+
+Travel times come from the travel network (canonical travel-link entities)
+when a directed link exists for a location pair; pairs without a link fall
+back to haversine distance at the average field travel speed, so a sparse
+network is valid input.
+"""
 
 import math
-from typing import Any
+from typing import Any, Optional
 
 from fl_op.core.constants import EARTH_RADIUS_KM
 
 _SECONDS_PER_KM = 240  # ~15 km/h average field travel speed -> 240 s/km
+
+# (from_location_ref, to_location_ref) -> travel time in integer seconds.
+TravelLookup = dict[tuple[str, str], int]
+
+
+def build_travel_lookup(travel_links: list[Any]) -> TravelLookup:
+    """Index travel-link rows by directed location pair (positive times only)."""
+    lookup: TravelLookup = {}
+    for link in travel_links:
+        seconds = _nonnegative(link.travel_time_s)
+        if seconds <= 0:
+            continue
+        lookup[(str(link.from_location_ref), str(link.to_location_ref))] = max(
+            1, int(seconds)
+        )
+    return lookup
 
 
 def _haversine_s(lat1: float, lon1: float, lat2: float, lon2: float) -> int:
@@ -16,6 +38,29 @@ def _haversine_s(lat1: float, lon1: float, lat2: float, lon2: float) -> int:
     a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
     km = 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(max(0.0, a)))
     return max(1, int(km * _SECONDS_PER_KM))
+
+
+def travel_seconds(
+    from_ref: str,
+    to_ref: str,
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+    travel_lookup: Optional[TravelLookup] = None,
+) -> int:
+    """Travel time between two locations: network link first, haversine fallback.
+
+    A missing directed link falls back to the reverse direction (road links
+    are usually symmetric) before the geometric estimate.
+    """
+    if travel_lookup and from_ref and to_ref and from_ref != to_ref:
+        seconds = travel_lookup.get((from_ref, to_ref)) or travel_lookup.get(
+            (to_ref, from_ref)
+        )
+        if seconds:
+            return seconds
+    return _haversine_s(lat1, lon1, lat2, lon2)
 
 
 def _estimate_operation_seconds(order: Any, implement: Any) -> int:

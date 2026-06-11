@@ -51,3 +51,15 @@ fieldMappings:
     binding: location.soilType
     semanticTerm: urn:xopt:attribute:soil-type
     planningUse: [field-restriction]
+  - sourceField: restricted_operations
+    binding: location.restrictedOperations
+    semanticTerm: urn:xopt:restriction:prohibited-operations
+    quantityKind: categorical-set
+    planningUse: [field-restriction]
+    missingValuePolicy: accept-optional
+  - sourceField: restricted_windows
+    binding: location.restrictionWindows
+    semanticTerm: urn:xopt:restriction:restricted-windows
+    quantityKind: interval-set
+    planningUse: [field-restriction, time-window]
+    missingValuePolicy: accept-optional

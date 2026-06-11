@@ -117,6 +117,16 @@ schema:
             value:
               avro: {default: 15.0}
               proto: {fieldNumber: 9}
+      - name: load_capacity_kg
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Total mass the vehicle can carry on one route; 0 means unconstrained.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: 0.0}
+              proto: {fieldNumber: 12}
       # Extra real-data fields: present in the physical schema for persistence and
       # analysis, but intentionally NOT mapped to the canonical optimization model.
       - name: manufacture_year

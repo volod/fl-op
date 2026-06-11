@@ -46,11 +46,13 @@ def test_assignment_bundle_ids_are_deterministically_reproducible(periodic_plan)
     snapshot, plan = periodic_plan
     from fl_op.canonical.bundle import compute_bundle_id
     from fl_op.core.constants import MAPPING_VERSION
+    from fl_op.snapshot.bundles import iter_bundles
 
-    # The snapshot materializes a bounded sample of bundles for inspection, but
-    # every assignment's bundle id must be reproducible from its assets so any
-    # Consumers can recompute and cross-reference the assignment bundle id.
-    assert snapshot.bundles, "snapshot should materialize operational bundles"
+    # The snapshot carries a compact feasibility summary; concrete bundles are
+    # enumerated lazily, and every assignment's bundle id must be reproducible
+    # from its assets so consumers can recompute and cross-reference it.
+    assert snapshot.bundle_summary.n_feasible_pairs > 0
+    assert next(iter_bundles(snapshot.assets, MAPPING_VERSION), None) is not None
     for a in plan.assignments:
         assert a.bundle_id == compute_bundle_id(a.asset_ids, [], MAPPING_VERSION)
 

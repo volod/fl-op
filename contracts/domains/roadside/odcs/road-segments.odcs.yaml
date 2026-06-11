@@ -1,0 +1,76 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: road-segments
+version: 1.0.0
+status: active
+name: Road Segments
+domain: roadside-infrastructure
+tenant: road-ops
+description:
+  purpose: >-
+    Maintained road segments hosting signage/sensor assets, mapped to
+    canonical work-site Locations (segment midpoint as the visit anchor).
+  usage: Service-visit geography, lane-closure curfews as restriction windows.
+  # Canonical projection lives in mappings/road-segments.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: road-segments.csv
+schema:
+  - name: roadSegments
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.roadside.network
+            recordName: RoadSegment
+            recordDoc: "Maintained road segment, mapped to a canonical Location. Source dataset: road-segments.csv."
+          proto:
+            package: org.example.roadside.network
+            messageName: RoadSegment
+            syntax: proto3
+          es:
+            indexName: road-segments
+            dynamic: strict
+    properties:
+      - name: segment_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the road segment.
+      - name: road_ref
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Human-readable road reference (route number, street).
+      - name: midpoint_lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Segment midpoint latitude (service-visit anchor).
+      - name: midpoint_lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Segment midpoint longitude (service-visit anchor).
+      - name: surface_type
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Surface classification (asphalt, concrete, gravel).
+      - name: closure_windows
+        logicalType: array
+        physicalType: string
+        required: false
+        description: >-
+          ISO-8601 "from/to" intervals when no roadside work may start on the
+          segment (peak-traffic curfews), stringified list.
+      # Extra real-data field, retained for analysis; not mapped to the canonical model.
+      - name: length_km
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Segment length (analytical, not used by the optimizer).

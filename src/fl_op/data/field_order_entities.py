@@ -32,6 +32,24 @@ _ORDER_CHAIN_DEADLINE_LAG_DAYS = 3
 
 # Share of (non-chained) orders carrying explicit workable time windows.
 _ORDER_WINDOWED_SHARE = 0.2
+
+# Mass of delivered material per worked hectare for load-demanding operations.
+_ORDER_LOAD_KG_PER_HA = 4.0
+# Operations whose orders carry a material load to the field.
+_LOAD_DEMANDING_OPERATIONS = (
+    OperationType.FERTILIZING.value,
+    OperationType.SEEDING.value,
+)
+
+# Share of fields declaring a restricted zone (one prohibited operation type)
+# and a time-restricted window, respectively.
+_FIELD_RESTRICTED_OP_SHARE = 0.05
+_FIELD_RESTRICTED_WINDOW_SHARE = 0.1
+# Placement of the restriction window: starts this many days out, lasts this
+# long. Short relative to order deadlines so most restricted fields stay
+# schedulable around the window.
+_FIELD_RESTRICTION_START_DAYS = 1.0
+_FIELD_RESTRICTION_LENGTH_DAYS = 2.0
 # How many windows a windowed order declares.
 _ORDER_WINDOWS_MIN = 1
 _ORDER_WINDOWS_MAX = 2
@@ -51,6 +69,7 @@ def _generate_fields(
     rng: np.random.Generator,
     n_orders: int,
     depots: list[dict[str, Any]],
+    now: datetime,
 ) -> list[dict[str, Any]]:
     """Generate one field per order; real data may share fields."""
     n = n_orders
@@ -63,6 +82,9 @@ def _generate_fields(
     )
     areas = rng.uniform(_ORDER_AREA_MIN_HA, _ORDER_AREA_MAX_HA, n)
     soil_types = rng.choice(["clay", "loam", "sandy_loam", "silt"], size=n)
+    restriction_draws = rng.uniform(0.0, 1.0, n)
+    window_draws = rng.uniform(0.0, 1.0, n)
+    prohibited_ops = rng.choice([op.value for op in OperationType], size=n)
 
     nearest = _nearest_depot_ids(lats, lons, depot_lats, depot_lons, depot_ids)
 
@@ -78,9 +100,27 @@ def _generate_fields(
                 "centroid_lon": round(float(lons[i]), 6),
                 "soil_type": str(soil_types[i]),
                 "nearest_depot_id": nearest[i],
+                "restricted_operations": (
+                    str([str(prohibited_ops[i])])
+                    if restriction_draws[i] < _FIELD_RESTRICTED_OP_SHARE
+                    else "[]"
+                ),
+                "restricted_windows": (
+                    _restriction_window(now)
+                    if window_draws[i] < _FIELD_RESTRICTED_WINDOW_SHARE
+                    else "[]"
+                ),
             }
         )
     return fields
+
+
+def _restriction_window(now: datetime) -> str:
+    """One stringified time-restricted interval in the near planning horizon."""
+    today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    start = today + timedelta(days=_FIELD_RESTRICTION_START_DAYS)
+    end = start + timedelta(days=_FIELD_RESTRICTION_LENGTH_DAYS)
+    return str([f"{start.isoformat()}/{end.isoformat()}"])
 
 
 def _generate_orders_and_contracts(
@@ -134,6 +174,11 @@ def _generate_orders_and_contracts(
                 "depends_on_order_id": "",
                 "workable_windows": "[]",
                 "service_duration_minutes": 0.0,
+                "material_load_kg": (
+                    round(float(fields[oi]["area_ha"]) * _ORDER_LOAD_KG_PER_HA, 1)
+                    if ops[oi] in _LOAD_DEMANDING_OPERATIONS
+                    else 0.0
+                ),
             }
             if j > 0 and chain_draws[oi] < _ORDER_CHAIN_SHARE:
                 _chain_to_predecessor(o, orders[-1])

@@ -143,6 +143,8 @@ class PrimeMoverRow(_SolverRow):
     fuel_tank_volume: float = 0.0
     fuel_consumption_rate: float = FUEL_CONSUMPTION_DEFAULT_L_PER_H
     travel_speed: float = TRAVEL_SPEED_DEFAULT_KMH
+    # Total mass carried on one route; 0 means the load is unconstrained.
+    load_capacity: float = 0.0
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -184,6 +186,10 @@ class SiteRow(_SolverRow):
     area: float = 0.0
     soil_type: str = ""
     polygon: Optional[Any] = None
+    # Operation types prohibited at this site (restricted zone).
+    restricted_operations: Any = dataclasses.field(default_factory=list)
+    # ISO-8601 "from/to" intervals when no execution may start here.
+    restriction_windows: Any = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -213,6 +219,29 @@ class ForecastRow(_SolverRow):
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class TravelLinkRow(_SolverRow):
+    """One directed travel-network edge between two locations."""
+
+    link_id: str
+    from_location_ref: str = ""
+    to_location_ref: str = ""
+    travel_time_s: float = 0.0
+    distance_km: float = 0.0
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class CostRateRow(_SolverRow):
+    """A priced resource rate (fuel, material) with an optional validity window."""
+
+    rate_id: str
+    rate_type: str = ""
+    unit_price: float = 0.0
+    per_unit: str = ""
+    valid_from: Optional[str] = None
+    valid_to: Optional[str] = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class TaskRow(_SolverRow):
     """A unit of work to schedule (order)."""
 
@@ -230,6 +259,8 @@ class TaskRow(_SolverRow):
     time_windows: Any = dataclasses.field(default_factory=list)
     # Predecessor task id that must be served before this task.
     depends_on_task_ref: str = ""
+    # Mass the bundle must carry to the task; 0 means no load demand.
+    load_demand: float = 0.0
     deadline: Optional[str] = None
     penalty_per_day: float = 0.0
     priority_class: str = ""

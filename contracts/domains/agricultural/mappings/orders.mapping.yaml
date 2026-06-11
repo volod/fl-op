@@ -54,6 +54,13 @@ fieldMappings:
     quantityKind: duration
     planningUse: [duration-estimation]
     missingValuePolicy: accept-optional
+  - sourceField: material_load_kg
+    binding: task.loadDemand
+    semanticTerm: urn:xopt:attribute:load-demand
+    canonicalUnit: kg
+    quantityKind: mass
+    planningUse: [capacity]
+    missingValuePolicy: accept-optional
   - sourceField: depends_on_order_id
     binding: task.dependsOnTaskRef
     semanticTerm: urn:xopt:relationship:depends-on

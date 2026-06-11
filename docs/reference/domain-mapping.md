@@ -71,7 +71,8 @@ metadata:
 Which datasets feed a snapshot is derived from the registry, not hardcoded: the
 snapshot builder maps every active-domain contract whose mapping targets a
 snapshot-input canonical entity (`asset`, `location`, `task`, `forecast`,
-`observation`, `commitment`), in registry declaration order. Adding a dataset to
+`observation`, `commitment`, `travel-link`, `cost-rate`), in registry
+declaration order. Adding a dataset to
 a domain therefore means adding the ODCS + mapping + registry entry; the engine
 picks it up automatically. The same holds in the stream layer: execution events
 resolve their target collection and key column from the mapping documents
@@ -116,8 +117,11 @@ with `fl-op contracts validate --write`.
 
 ## Adding a new domain (worked example: construction)
 
-`contracts/domains/construction/` is a proof pack that maps a different physical
-schema onto the **same** canonical model with no engine changes:
+`contracts/domains/construction/` maps a different physical schema onto the
+**same** canonical model with no engine changes -- and is fully runnable:
+`fl-op generate-data --domain construction` produces a conforming dataset and
+`ACTIVE_DOMAIN=construction fl-op plan periodic --data latest` plans it
+through the identical pipeline:
 
 | Construction physical | Canonical entity / role | Reuses agricultural binding |
 |---|---|---|
@@ -136,10 +140,18 @@ To add a domain:
    new vocabulary entry to `contracts/canonical/model.yaml` only if a genuinely
    new meaning is needed.
 3. Register the domain in `contracts/registry.yaml` under `domains:` (with its
-   `mappings:` list) and add a `profile.yaml`.
+   `mappings:` list for a validation-level pack) and add a `profile.yaml`.
 4. Validate: `fl-op contracts validate-domain --domain <domain>` (for the
    construction pack: `make validate-construction`). This asserts the pack maps
    completely onto the canonical model.
+5. To make the pack runnable, register its contracts under `contracts:`
+   (contract ids are a global namespace -- construction registers its
+   operator master as `construction-operators`), register the profile under
+   `profiles:`, provide source data (or a generator), and select the domain
+   at run time with `ACTIVE_DOMAIN=<domain>`. The engine needs no change:
+   solver inputs resolve binding tables by canonical entity and asset role.
 
-Wiring a new domain through the solver additionally requires source data and a
-generator; the engine itself is already domain-agnostic and needs no change.
+`contracts/domains/roadside/` is the validation-level example of a
+monitoring-driven domain: stationary signage/sensor assets along road
+segments, lane-closure curfews as restriction windows, and inspection rounds
+as the observation source feeding derived service visits.

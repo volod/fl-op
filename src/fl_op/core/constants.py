@@ -122,6 +122,21 @@ WEATHER_SOIL_MOISTURE_MAX_PCT: float = 85.0  # % volumetric water content
 # Implement may draw up to this % above vehicle rated power (short-duration peaks).
 POWER_MARGIN_PCT: float = float(os.environ.get("POWER_MARGIN_PCT", "10.0"))
 
+# Compatibility-matrix cache: matrices are keyed by a content hash of the
+# power capabilities they derive from (plus the margin), so a repeated solve
+# over the same fleet skips the rebuild. Safe by construction: any input
+# change changes the key.
+COMPAT_MATRIX_CACHE_ENABLED: bool = bool(
+    int(os.environ.get("COMPAT_MATRIX_CACHE_ENABLED", "1"))
+)
+
+# Cache directory under DATA_DIR, and how many cached matrices to retain
+# (oldest entries beyond the bound are pruned).
+COMPAT_MATRIX_CACHE_DIRNAME: str = "cache/compat-matrix"
+COMPAT_MATRIX_CACHE_MAX_ENTRIES: int = int(
+    os.environ.get("COMPAT_MATRIX_CACHE_MAX_ENTRIES", "8")
+)
+
 # Maximum V-I candidate pairs per order before routing model construction.
 MAX_PAIRS_PER_ORDER: int = int(os.environ.get("MAX_PAIRS_PER_ORDER", "30"))
 
@@ -142,12 +157,52 @@ CLUSTER_TARGET_SIZE: int = int(os.environ.get("CLUSTER_TARGET_SIZE", "50"))
 # Wall-clock seconds per cluster worker before marking the cluster infeasible.
 CLUSTER_SOLVE_TIME_LIMIT_S: int = int(os.environ.get("CLUSTER_SOLVE_TIME_LIMIT_S", "60"))
 
-# Number of parallel solver threads (0 = auto: min(n_clusters, cpu_count)).
+# Routing-model scheduling horizon: deadlines, workable windows, and location
+# restriction windows are clamped to this many seconds from now.
+ROUTING_HORIZON_S: int = 30 * 24 * 3600
+
+# Vehicle route-load capacity assigned when a prime mover declares none
+# (capacity dimension upper bound that can never bind).
+VEHICLE_LOAD_UNLIMITED_KG: float = 1.0e9
+
+# Number of parallel solver workers. 0 = auto: min(n_clusters, cpu_count,
+# memory-derived cap). An explicit positive value always wins.
 SOLVER_WORKERS: int = int(os.environ.get("SOLVER_WORKERS", "0"))
+
+# ---------------------------------------------------------------------------
+# Memory-aware pool sizing (auto mode only)
+# ---------------------------------------------------------------------------
+# Each spawned worker pays a base footprint (interpreter + OR-Tools import)
+# plus a model footprint estimated from the largest cluster: the routing model
+# holds the time matrix and one transit callback per routing vehicle, scaling
+# with n_nodes^2 x (n_vehicles + 1) cells.
+
+# Baseline resident memory of one spawned solver worker before any model.
+SOLVER_WORKER_BASE_MEMORY_MB: float = float(
+    os.environ.get("SOLVER_WORKER_BASE_MEMORY_MB", "300.0")
+)
+
+# Estimated bytes per routing-model matrix cell (matrix entry plus callback
+# and search-state overhead, measured order of magnitude).
+SOLVER_MODEL_BYTES_PER_CELL: float = float(
+    os.environ.get("SOLVER_MODEL_BYTES_PER_CELL", "64.0")
+)
+
+# Share of available memory kept free for the parent process and OS.
+SOLVER_MEMORY_HEADROOM_PCT: float = float(
+    os.environ.get("SOLVER_MEMORY_HEADROOM_PCT", "20.0")
+)
 
 # ---------------------------------------------------------------------------
 # Cost rates
 # ---------------------------------------------------------------------------
+# Cost rates are data entities (canonical cost-rate contract): when the active
+# snapshot carries a valid rate for a resource code, that rate wins. The
+# constants below are the engine fallback for unpriced resources.
+
+# Canonical resource codes a cost-rate row may price (cost-rate.rateType).
+RATE_TYPE_FUEL: str = "fuel"
+RATE_TYPE_MATERIAL: str = "fertilizer"
 
 # Diesel cost per litre used for repositioning cost estimation in greedy scoring.
 FUEL_COST_EUR_PER_L: float = float(os.environ.get("FUEL_COST_EUR_PER_L", "1.45"))
@@ -187,6 +242,33 @@ RELATED_WORKING_WIDTH_DEFAULT: float = 12.0
 
 # Related-equipment operating speed when none is projected.
 RELATED_OPERATING_SPEED_DEFAULT: float = 8.0
+
+# ---------------------------------------------------------------------------
+# Parameter tuning (Optuna) and experiment tracking (MLflow)
+# ---------------------------------------------------------------------------
+
+# Optuna trials per tuning run, and the TPE sampler seed for reproducibility.
+TUNE_N_TRIALS: int = int(os.environ.get("TUNE_N_TRIALS", "20"))
+TUNE_SEED: int = int(os.environ.get("TUNE_SEED", "7"))
+
+# Per-cluster solve budget used for the tuning baseline and as the search
+# upper bound: trials run at experiment scale, not production scale, so the
+# baseline uses the same budget for comparability.
+TUNE_TIME_LIMIT_MIN_S: int = int(os.environ.get("TUNE_TIME_LIMIT_MIN_S", "5"))
+TUNE_TIME_LIMIT_MAX_S: int = int(os.environ.get("TUNE_TIME_LIMIT_MAX_S", "30"))
+
+# Search bounds for the cluster target size and the greedy score weights
+# (weights sampled log-uniform around the 1.0 defaults).
+TUNE_CLUSTER_TARGET_SIZE_MIN: int = int(os.environ.get("TUNE_CLUSTER_TARGET_SIZE_MIN", "10"))
+TUNE_CLUSTER_TARGET_SIZE_MAX: int = int(os.environ.get("TUNE_CLUSTER_TARGET_SIZE_MAX", "80"))
+TUNE_SCORE_WEIGHT_MIN: float = float(os.environ.get("TUNE_SCORE_WEIGHT_MIN", "0.1"))
+TUNE_SCORE_WEIGHT_MAX: float = float(os.environ.get("TUNE_SCORE_WEIGHT_MAX", "5.0"))
+
+# Opt-in MLflow run logging. The tracking URI defaults to a local file store
+# under DATA_DIR; MLFLOW_TRACKING_URI overrides it.
+MLFLOW_LOGGING_ENABLED: bool = bool(int(os.environ.get("MLFLOW_LOGGING_ENABLED", "0")))
+MLFLOW_EXPERIMENT_NAME: str = os.environ.get("MLFLOW_EXPERIMENT_NAME", "fl-op")
+MLFLOW_LOCAL_DIRNAME: str = "mlruns"
 
 # ---------------------------------------------------------------------------
 # JSON artifact schema
@@ -286,11 +368,6 @@ ADAPTER_VERSION: str = "0.1.0"
 # Snapshot/adapter compatibility version recorded on every snapshot and plan.
 ADAPTER_COMPATIBILITY_VERSION: str = "0.1.0"
 
-# Maximum number of compatible (prime-mover, implement) operational bundles
-# materialized into a snapshot for inspection/explanation. The solver chain does
-# its own compatibility filtering, so this only bounds the snapshot artifact size.
-BUNDLE_GENERATION_CAP: int = int(os.environ.get("BUNDLE_GENERATION_CAP", "2000"))
-
 # Version dimensions stamped onto snapshots and plans for governance/lineage.
 MAPPING_VERSION: str = "1.0.0"
 OPTIMIZATION_PROFILE_VERSION: str = "0.1.0"
@@ -309,6 +386,8 @@ SNAPSHOT_INPUT_ENTITIES: tuple[str, ...] = (
     "forecast",
     "observation",
     "commitment",
+    "travel-link",
+    "cost-rate",
 )
 
 # ---------------------------------------------------------------------------

@@ -39,28 +39,52 @@ schema:
         physicalType: string
         required: true
         description: Stable identifier of the work site.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
       - name: label
         logicalType: string
         physicalType: string
         required: false
         description: Human-readable site name.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
       - name: plot_ha
         logicalType: number
         physicalType: double
         required: true
         description: Work-site area.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
       - name: entry_lat
         logicalType: number
         physicalType: double
         required: true
         description: Site-entry latitude.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
       - name: entry_lon
         logicalType: number
         physicalType: double
         required: true
         description: Site-entry longitude.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
       - name: ground_class
         logicalType: string
         physicalType: string
         required: false
         description: Ground classification.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}

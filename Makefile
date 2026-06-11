@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: venv setenv quickstart analyse data demo contracts canonical-validate validate-construction avro-gen proto-gen es-gen parquet-gen contracts-gen check-gen clean
+.PHONY: venv setenv quickstart analyse data demo contracts canonical-validate validate-construction validate-roadside avro-gen proto-gen es-gen parquet-gen contracts-gen check-gen clean
 
 PYTHON := .venv/bin/python
 FL_OP := .venv/bin/fl-op
@@ -60,6 +60,11 @@ canonical-validate: venv
 # model (proof that a second physical domain reuses the one optimization model).
 validate-construction: venv
 	$(FL_OP) contracts validate-domain --domain construction
+
+# Validate the roadside-infrastructure example pack (stationary signage along
+# road segments with inspection rounds as observation sources).
+validate-roadside: venv
+	$(FL_OP) contracts validate-domain --domain roadside
 
 # Validate the declarative data-contract suite (canonical model + ODCS + generated schemas + dual fingerprints).
 contracts: venv

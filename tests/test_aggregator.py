@@ -106,14 +106,16 @@ class TestComputeKpis:
 
 class TestPoolSolveFastPath:
     def test_empty_clusters_returns_empty_lists(self):
-        dispatch, infeasible = pool_solve([], [], [], [], [], [], {}, {}, {})
+        dispatch, infeasible, telemetry = pool_solve([], [], [], [], [], [], {}, {}, {})
         assert dispatch == []
         assert infeasible == []
+        assert telemetry == []
 
     def test_return_types(self):
-        dispatch, infeasible = pool_solve([], [], [], [], [], [], {}, {}, {})
+        dispatch, infeasible, telemetry = pool_solve([], [], [], [], [], [], {}, {}, {})
         assert isinstance(dispatch, list)
         assert isinstance(infeasible, list)
+        assert isinstance(telemetry, list)
 
 
 # ---------------------------------------------------------------------------

@@ -12,11 +12,13 @@ from typing import Any, Callable
 from fl_op.canonical.asset import Asset, GeoLocation
 from fl_op.canonical.commitment import Commitment, InventoryPosition
 from fl_op.canonical.common import TimeInterval
+from fl_op.canonical.cost import CostRate
 from fl_op.canonical.enums import AssetMobility, CommitmentHardness
 from fl_op.canonical.forecast import Forecast
 from fl_op.canonical.location import Location
 from fl_op.canonical.observation import Observation
 from fl_op.canonical.task import Task
+from fl_op.canonical.travel import TravelLink
 from fl_op.mapping.bindings import BindingTable
 from fl_op.mapping.result import MappingResult
 
@@ -66,6 +68,8 @@ def build_location(
         name=str(acc.get("name", "")),
         area_ha=float(acc["areaHa"]) if "areaHa" in acc else None,
         soil_type=str(acc.get("soilType", "")),
+        restricted_operations=[str(op) for op in acc.get("restrictedOperations") or []],
+        restriction_windows=parse_time_intervals(acc.get("restrictionWindows")),
         source_ref=f"{table.contract_id}:{location_id}",
     )
 
@@ -82,6 +86,7 @@ def build_task(table: BindingTable, acc: dict[str, Any]) -> Task:
         work_quantity=float(acc["workQuantity"]) if "workQuantity" in acc else None,
         work_quantity_unit=str(acc.get("workQuantityUnit", "")),
         service_duration_minutes=int(float(duration)) if duration else None,
+        load_demand_kg=float(acc["loadDemand"]) if "loadDemand" in acc else None,
         time_windows=parse_time_intervals(acc.get("timeWindows")),
         depends_on_task_ref=str(acc.get("dependsOnTaskRef") or "") or None,
         deadline=acc.get("deadline"),
@@ -154,6 +159,31 @@ def build_observation(table: BindingTable, acc: dict[str, Any]) -> Observation:
     )
 
 
+def build_travel_link(table: BindingTable, acc: dict[str, Any]) -> TravelLink:
+    """Build a TravelLink from one accumulated source row."""
+    return TravelLink(
+        link_id=str(acc["linkId"]),
+        from_location_ref=str(acc["fromLocationRef"]),
+        to_location_ref=str(acc["toLocationRef"]),
+        travel_time_s=float(acc["travelTimeS"]),
+        distance_km=float(acc["distanceKm"]) if "distanceKm" in acc else None,
+        source_ref=f"{table.contract_id}:{acc['linkId']}",
+    )
+
+
+def build_cost_rate(table: BindingTable, acc: dict[str, Any]) -> CostRate:
+    """Build a CostRate from one accumulated source row."""
+    return CostRate(
+        cost_rate_id=str(acc["costRateId"]),
+        rate_type=str(acc["rateType"]),
+        unit_price_eur=float(acc["unitPrice"]),
+        per_unit=str(acc.get("perUnit", "")),
+        valid_from=acc.get("validFrom"),
+        valid_to=acc.get("validTo"),
+        source_ref=f"{table.contract_id}:{acc['costRateId']}",
+    )
+
+
 def build_commitment(table: BindingTable, acc: dict[str, Any]) -> Commitment:
     """Build a Commitment from one accumulated source row."""
     hardness_raw = str(acc.get("hardness", CommitmentHardness.MEDIUM.value))
@@ -205,6 +235,14 @@ def _emit_commitment(table: BindingTable, acc: dict[str, Any], result: MappingRe
     result.commitments.append(build_commitment(table, acc))
 
 
+def _emit_travel_link(table: BindingTable, acc: dict[str, Any], result: MappingResult) -> None:
+    result.travel_links.append(build_travel_link(table, acc))
+
+
+def _emit_cost_rate(table: BindingTable, acc: dict[str, Any], result: MappingResult) -> None:
+    result.cost_rates.append(build_cost_rate(table, acc))
+
+
 ENTITY_EMITTERS: dict[str, EntityEmitter] = {
     "asset": _emit_asset,
     "location": _emit_location,
@@ -212,6 +250,8 @@ ENTITY_EMITTERS: dict[str, EntityEmitter] = {
     "forecast": _emit_forecast,
     "observation": _emit_observation,
     "commitment": _emit_commitment,
+    "travel-link": _emit_travel_link,
+    "cost-rate": _emit_cost_rate,
 }
 
 

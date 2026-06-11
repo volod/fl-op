@@ -31,9 +31,19 @@ gate distribution, solver enforcement gates new ontology surface):
    pre-allocation with greedy fallback; optional LNS improvement pass for
    high-value clusters; held rolling assignments as vehicle time-window
    breaks; follow-up findings below).
-7. Ontology Coverage (add surface only once the solver can consume it).
-8. Multi-Domain.
-9. Snapshot Scale and Performance.
+7. Ontology Coverage - DONE (task precedence, multiple workable windows,
+   generic work quantity, travel-network entity, vehicle load capacities,
+   restricted zones / time-restricted areas, cost rates as data entities,
+   canonical plan output contract; every added surface is solver-consumed;
+   follow-up findings below).
+8. Multi-Domain - DONE (construction pack promoted to runnable: registered
+   contracts, data generator, ACTIVE_DOMAIN selection, domain-neutral solver
+   projection; roadside-infrastructure example pack authored; follow-up
+   findings below).
+9. Snapshot Scale and Performance - DONE (exact bundle feasibility summary
+   with lazy enumeration replacing the capped bundle list; dataset-hash
+   compat-matrix cache; memory-aware pool sizing; machine-readable
+   per-cluster solve telemetry with LNS deltas; follow-up findings below).
 10. Parameter Tuning, Data Contracts CI / schema evolution, Serving.
 
 ## Solver Quality
@@ -73,9 +83,9 @@ Follow-up findings from the global assignment, LNS, and held-window work:
 - Held-window offsets are computed against wall-clock now, consistent with
   deadline handling in the routing model; basing both on the snapshot
   effective time would make replayed/synthetic timelines exact.
-- The LNS pass is a fixed second solve; budgets proportional to cluster value
-  and recording the objective delta in machine-readable solve telemetry
-  remain open (see Performance).
+- The LNS pass is a fixed second solve; the objective delta is now recorded
+  in the machine-readable solve telemetry, while budgets proportional to
+  cluster value remain open (see Performance).
 
 Follow-up findings from the implemented constraint enforcement (weather
 windows, operator qualification, material availability):
@@ -92,23 +102,80 @@ windows, operator qualification, material availability):
 
 ## Ontology Coverage
 
-Gaps identified in
-[reference/optimization-ontology.md](reference/optimization-ontology.md):
+All gaps identified in
+[reference/optimization-ontology.md](reference/optimization-ontology.md) are
+implemented, each with solver consumption:
 
-- Task precedence / dependency relations for multi-stage work sequences.
-- Multiple task time windows; only a single deadline binding exists today.
-- A travel-network entity (distance/time matrices, road graphs) so travel is
-  not limited to haversine distance and asset travel speed.
-- A generic work-quantity semantic term; duration estimation is area-driven.
-- Vehicle load capacities for pickup-and-delivery flows.
-- Restricted zones and time-restricted areas beyond soil-type restrictions.
-- Cost rates as data entities (fuel and material prices are engine constants).
-- A canonical output contract for plans, mirroring the input entity contracts.
+- Task precedence (`urn:xopt:relationship:depends-on`): chain-aware
+  clustering, in-model precedence constraints, transitive cascade exclusion,
+  and post-solve dependent withdrawal.
+- Multiple workable time windows (`urn:xopt:time:workable-windows`):
+  chain-level pre-filter plus in-model admissible start intervals.
+- Generic work quantity (`urn:xopt:attribute:work-quantity` + unit +
+  `service-duration` override): duration estimation is quantity-driven; area
+  is its legacy alias.
+- Travel network (`travel-link` entity, `routes` source contract): routing
+  arc times use directed link lookups with reverse-direction and haversine
+  fallbacks, so a sparse network is valid input
+  (`solver/travel_time.py`).
+- Vehicle load capacities (`urn:xopt:capability:load-capacity` vs
+  `urn:xopt:attribute:load-demand`): a routing capacity dimension bounds
+  each route's cumulative delivered mass; capacity-free vehicles stay
+  unconstrained and the dimension is skipped without load demands.
+- Restricted zones and time-restricted areas
+  (`location.restrictedOperations`, `location.restrictionWindows`):
+  chain-level exclusion (`RESTRICTED_ZONE`) plus in-model start-interval
+  blocking (`solver/restrictions.py`).
+- Cost rates (`cost-rate` entity, `prices` source contract): fuel and
+  material prices resolve from validity-windowed rate rows into greedy
+  scoring and KPIs, with the engine constants as fallback
+  (`solver/cost_rates.py`).
+- Canonical plan output contract
+  (`contracts/canonical/odcs/plan.odcs.yaml`): published plans are validated
+  binding-by-binding at publication time (`contracts/plan_contract.py`).
+
+Follow-up findings from the ontology-coverage work:
+
+- Travel links are consumed as direct pair lookups; composing multi-hop
+  shortest paths over a road graph, and using network times in clustering
+  and greedy repositioning (both still haversine), remain open.
+- The load dimension is one aggregate mass per route with single-trip
+  semantics; per-material compartments, depot reloads (multi-trip), and true
+  pickup-and-delivery pairing (paired pickup/dropoff nodes) would extend it.
+- Restriction windows block execution *start* only; a task may run into a
+  restriction window it started before. Occupancy semantics need
+  service-duration-aware interval constraints. Zone restrictions are
+  per-location operation lists; geometric restricted areas (polygons
+  intersecting field geometry) are not modelled.
+- Cost rates price greedy scoring and KPI aggregates; routing arc costs stay
+  time-based and per-dispatch margin estimates do not yet subtract resolved
+  fuel/material costs.
+- Non-area work quantities (m3, items) fall back to a nominal effort;
+  work-rate capabilities per unit kind would make duration estimation
+  uniform.
+- The plan contract is validated structurally (required bindings resolve);
+  generating physical output schemas (Avro/Parquet) from it, as is done for
+  input contracts, would let downstream consumers validate plan artifacts
+  without this codebase.
 
 ## Snapshot Scale
 
-- Replace the capped materialized bundle list with a lazy bundle index or a
-  compact feasibility summary.
+Implemented: the capped materialized bundle list is gone. The snapshot
+carries a compact `BundleFeasibilitySummary` (`snapshot/bundles.py`) with
+exact counts computed vectorised over the full prime-mover x related-equipment
+cross product (feasible pairs, per-operation pair counts, unmatched
+resources), so the artifact stays constant-size at any fleet scale and the
+former truncation diagnostics are unnecessary. Consumers that need concrete
+bundles enumerate them lazily through `iter_bundles` (deterministic order,
+filterable by operation type or participating asset); nothing is materialized
+beyond the yielded bundle.
+
+Follow-up findings:
+
+- The summary covers the power-feasibility rule only; folding per-operation
+  candidate counts after the task-level operation filter would also expose
+  demand-side scarcity (which operations are short on bundles for the actual
+  order book).
 
 ## Data Contracts
 
@@ -196,15 +263,79 @@ Follow-up findings from the implemented event effects and revision diff:
 
 ## Multi-Domain
 
-- A construction-domain data generator and end-to-end solver wiring, promoting
-  the existing mapping pack from validation-only to runnable.
-- A roadside-infrastructure example pack: stationary signage/sensor assets along
-  road segments with inspection rounds as observation sources.
+Both items are implemented:
+
+- The construction pack is runnable end to end: its six contracts are
+  registered (the operator master as `construction-operators`; contract ids
+  are a global namespace), the construction-earthworks profile is registered,
+  `fl-op generate-data --domain construction` produces a conforming dataset
+  (machines, attachments, operators, yards, sites, jobs), and
+  `ACTIVE_DOMAIN=construction fl-op plan periodic` runs the identical
+  snapshot -> adapter -> plan pipeline. Enabling change: the solver-input
+  projection resolves binding tables by canonical entity and asset role,
+  never by contract id, and the rolling compiler classifies held assets by
+  solver-row section membership instead of id prefixes.
+- The roadside-infrastructure example pack
+  (`contracts/domains/roadside/`) is a validation-level mapping pack:
+  stationary signage/sensor assets along road segments (anchored to their
+  segment via `asset.homeDepotRef`), maintenance depots, lane-closure
+  curfews as canonical restriction windows, and inspection rounds as the
+  observation source (condition ratings normalized to canonical metric codes
+  via `metricCodes`); its profile carries per-asset-type monitoring
+  overrides (speed radars get stricter battery thresholds).
+
+Follow-up findings from the multi-domain work:
+
+- Construction duration estimation reuses the area-driven coverage model
+  (`plot_ha` through the generic work quantity); earthworks-native
+  quantities (m3 with machine work rates) wait on the work-rate capability
+  surface tracked under Ontology Coverage.
+- The roadside pack is validation-level; promoting it to runnable needs a
+  data generator plus a monitoring-driven end-to-end test (inspection
+  findings -> derived EQUIPMENT_SERVICE visits -> dispatch), for which all
+  engine machinery already exists.
+- One domain is active per run (registry `activeDomain` or the
+  ACTIVE_DOMAIN override); cross-domain planning over a shared fleet in one
+  run is not modelled.
+- `generate-data --domain` dispatches to hardcoded generators; a domain pack
+  cannot yet register its own generator.
+- Contract ids share one global registry namespace, forcing the
+  `construction-operators` rename; per-domain namespacing would remove it.
 
 ## Performance
 
-- Cache compatibility matrices by dataset hash.
-- Add process-pool sizing based on measured per-cluster memory instead of CPU
-  count alone.
-- Record per-cluster solve quality and timeout diagnostics in machine-readable
-  artifacts.
+All three items are implemented:
+
+- Compatibility matrices are cached by dataset hash
+  (`solver/feasibility.py:cached_compat_matrix`): the key is a content hash
+  over exactly the inputs the matrix derives from (asset ids, power
+  capabilities, the power margin), stored as `.npz` under
+  `$DATA_DIR/cache/compat-matrix` with a bounded entry count
+  (`COMPAT_MATRIX_CACHE_MAX_ENTRIES`, `COMPAT_MATRIX_CACHE_ENABLED=0` to
+  disable). Safe by construction: any input change changes the key, and any
+  cache trouble falls back to a plain rebuild.
+- Auto pool sizing is memory-aware (`solver/cluster_pool.py:
+  compute_pool_sizing`): the per-worker footprint is estimated from the
+  largest cluster's routing-model size (n_nodes^2 x (n_vehicles + 1) cells on
+  top of `SOLVER_WORKER_BASE_MEMORY_MB`) and the worker count is additionally
+  bounded by available memory (`/proc/meminfo` MemAvailable with a sysconf
+  fallback), keeping `SOLVER_MEMORY_HEADROOM_PCT` free. An explicit
+  `SOLVER_WORKERS` still wins; unmeasurable memory keeps CPU-based sizing.
+- Every cluster solve yields a machine-readable telemetry record
+  (`solver/solve_telemetry.py`): model size, wall time, OR-Tools search
+  status, time-limit flag, objective values, and the LNS attempt/improvement
+  delta; crashed workers and pool-timeout cancellations get synthesized
+  records. Batch runs write `solve_telemetry.json` (records + summary) and
+  periodic/rolling plan scores carry the summary.
+
+Follow-up findings:
+
+- The per-worker memory model is an estimate (base footprint + matrix-cell
+  coefficient); feeding back measured worker RSS from completed solves would
+  calibrate the coefficients per deployment.
+- LNS budgets are still fixed per cluster; budgets proportional to cluster
+  value (the recorded objective deltas now provide the evaluation data)
+  remain open.
+- The compat cache covers the power matrix; caching the operation-type
+  candidate filter and cluster specs by the same dataset-hash scheme would
+  extend reuse to the full preprocessing stage.

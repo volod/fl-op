@@ -1,0 +1,48 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+# Projects the agricultural physical 'prices' schema onto the canonical
+# CostRate entity.
+metadata:
+  domain: agricultural
+  sourceContract: prices
+  canonicalEntity: cost-rate
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: resourcePrices
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+
+fieldMappings:
+  - sourceField: price_id
+    binding: costRate.costRateId
+    semanticTerm: urn:xopt:identity:cost-rate-id
+    planningUse: [identity]
+  - sourceField: resource_type
+    binding: costRate.rateType
+    semanticTerm: urn:xopt:cost:rate-type
+    planningUse: [cost]
+    missingValuePolicy: reject-for-planning
+  - sourceField: price_eur
+    binding: costRate.unitPrice
+    semanticTerm: urn:xopt:cost:unit-price
+    canonicalUnit: EUR
+    quantityKind: money
+    planningUse: [cost]
+    missingValuePolicy: reject-for-planning
+  - sourceField: per_unit
+    binding: costRate.perUnit
+    semanticTerm: urn:xopt:cost:per-unit
+    planningUse: [cost]
+    missingValuePolicy: reject-for-planning
+  - sourceField: valid_from
+    binding: costRate.validFrom
+    semanticTerm: urn:xopt:time:valid-from
+    quantityKind: timestamp
+    planningUse: [cost]
+    missingValuePolicy: accept-optional
+  - sourceField: valid_to
+    binding: costRate.validTo
+    semanticTerm: urn:xopt:time:valid-to
+    quantityKind: timestamp
+    planningUse: [cost]
+    missingValuePolicy: accept-optional

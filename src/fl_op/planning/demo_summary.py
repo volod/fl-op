@@ -43,11 +43,11 @@ def _log_snapshot(snapshot: dict[str, Any]) -> None:
     logger.info("Snapshot   : %s", snapshot.get("snapshot_id", "?"))
     logger.info("  hash            : %s", snapshot.get("snapshot_hash", "")[:16])
     logger.info(
-        "  canonical       : %d assets, %d locations, %d tasks, %d bundles",
+        "  canonical       : %d assets, %d locations, %d tasks, %d feasible bundle pairs",
         len(snapshot.get("assets", [])),
         len(snapshot.get("locations", [])),
         len(snapshot.get("tasks", [])),
-        len(snapshot.get("bundles", [])),
+        (snapshot.get("bundle_summary") or {}).get("n_feasible_pairs", 0),
     )
     logger.info(
         "  quality         : %d findings, %d entities excluded",

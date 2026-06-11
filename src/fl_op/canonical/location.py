@@ -8,6 +8,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from fl_op.canonical.common import TimeInterval
+
 
 class Location(BaseModel):
     """A point of interest: field-entry point, depot, or loading station."""
@@ -22,5 +24,9 @@ class Location(BaseModel):
     area_ha: Optional[float] = None
     soil_type: str = ""
     polygon: list[list[float]] = Field(default_factory=list)
+    # Operation types prohibited at this location (restricted zone).
+    restricted_operations: list[str] = Field(default_factory=list)
+    # Intervals during which no execution may start here (time-restricted area).
+    restriction_windows: list[TimeInterval] = Field(default_factory=list)
     source_ref: str = ""
     extra: dict[str, Any] = Field(default_factory=dict)

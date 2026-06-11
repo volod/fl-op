@@ -28,9 +28,11 @@ for the whole pool, not per-cluster multiplied by count.
 """
 
 import concurrent.futures
+import dataclasses
 import logging
 import multiprocessing
 import os
+import pathlib
 from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 from typing import Any, Optional
 
@@ -38,11 +40,107 @@ from fl_op.canonical.enums import ReasonCode
 from fl_op.core import constants
 from fl_op.core.constants import CLUSTER_SOLVE_TIME_LIMIT_S, SOLVER_WORKERS
 from fl_op.solver.cluster.routing import HeldWindows
+from fl_op.solver.travel_time import TravelLookup
 from fl_op.solver.types import ClusterSpec
 
 logger = logging.getLogger(__name__)
 
 _SOLVER_GRACE_S = 30
+
+_MEMINFO_PATH = pathlib.Path("/proc/meminfo")
+_BYTES_PER_MB = 1024 * 1024
+
+
+@dataclasses.dataclass(frozen=True)
+class PoolSizing:
+    """How the worker count was derived (recorded for diagnostics)."""
+
+    n_workers: int
+    cpu_cap: int
+    memory_cap: Optional[int]
+    available_memory_mb: Optional[float]
+    estimated_worker_memory_mb: float
+    explicit_override: bool
+
+
+def _available_memory_mb() -> Optional[float]:
+    """Currently available physical memory; None when not measurable."""
+    try:
+        for line in _MEMINFO_PATH.read_text().splitlines():
+            if line.startswith("MemAvailable:"):
+                return float(line.split()[1]) / 1024.0
+    except (OSError, ValueError, IndexError):
+        pass
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_AVPHYS_PAGES") / _BYTES_PER_MB
+    except (ValueError, OSError, AttributeError):
+        return None
+
+
+def _estimate_worker_memory_mb(clusters: list[ClusterSpec]) -> float:
+    """Estimated peak memory of one worker solving the largest cluster.
+
+    The routing model holds an n_nodes^2 time matrix plus one transit callback
+    per routing vehicle, so the model footprint scales with
+    n_nodes^2 x (n_vehicles + 1) cells on top of the worker's base footprint.
+    """
+    max_nodes = 1
+    max_vehicles = 1
+    for cluster in clusters:
+        max_nodes = max(max_nodes, len(cluster.get("task_ids", [])) + 1)
+        max_vehicles = max(
+            max_vehicles, len(cluster.get("allocated_prime_related", {})) or 1
+        )
+    model_mb = (
+        max_nodes * max_nodes * (max_vehicles + 1)
+        * constants.SOLVER_MODEL_BYTES_PER_CELL
+        / _BYTES_PER_MB
+    )
+    return constants.SOLVER_WORKER_BASE_MEMORY_MB + model_mb
+
+
+def compute_pool_sizing(clusters: list[ClusterSpec]) -> PoolSizing:
+    """Derive the worker count from cluster count, CPUs, and available memory.
+
+    An explicit SOLVER_WORKERS > 0 always wins. In auto mode the CPU-derived
+    cap is additionally bounded by how many estimated worker footprints fit
+    into the available memory (keeping SOLVER_MEMORY_HEADROOM_PCT free); when
+    memory cannot be measured, sizing stays CPU-based.
+    """
+    cpu_cap = os.cpu_count() or 1
+    estimated_mb = _estimate_worker_memory_mb(clusters)
+    if SOLVER_WORKERS > 0:
+        return PoolSizing(
+            n_workers=max(1, min(len(clusters), SOLVER_WORKERS)),
+            cpu_cap=cpu_cap,
+            memory_cap=None,
+            available_memory_mb=None,
+            estimated_worker_memory_mb=estimated_mb,
+            explicit_override=True,
+        )
+
+    available_mb = _available_memory_mb()
+    memory_cap: Optional[int] = None
+    if available_mb is not None:
+        usable_mb = available_mb * (1.0 - constants.SOLVER_MEMORY_HEADROOM_PCT / 100.0)
+        memory_cap = max(1, int(usable_mb / estimated_mb))
+
+    n_workers = max(
+        1,
+        min(
+            len(clusters),
+            cpu_cap,
+            memory_cap if memory_cap is not None else cpu_cap,
+        ),
+    )
+    return PoolSizing(
+        n_workers=n_workers,
+        cpu_cap=cpu_cap,
+        memory_cap=memory_cap,
+        available_memory_mb=available_mb,
+        estimated_worker_memory_mb=estimated_mb,
+        explicit_override=False,
+    )
 
 
 def _pool_initializer() -> None:
@@ -66,12 +164,15 @@ def _worker_fn(
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
     held_windows: Optional[HeldWindows] = None,
-) -> tuple[list[dict], list[dict]]:
+    travel_lookup: Optional[TravelLookup] = None,
+    solve_time_limit_s: Optional[int] = None,
+) -> tuple[list[dict], list[dict], dict[str, Any]]:
     """Top-level worker function — module-level def required for pickling."""
-    from fl_op.solver.cluster_solver import solve_cluster
-    return solve_cluster(
+    from fl_op.solver.cluster_solver import solve_cluster_instrumented
+    return solve_cluster_instrumented(
         cluster_dict, orders, vehicles, implements, fields, depots,
         greedy_assignment, vehicle_index, implement_index, held_windows,
+        travel_lookup, solve_time_limit_s,
     )
 
 
@@ -86,41 +187,64 @@ def pool_solve(
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
     held_windows: Optional[HeldWindows] = None,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Solve all clusters in parallel; return (all_dispatch, all_infeasible)."""
-    if not clusters:
-        return [], []
+    travel_lookup: Optional[TravelLookup] = None,
+    solve_time_limit_s: Optional[int] = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Solve all clusters in parallel.
 
-    cpu_count = os.cpu_count() or 1
-    n_workers = max(1, min(
-        len(clusters),
-        SOLVER_WORKERS if SOLVER_WORKERS > 0 else cpu_count,
-    ))
+    Returns (all_dispatch, all_infeasible, cluster_telemetry): one
+    machine-readable solve record per cluster, including synthesized records
+    for crashed workers and pool-timeout cancellations.
+    """
+    if not clusters:
+        return [], [], []
+
+    sizing = compute_pool_sizing(clusters)
+    n_workers = sizing.n_workers
 
     # The optional LNS improvement pass adds its own per-cluster budget.
     lns_budget_s = (
         constants.CLUSTER_LNS_TIME_LIMIT_S if constants.CLUSTER_LNS_ENABLED else 0
     )
-    task_cap_s = CLUSTER_SOLVE_TIME_LIMIT_S + lns_budget_s + _SOLVER_GRACE_S
+    cluster_limit_s = (
+        solve_time_limit_s
+        if solve_time_limit_s is not None
+        else CLUSTER_SOLVE_TIME_LIMIT_S
+    )
+    task_cap_s = cluster_limit_s + lns_budget_s + _SOLVER_GRACE_S
     n_rounds = (len(clusters) + n_workers - 1) // n_workers
     overall_timeout = (n_rounds + 1) * task_cap_s
 
     logger.info(
-        "Cluster pool: %d clusters, %d workers, overall timeout %ds",
-        len(clusters), n_workers, overall_timeout,
+        "Cluster pool: %d clusters, %d workers (cpu cap %d, memory cap %s, "
+        "available %s MB, est %.0f MB/worker%s), overall timeout %ds",
+        len(clusters),
+        n_workers,
+        sizing.cpu_cap,
+        sizing.memory_cap if sizing.memory_cap is not None else "n/a",
+        f"{sizing.available_memory_mb:.0f}" if sizing.available_memory_mb else "n/a",
+        sizing.estimated_worker_memory_mb,
+        ", explicit SOLVER_WORKERS" if sizing.explicit_override else "",
+        overall_timeout,
     )
+
+    from fl_op.solver.solve_telemetry import STATUS_POOL_TIMEOUT, STATUS_WORKER_ERROR
 
     all_dispatch: list[dict[str, Any]] = []
     all_infeasible: list[dict[str, Any]] = []
+    cluster_telemetry: list[dict[str, Any]] = []
     cluster_dicts = [dict(c) for c in clusters]
 
     ctx = multiprocessing.get_context("spawn")
     with ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx, initializer=_pool_initializer) as executor:
-        future_to_cluster: dict[Future[tuple[list[dict], list[dict]]], dict[str, Any]] = {
+        future_to_cluster: dict[
+            Future[tuple[list[dict], list[dict], dict[str, Any]]], dict[str, Any]
+        ] = {
             executor.submit(
                 _worker_fn,
                 cd, orders, vehicles, implements, fields, depots,
                 greedy_assignment, vehicle_index, implement_index, held_windows,
+                travel_lookup, solve_time_limit_s,
             ): cd
             for cd in cluster_dicts
         }
@@ -130,9 +254,10 @@ def pool_solve(
                 cd = future_to_cluster[future]
                 cluster_id = cd.get("cluster_id", "?")
                 try:
-                    dispatch, infeasible = future.result()
+                    dispatch, infeasible, telemetry = future.result()
                     all_dispatch.extend(dispatch)
                     all_infeasible.extend(infeasible)
+                    cluster_telemetry.append(dict(telemetry))
                 except Exception as exc:
                     logger.error("Cluster %s worker crashed: %s", cluster_id, exc)
                     all_infeasible.extend(
@@ -143,6 +268,14 @@ def pool_solve(
                             "detail": str(exc),
                         }
                         for oid in cd.get("task_ids", [])
+                    )
+                    cluster_telemetry.append(
+                        {
+                            "cluster_id": cluster_id,
+                            "status": STATUS_WORKER_ERROR,
+                            "n_tasks": len(cd.get("task_ids", [])),
+                            "detail": str(exc),
+                        }
                     )
 
         except concurrent.futures.TimeoutError:
@@ -163,5 +296,15 @@ def pool_solve(
                         }
                         for oid in cd.get("task_ids", [])
                     )
+                    cluster_telemetry.append(
+                        {
+                            "cluster_id": cluster_id,
+                            "status": STATUS_POOL_TIMEOUT,
+                            "n_tasks": len(cd.get("task_ids", [])),
+                            "hit_time_limit": True,
+                            "time_limit_s": overall_timeout,
+                            "detail": f"worker did not complete within {overall_timeout}s",
+                        }
+                    )
 
-    return all_dispatch, all_infeasible
+    return all_dispatch, all_infeasible, cluster_telemetry

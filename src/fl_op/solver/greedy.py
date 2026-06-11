@@ -11,7 +11,7 @@ taking the top-1 scoring V-I pair for each order.
 
 import logging
 import math
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 
@@ -50,8 +50,12 @@ def _estimate_gross_margin(order: Any) -> float:
 def _estimate_repositioning_cost(
     vehicle: Any,
     field: Any,
+    fuel_price_eur_per_l: Optional[float] = None,
 ) -> float:
     """Diesel cost to drive from vehicle's current position to the field centroid."""
+    fuel_price = (
+        fuel_price_eur_per_l if fuel_price_eur_per_l is not None else FUEL_COST_EUR_PER_L
+    )
     dist_km = _haversine_km(
         float(vehicle.lat),
         float(vehicle.lon),
@@ -61,7 +65,7 @@ def _estimate_repositioning_cost(
     speed_kmh = float(vehicle.travel_speed)
     hours = dist_km / speed_kmh if speed_kmh > 0 else 0
     fuel_l_per_h = float(vehicle.fuel_consumption_rate)
-    return hours * fuel_l_per_h * FUEL_COST_EUR_PER_L
+    return hours * fuel_l_per_h * fuel_price
 
 
 def vectorized_score(
@@ -72,11 +76,28 @@ def vectorized_score(
     feasible_pairs: dict[str, list[tuple[int, int]]],
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
+    fuel_price_eur_per_l: Optional[float] = None,
+    score_weight_margin: Optional[float] = None,
+    score_weight_reposition: Optional[float] = None,
 ) -> dict[str, list[tuple[float, int, int]]]:
     """Return {task_id: [(score, v_idx, i_idx), ...]} sorted descending by score.
 
     Vectorises over all orders and their feasible pairs using numpy broadcast.
+    ``fuel_price_eur_per_l`` is the resolved cost-rate price; the engine
+    constant applies when no rate is supplied. The score weights default to
+    the engine constants and are tunable via SolverParameters.
     """
+    fuel_price = (
+        fuel_price_eur_per_l if fuel_price_eur_per_l is not None else FUEL_COST_EUR_PER_L
+    )
+    weight_margin = (
+        score_weight_margin if score_weight_margin is not None else SCORE_WEIGHT_MARGIN
+    )
+    weight_reposition = (
+        score_weight_reposition
+        if score_weight_reposition is not None
+        else SCORE_WEIGHT_REPOSITION
+    )
     field_map = {f.location_id: f for f in fields}
     idx_to_vehicle = {idx: v for v in vehicles for idx in [vehicle_index[v.asset_id]]}
     idx_to_implement = {idx: im for im in implements for idx in [implement_index[im.asset_id]]}
@@ -117,14 +138,14 @@ def vectorized_score(
         a = np.sin(dphi / 2) ** 2 + np.cos(lat1) * math.cos(lat2) * np.sin(dlambda / 2) ** 2
         dist_km = 2 * EARTH_RADIUS_KM * np.arcsin(np.sqrt(a.clip(0, 1)))
         hours = dist_km / v_speeds[v_indices].clip(1)
-        reposition_cost = hours * v_consumptions[v_indices] * FUEL_COST_EUR_PER_L
+        reposition_cost = hours * v_consumptions[v_indices] * fuel_price
 
         # Gross margin: per-order constant for all pairs
         gross_margins = np.full(len(pairs), _estimate_gross_margin(order))
 
         scores = (
-            SCORE_WEIGHT_MARGIN * gross_margins
-            - SCORE_WEIGHT_REPOSITION * reposition_cost
+            weight_margin * gross_margins
+            - weight_reposition * reposition_cost
         )
 
         scored_pairs = sorted(

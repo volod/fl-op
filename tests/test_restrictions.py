@@ -1,0 +1,139 @@
+"""Restricted zones and time-restricted areas: filters and interval algebra."""
+
+from datetime import datetime, timedelta, timezone
+
+from fl_op.canonical.enums import ReasonCode
+from fl_op.solver.restrictions import (
+    allowed_start_intervals,
+    apply_location_restrictions,
+    merge_intervals,
+    subtract_intervals,
+)
+from fl_op.solver.types import SiteRow, TaskRow
+
+
+def _now() -> datetime:
+    return datetime.now(tz=timezone.utc)
+
+
+def _iso(dt: datetime) -> str:
+    return dt.isoformat()
+
+
+def _order(oid: str, fid: str = "f0", op: str = "SPRAYING", windows: str = "",
+           deadline_days: int = 30) -> TaskRow:
+    return TaskRow.from_canonical_dict({
+        "task_id": oid, "location_ref": fid, "operation_type": op,
+        "area": "10", "deadline": _iso(_now() + timedelta(days=deadline_days)),
+        "penalty_per_day": "100", "status": "pending", "revenue": "2000",
+        "time_windows": windows,
+    })
+
+
+def _site(fid: str = "f0", restricted_ops: str = "[]", windows: str = "[]") -> SiteRow:
+    return SiteRow.from_canonical_dict({
+        "location_id": fid, "lat": "48.5", "lon": "32.0", "area": "10",
+        "restricted_operations": restricted_ops, "restriction_windows": windows,
+    })
+
+
+class TestIntervalAlgebra:
+    def test_merge_overlapping_and_adjacent(self):
+        assert merge_intervals([(5, 9), (0, 4), (12, 14)]) == [(0, 9), (12, 14)]
+
+    def test_subtract_inner_block_splits_interval(self):
+        assert subtract_intervals([(0, 10)], [(3, 5)]) == [(0, 2), (6, 10)]
+
+    def test_subtract_full_cover_empties(self):
+        assert subtract_intervals([(2, 8)], [(0, 10)]) == []
+
+    def test_subtract_disjoint_is_noop(self):
+        assert subtract_intervals([(0, 10)], [(20, 30)]) == [(0, 10)]
+
+
+class TestAllowedStartIntervals:
+    def test_no_windows_no_restrictions_is_full_range(self):
+        order = _order("o0")
+        site = _site()
+        assert allowed_start_intervals(order, site, 100, 200) == [(100, 200)]
+
+    def test_restriction_window_is_removed(self):
+        start = _now() + timedelta(days=1)
+        end = start + timedelta(days=2)
+        order = _order("o0")
+        site = _site(windows=str([f"{_iso(start)}/{_iso(end)}"]))
+        now_epoch = int(_now().timestamp())
+        deadline_epoch = now_epoch + 30 * 24 * 3600
+        intervals = allowed_start_intervals(order, site, now_epoch, deadline_epoch)
+        assert len(intervals) == 2
+        assert intervals[0][0] == now_epoch
+        assert intervals[1][1] == deadline_epoch
+        blocked_probe = int(start.timestamp()) + 3600
+        assert not any(s <= blocked_probe <= e for s, e in intervals)
+
+
+class TestLocationRestrictionFilter:
+    def test_prohibited_operation_excluded(self):
+        orders = [_order("o0", op="SPRAYING"), _order("o1", op="SEEDING")]
+        sites = [_site(restricted_ops="['SPRAYING']")]
+        kept, infeasible = apply_location_restrictions(orders, sites, _now())
+        assert [o.task_id for o in kept] == ["o1"]
+        assert infeasible[0]["task_id"] == "o0"
+        assert infeasible[0]["reason_code"] == ReasonCode.RESTRICTED_ZONE.value
+
+    def test_full_horizon_restriction_excluded(self):
+        window = str([f"{_iso(_now() - timedelta(days=1))}/{_iso(_now() + timedelta(days=60))}"])
+        orders = [_order("o0", deadline_days=30)]
+        sites = [_site(windows=window)]
+        kept, infeasible = apply_location_restrictions(orders, sites, _now())
+        assert kept == []
+        assert infeasible[0]["reason_code"] == ReasonCode.RESTRICTED_ZONE.value
+
+    def test_partial_restriction_passes_through(self):
+        window = str([f"{_iso(_now() + timedelta(days=1))}/{_iso(_now() + timedelta(days=2))}"])
+        orders = [_order("o0", deadline_days=30)]
+        sites = [_site(windows=window)]
+        kept, infeasible = apply_location_restrictions(orders, sites, _now())
+        assert [o.task_id for o in kept] == ["o0"]
+        assert infeasible == []
+
+    def test_unknown_site_passes_through(self):
+        orders = [_order("o0", fid="ghost")]
+        kept, infeasible = apply_location_restrictions(orders, [_site()], _now())
+        assert [o.task_id for o in kept] == ["o0"]
+        assert infeasible == []
+
+
+class TestRoutingRestriction:
+    def test_schedule_starts_after_restriction_window(self):
+        """A near-term restriction pushes the scheduled start past its end."""
+        from fl_op.solver.cluster_solver import solve_cluster
+        from fl_op.solver.types import DepotRow, PrimeMoverRow, RelatedRow
+
+        restriction_end = _now() + timedelta(hours=24)
+        window = str([f"{_iso(_now() - timedelta(hours=1))}/{_iso(restriction_end)}"])
+        cd = {
+            "cluster_id": "cl0", "depot_ref": "d0", "task_ids": ["o0"],
+            "allocated_prime_related": {"v0": ["i0"]},
+            "total_penalty_per_day": 100.0,
+        }
+        orders = [_order("o0")]
+        vehicles = [PrimeMoverRow.from_canonical_dict({
+            "asset_id": "v0", "rated_power": "150", "lat": "48.5", "lon": "32.0",
+            "home_depot_ref": "d0", "travel_speed": "15",
+        })]
+        implements = [RelatedRow.from_canonical_dict({
+            "asset_id": "i0", "compatible_operations": "['SPRAYING']",
+            "required_power": "100", "working_width": "24", "max_speed": "12",
+        })]
+        fields = [_site(windows=window)]
+        depots = [DepotRow.from_canonical_dict(
+            {"location_id": "d0", "lat": "48.5", "lon": "32.0"})]
+
+        dispatch, infeasible = solve_cluster(
+            cd, orders, vehicles, implements, fields, depots,
+            {}, {"v0": 0}, {"i0": 0},
+        )
+        assert {d["task_id"] for d in dispatch} == {"o0"}, infeasible
+        scheduled = datetime.fromisoformat(dispatch[0]["scheduled_start"])
+        assert scheduled >= restriction_end - timedelta(minutes=5)

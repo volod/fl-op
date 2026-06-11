@@ -3,9 +3,9 @@
 import json
 import logging
 import pathlib
-from typing import Any
+from typing import Any, Optional
 
-from fl_op.core.constants import FUEL_COST_EUR_PER_L
+from fl_op.core.constants import FERTILIZER_COST_EUR_PER_KG, FUEL_COST_EUR_PER_L
 logger = logging.getLogger(__name__)
 
 
@@ -14,7 +14,22 @@ def _compute_kpis(
     infeasible_orders: list[dict[str, Any]],
     orders: list[Any],
     greedy_assignment: dict[str, tuple[int, int]],
+    fuel_price_eur_per_l: Optional[float] = None,
+    material_price_eur_per_kg: Optional[float] = None,
 ) -> dict[str, Any]:
+    """Aggregate schedule KPIs.
+
+    Prices come from resolved cost-rate data when supplied; the engine cost
+    constants are the fallback.
+    """
+    fuel_price = (
+        fuel_price_eur_per_l if fuel_price_eur_per_l is not None else FUEL_COST_EUR_PER_L
+    )
+    material_price = (
+        material_price_eur_per_kg
+        if material_price_eur_per_kg is not None
+        else FERTILIZER_COST_EUR_PER_KG
+    )
     total_margin = sum(d.get("estimated_margin_eur", 0) for d in dispatch_packages)
     total_fuel = sum(d.get("estimated_fuel_l", 0) for d in dispatch_packages)
     total_fertilizer = sum(d.get("estimated_fertilizer_kg", 0) for d in dispatch_packages)
@@ -22,7 +37,7 @@ def _compute_kpis(
     order_map = {o.task_id: o for o in orders}
     greedy_baseline = sum(
         float(order_map[oid].revenue)
-        - float(order_map[oid].area) * FUEL_COST_EUR_PER_L
+        - float(order_map[oid].area) * fuel_price
         for oid in greedy_assignment
         if oid in order_map
     )
@@ -39,7 +54,9 @@ def _compute_kpis(
         "greedy_baseline_margin_eur": round(greedy_baseline, 2),
         "solver_improvement_eur": round(total_margin - greedy_baseline, 2),
         "total_fuel_l": round(total_fuel, 2),
+        "total_fuel_cost_eur": round(total_fuel * fuel_price, 2),
         "total_fertilizer_kg": round(total_fertilizer, 2),
+        "total_material_cost_eur": round(total_fertilizer * material_price, 2),
         "infeasibility_reasons": infeasibility_reasons,
     }
 
