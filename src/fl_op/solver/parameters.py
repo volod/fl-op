@@ -12,6 +12,7 @@ from typing import Any
 from fl_op.core.constants import (
     CLUSTER_SOLVE_TIME_LIMIT_S,
     CLUSTER_TARGET_SIZE,
+    GLOBAL_ASSIGNMENT_COUNT_PRIORITY,
     SCORE_WEIGHT_MARGIN,
     SCORE_WEIGHT_REPOSITION,
 )
@@ -28,6 +29,10 @@ class SolverParameters:
     score_weight_reposition: float = SCORE_WEIGHT_REPOSITION
     # Wall-clock budget per cluster routing solve.
     cluster_solve_time_limit_s: int = CLUSTER_SOLVE_TIME_LIMIT_S
+    # Count-vs-margin tradeoff of the global assignment objective
+    # (1.0 = count-first, 0.0 = pure score maximization); profiles set it
+    # via allocationPolicy.countPriority.
+    assignment_count_priority: float = GLOBAL_ASSIGNMENT_COUNT_PRIORITY
 
     def as_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

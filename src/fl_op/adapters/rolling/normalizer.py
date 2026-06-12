@@ -4,7 +4,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from fl_op.adapters.base import dispatch_to_assignment, infeasible_to_unassigned
+from fl_op.adapters.base import (
+    dispatch_to_assignment,
+    infeasible_to_unassigned,
+    link_reservation_refs,
+    reservation_to_canonical,
+)
 from fl_op.adapters.ortools_periodic import _ortools_version
 from fl_op.adapters.rolling.state import RollingSolveResult
 from fl_op.canonical.common import RiskSummary
@@ -27,6 +32,13 @@ def normalize_rolling_result(
     """Convert a rolling solve result into an immutable canonical Plan revision."""
     now = datetime.now(tz=timezone.utc)
     new_assignments, unassigned, kpis = _normalize_chain_delta(raw_result)
+    chain = raw_result.chain_result
+    new_reservations = [
+        reservation_to_canonical(r)
+        for r in (chain.material_reservations if chain is not None else [])
+    ]
+    new_assignments = link_reservation_refs(new_assignments, new_reservations)
+    reservations = [*raw_result.carried_reservations, *new_reservations]
     assignments = [
         *raw_result.frozen_assignments,
         *raw_result.carried_forward,
@@ -52,10 +64,12 @@ def normalize_rolling_result(
         status=PlanStatus.DRAFT,
         assignments=assignments,
         unassigned_tasks=unassigned,
+        material_reservations=reservations,
         corrective_actions=raw_result.corrective_actions,
         score=score,
         quality_summary=snapshot.quality_summary,
         risk_summary=RiskSummary(n_contract_deadlines_at_risk=len(unassigned)),
+        source_watermarks=snapshot.source_watermarks,
         lineage_ref=snapshot.lineage_ref,
     )
 

@@ -97,6 +97,10 @@ semanticTerms:
   # Mass the bundle must carry to the task (delivered material); enforced as a
   # cumulative route-load constraint against the prime mover's load capacity.
   urn:xopt:attribute:load-demand: {valueType: number, quantityKind: mass, canonicalUnit: kg}
+  # Material code of the task's load demand; tasks sharing a code compete for
+  # the same compartment. Empty means the unspecified aggregate material (one
+  # shared load dimension bounded by the plain load capacity).
+  urn:xopt:attribute:load-material: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:polygon: {valueType: array, quantityKind: geometry}
   urn:xopt:attribute:soil-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:operation-type: {valueType: string, quantityKind: categorical}
@@ -131,8 +135,17 @@ semanticTerms:
   # Total mass a prime mover can carry on one route (pickup-and-delivery
   # flows); absent or zero means the vehicle's load is unconstrained.
   urn:xopt:capability:load-capacity: {valueType: number, quantityKind: mass, canonicalUnit: kg}
+  # Per-material compartment capacities (material code -> kg). Materials
+  # absent from the map fall back to the aggregate load-capacity.
+  urn:xopt:capability:load-capacities: {valueType: object, quantityKind: rate-map}
   urn:xopt:capability:compatible-operations: {valueType: array, quantityKind: categorical-set}
   urn:xopt:capability:operator-certification: {valueType: array, quantityKind: categorical-set}
+  # Work quantity processed per hour, keyed by work-quantity unit code
+  # ("ha", "m3", "items"). Drives duration estimation uniformly for any unit
+  # kind; a declared rate for an area unit overrides the width-times-speed
+  # coverage model. Units absent from the map fall back to that model (area)
+  # or to the nominal effort (other units).
+  urn:xopt:capability:work-rates: {valueType: object, quantityKind: rate-map}
   # -- availability ----------------------------------------------------------
   urn:xopt:availability:shift-start: {valueType: integer, quantityKind: time, canonicalUnit: s}
   urn:xopt:availability:shift-end: {valueType: integer, quantityKind: time, canonicalUnit: s}
@@ -148,6 +161,10 @@ semanticTerms:
   # sequences). A reference to a task absent from the planning input is treated
   # as already satisfied (the predecessor completed in an earlier revision).
   urn:xopt:relationship:depends-on: {valueType: string, quantityKind: identifier}
+  # Pickup location of a paired pickup-and-delivery task: the load is picked
+  # up there and dropped at the task location (same vehicle, pickup first).
+  # Absent means the load is carried from the depot.
+  urn:xopt:relationship:pickup-location: {valueType: string, quantityKind: identifier}
   # Directed travel-network edge endpoints (travel-link entity).
   urn:xopt:relationship:from-location: {valueType: string, quantityKind: identifier}
   urn:xopt:relationship:to-location: {valueType: string, quantityKind: identifier}
@@ -190,6 +207,10 @@ semanticTerms:
   urn:xopt:time:forecast-from: {valueType: string, quantityKind: timestamp}
   urn:xopt:time:forecast-to: {valueType: string, quantityKind: timestamp}
   urn:xopt:time:observed-at: {valueType: string, quantityKind: timestamp}
+  # When the reading arrived at the platform (ingestion time). Makes arrival
+  # order exact across restarts: timestamp-regression and skew detection use
+  # it instead of approximating arrival by source row order.
+  urn:xopt:time:ingested-at: {valueType: string, quantityKind: timestamp}
   urn:xopt:time:valid-from: {valueType: string, quantityKind: timestamp}
   urn:xopt:time:valid-to: {valueType: string, quantityKind: timestamp}
   urn:xopt:time:generated-at: {valueType: string, quantityKind: timestamp}

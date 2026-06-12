@@ -53,3 +53,7 @@ def _max_rss_mb(
     # Linux reports ru_maxrss in KiB. macOS reports bytes; this project runs on Linux in CI/dev.
     return max(usage.ru_maxrss, child_usage.ru_maxrss) / 1024.0
 
+
+def current_process_max_rss_mb() -> float:
+    """Maximum resident set size of the current process, in MB."""
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0

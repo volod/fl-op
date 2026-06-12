@@ -78,11 +78,25 @@ GLOBAL_ASSIGNMENT_RANDOM_SEED: int = int(
     os.environ.get("GLOBAL_ASSIGNMENT_RANDOM_SEED", "7")
 )
 
+# Count-vs-margin tradeoff of the global assignment objective: 1.0 keeps the
+# count-first construction (allocate as many bundles as the limits admit,
+# scores only break ties); 0.0 maximizes summed candidate scores regardless
+# of how many bundles are allocated. Profiles override it via
+# allocationPolicy.countPriority.
+GLOBAL_ASSIGNMENT_COUNT_PRIORITY: float = float(
+    os.environ.get("GLOBAL_ASSIGNMENT_COUNT_PRIORITY", "1.0")
+)
+
 # Objective reward per cluster operation type the assigned operator is
 # certified for, and the smaller tiebreak bonus for an operator whose home
 # depot matches the cluster depot.
 OPERATOR_COVERAGE_REWARD: int = 100
 OPERATOR_DEPOT_MATCH_REWARD: int = 1
+
+# Maximum operator-reward discount for a fully-held operator; kept below
+# OPERATOR_COVERAGE_REWARD so certified coverage always dominates and holds
+# only break ties among equally covering operators.
+OPERATOR_HOLD_DISCOUNT_REWARD: int = 50
 
 # ---------------------------------------------------------------------------
 # Large Neighbourhood Search improvement pass
@@ -137,6 +151,29 @@ COMPAT_MATRIX_CACHE_MAX_ENTRIES: int = int(
     os.environ.get("COMPAT_MATRIX_CACHE_MAX_ENTRIES", "8")
 )
 
+# Preprocessing cache: operation-filtered V-I candidates and cluster specs are
+# keyed by stable content hashes over canonical solver rows. This extends the
+# compatibility-matrix cache to the next expensive deterministic preprocessing
+# stages.
+PREPROCESSING_CACHE_ENABLED: bool = bool(
+    int(os.environ.get("PREPROCESSING_CACHE_ENABLED", "1"))
+)
+PREPROCESSING_CACHE_DIRNAME: str = "cache/preprocessing"
+PREPROCESSING_CACHE_MAX_ENTRIES: int = int(
+    os.environ.get("PREPROCESSING_CACHE_MAX_ENTRIES", "16")
+)
+
+# Serving feasibility cache: exact /feasibility requests are cached by the
+# dataset/schedule/order content hash. The endpoint still sees file changes
+# because the key includes source bytes, not just paths.
+FEASIBILITY_CACHE_ENABLED: bool = bool(
+    int(os.environ.get("FEASIBILITY_CACHE_ENABLED", "1"))
+)
+FEASIBILITY_CACHE_DIRNAME: str = "cache/feasibility"
+FEASIBILITY_CACHE_MAX_ENTRIES: int = int(
+    os.environ.get("FEASIBILITY_CACHE_MAX_ENTRIES", "128")
+)
+
 # Maximum V-I candidate pairs per order before routing model construction.
 MAX_PAIRS_PER_ORDER: int = int(os.environ.get("MAX_PAIRS_PER_ORDER", "30"))
 
@@ -146,6 +183,13 @@ MAX_PAIRS_PER_ORDER: int = int(os.environ.get("MAX_PAIRS_PER_ORDER", "30"))
 
 # WGS-84 mean Earth radius used for haversine distance calculations.
 EARTH_RADIUS_KM: float = 6371.0
+
+# Travel-network locations above which the all-pairs shortest-path closure is
+# skipped (the composed lookup grows with the square of the node count);
+# direct links still apply, pairs without one fall back to haversine.
+TRAVEL_NETWORK_MAX_COMPOSE_NODES: int = int(
+    os.environ.get("TRAVEL_NETWORK_MAX_COMPOSE_NODES", "1000")
+)
 
 # Target number of orders per geographic cluster fed to one solver worker.
 CLUSTER_TARGET_SIZE: int = int(os.environ.get("CLUSTER_TARGET_SIZE", "50"))
@@ -164,6 +208,15 @@ ROUTING_HORIZON_S: int = 30 * 24 * 3600
 # Vehicle route-load capacity assigned when a prime mover declares none
 # (capacity dimension upper bound that can never bind).
 VEHICLE_LOAD_UNLIMITED_KG: float = 1.0e9
+
+# Depot reloads (multi-trip routes). When enabled and any cluster task
+# demands a load, each routing vehicle gets one optional reload visit at the
+# depot that resets the load dimensions, so demand beyond one vehicle fill
+# can be served in several trips instead of dropping tasks.
+DEPOT_RELOAD_ENABLED: bool = bool(int(os.environ.get("DEPOT_RELOAD_ENABLED", "1")))
+
+# Handling time of one depot reload visit (loading at the ramp).
+DEPOT_RELOAD_SERVICE_S: int = int(os.environ.get("DEPOT_RELOAD_SERVICE_S", "900"))
 
 # Number of parallel solver workers. 0 = auto: min(n_clusters, cpu_count,
 # memory-derived cap). An explicit positive value always wins.
@@ -193,6 +246,27 @@ SOLVER_MEMORY_HEADROOM_PCT: float = float(
     os.environ.get("SOLVER_MEMORY_HEADROOM_PCT", "20.0")
 )
 
+# Feedback from completed worker solves. Per-cluster telemetry records worker
+# RSS and LNS objective deltas; later runs use the retained summary to calibrate
+# auto worker-count memory estimates and LNS improvement budgets.
+SOLVER_FEEDBACK_ENABLED: bool = bool(int(os.environ.get("SOLVER_FEEDBACK_ENABLED", "1")))
+SOLVER_FEEDBACK_DIRNAME: str = "cache/solver-feedback"
+SOLVER_MEMORY_FEEDBACK_FILENAME: str = "worker-memory.json"
+SOLVER_LNS_FEEDBACK_FILENAME: str = "lns-budget.json"
+
+# Guardrails for adapting the LNS improvement budget from observed objective
+# deltas. The constant LNS time limit remains the nominal budget; feedback
+# scales it between these multipliers.
+CLUSTER_LNS_FEEDBACK_REFERENCE_DELTA: float = float(
+    os.environ.get("CLUSTER_LNS_FEEDBACK_REFERENCE_DELTA", "1000.0")
+)
+CLUSTER_LNS_MIN_BUDGET_MULTIPLIER: float = float(
+    os.environ.get("CLUSTER_LNS_MIN_BUDGET_MULTIPLIER", "0.5")
+)
+CLUSTER_LNS_MAX_BUDGET_MULTIPLIER: float = float(
+    os.environ.get("CLUSTER_LNS_MAX_BUDGET_MULTIPLIER", "3.0")
+)
+
 # ---------------------------------------------------------------------------
 # Cost rates
 # ---------------------------------------------------------------------------
@@ -203,6 +277,10 @@ SOLVER_MEMORY_HEADROOM_PCT: float = float(
 # Canonical resource codes a cost-rate row may price (cost-rate.rateType).
 RATE_TYPE_FUEL: str = "fuel"
 RATE_TYPE_MATERIAL: str = "fertilizer"
+
+# Canonical unit of depot material inventory and of the material-reservation
+# quantities derived from it (urn:xopt:inventory:fertilizer is kept in kg).
+MATERIAL_INVENTORY_CANONICAL_UNIT: str = "kg"
 
 # Diesel cost per litre used for repositioning cost estimation in greedy scoring.
 FUEL_COST_EUR_PER_L: float = float(os.environ.get("FUEL_COST_EUR_PER_L", "1.45"))
@@ -250,6 +328,11 @@ RELATED_OPERATING_SPEED_DEFAULT: float = 8.0
 # Optuna trials per tuning run, and the TPE sampler seed for reproducibility.
 TUNE_N_TRIALS: int = int(os.environ.get("TUNE_N_TRIALS", "20"))
 TUNE_SEED: int = int(os.environ.get("TUNE_SEED", "7"))
+# Parallel Optuna workers. Values above 1 use an RDB storage backend so trials
+# can be coordinated safely across worker threads/processes or repeated CLI
+# invocations.
+TUNE_N_JOBS: int = int(os.environ.get("TUNE_N_JOBS", "1"))
+TUNE_STORAGE_URI: str = os.environ.get("TUNE_STORAGE_URI", "")
 
 # Per-cluster solve budget used for the tuning baseline and as the search
 # upper bound: trials run at experiment scale, not production scale, so the
@@ -263,6 +346,11 @@ TUNE_CLUSTER_TARGET_SIZE_MIN: int = int(os.environ.get("TUNE_CLUSTER_TARGET_SIZE
 TUNE_CLUSTER_TARGET_SIZE_MAX: int = int(os.environ.get("TUNE_CLUSTER_TARGET_SIZE_MAX", "80"))
 TUNE_SCORE_WEIGHT_MIN: float = float(os.environ.get("TUNE_SCORE_WEIGHT_MIN", "0.1"))
 TUNE_SCORE_WEIGHT_MAX: float = float(os.environ.get("TUNE_SCORE_WEIGHT_MAX", "5.0"))
+
+# Reviewed tuned solver-parameter artifact. `fl-op tune-promote` writes this
+# under DATA_DIR/tune; plan adapters load it as an overlay on the checked-in
+# profile defaults without modifying the profile document itself.
+TUNED_SOLVER_PARAMETERS_FILENAME: str = "solver-parameters-tuned.json"
 
 # Opt-in MLflow run logging. The tracking URI defaults to a local file store
 # under DATA_DIR; MLFLOW_TRACKING_URI overrides it.
@@ -278,6 +366,15 @@ MLFLOW_LOCAL_DIRNAME: str = "mlruns"
 # set SERVE_HOST=0.0.0.0 explicitly to expose the API beyond the host.
 SERVE_HOST: str = os.environ.get("SERVE_HOST", "127.0.0.1")
 SERVE_PORT: int = int(os.environ.get("SERVE_PORT", "8000"))
+
+# Optional bearer token for the serving API. Non-local binds require it; local
+# loopback serving may omit it for developer use. Health remains public.
+SERVE_AUTH_TOKEN: str = os.environ.get("SERVE_AUTH_TOKEN", "")
+
+# Artifact root the serving API reads. Defaults to DATA_DIR, but can point at a
+# shared mounted filesystem so multiple API instances serve the same plans and
+# datasets without changing route shapes.
+SERVE_ARTIFACT_ROOT: str = os.environ.get("SERVE_ARTIFACT_ROOT", "")
 
 # ---------------------------------------------------------------------------
 # Event-bus ingestion (broker-backed execution events)
@@ -300,6 +397,23 @@ EVENT_BROKER_POLL_TIMEOUT_S: float = float(
 EVENT_BROKER_MAX_EMPTY_POLLS: int = int(
     os.environ.get("EVENT_BROKER_MAX_EMPTY_POLLS", "3")
 )
+
+# Durable event-id deduplication for broker-backed rolling runs: ids of
+# events whose revisions were published are persisted so a redelivery after
+# a process restart is suppressed instead of producing a duplicate revision.
+# The JSONL development source replays files intentionally and never uses
+# the store.
+EVENT_DEDUP_STORE_ENABLED: bool = bool(
+    int(os.environ.get("EVENT_DEDUP_STORE_ENABLED", "1"))
+)
+
+# Directory (under DATA_DIR) and filename of the durable event-id log.
+STREAM_STATE_DIRNAME: str = "stream"
+EVENT_DEDUP_FILENAME: str = "event-dedup.ids"
+
+# Retention of the id log: past this many ids it is compacted in place to
+# the newest ones (atomic replace), bounding the file across deployments.
+EVENT_DEDUP_MAX_IDS: int = int(os.environ.get("EVENT_DEDUP_MAX_IDS", "10000"))
 
 # ---------------------------------------------------------------------------
 # JSON artifact schema
@@ -364,6 +478,11 @@ ROLLING_HORIZON_HOURS: int = int(os.environ.get("ROLLING_HORIZON_HOURS", "48"))
 
 # Tasks whose planned start falls within this window are frozen (not replanned).
 FREEZE_WINDOW_MINUTES: int = int(os.environ.get("FREEZE_WINDOW_MINUTES", "60"))
+
+# Horizon over which a held asset's free capacity is measured for hold-aware
+# pre-allocation scoring (the rolling dispatch horizon); busy time beyond it
+# does not discount candidates.
+HOLD_CAPACITY_HORIZON_S: int = ROLLING_HORIZON_HOURS * 3600
 
 # Maximum CP-SAT/routing feedback iterations before stopping.
 MAX_ASSIGNMENT_ROUTING_ITERATIONS: int = int(
@@ -432,6 +551,13 @@ SNAPSHOT_INPUT_ENTITIES: tuple[str, ...] = (
 # them; domain sources normalize their metric vocabulary to these values.
 METRIC_BATTERY_LEVEL: str = "battery-level"
 METRIC_HEALTH_STATUS: str = "health-status"
+
+# Telemetry-derived task progress: an observation carrying this canonical
+# metric for a task id reports the completed share of the task's work in
+# percent; reaching the completion percentage finishes the task exactly like
+# a task.completed event.
+METRIC_WORK_PROGRESS: str = "work-progress"
+WORK_PROGRESS_COMPLETE_PCT: float = 100.0
 
 # Battery level (percent) at or below which a service visit is required.
 BATTERY_LOW_THRESHOLD_PCT: float = float(os.environ.get("BATTERY_LOW_THRESHOLD_PCT", "20.0"))
@@ -617,12 +743,21 @@ QUALITY_TREND_FILENAME: str = "observation-error-rates.jsonl"
 # degrading.
 ERROR_RATE_TREND_MIN_RUNS: int = int(os.environ.get("ERROR_RATE_TREND_MIN_RUNS", "3"))
 
+# Retention of the trend file itself: once it exceeds this many records it is
+# compacted in place to the newest records, so the append-only file cannot
+# grow unboundedly across long deployments.
+QUALITY_TREND_MAX_RECORDS: int = int(os.environ.get("QUALITY_TREND_MAX_RECORDS", "500"))
+
 # ---------------------------------------------------------------------------
 # Service-prognosis accuracy feedback
 # ---------------------------------------------------------------------------
 
 # Filename (under DATA_DIR/quality) of the per-revision service-outcome log.
 PROGNOSIS_LOG_FILENAME: str = "service-prognosis.jsonl"
+
+# Filename (under DATA_DIR/quality) of the task-completion lead-time log:
+# one record per completed task with its deadline lead and schedule error.
+LEAD_TIME_LOG_FILENAME: str = "completion-lead-times.jsonl"
 
 # Share of withdrawn (false positive) service prognoses above which a looser
 # monitoring policy (shorter forecast horizon, lower composite threshold) is
@@ -637,3 +772,30 @@ PROGNOSIS_FALSE_POSITIVE_ALERT: float = float(
 PROGNOSIS_FALSE_NEGATIVE_ALERT: float = float(
     os.environ.get("PROGNOSIS_FALSE_NEGATIVE_ALERT", "0.2")
 )
+
+# ---------------------------------------------------------------------------
+# Guarded automatic monitoring-policy tuning
+# ---------------------------------------------------------------------------
+# Opt-in: accumulated prognosis accuracy may adjust the active monitoring
+# policy in bounded steps, recorded in an audit trail. Adjustments live in a
+# tuned-policy overlay under DATA_DIR/quality; the reviewed profile document
+# is never modified, and deleting the overlay reverts to it.
+
+MONITORING_AUTO_TUNE_ENABLED: bool = bool(
+    int(os.environ.get("MONITORING_AUTO_TUNE_ENABLED", "0"))
+)
+
+# Maximum relative change of one tunable field per adjustment.
+MONITORING_AUTO_TUNE_MAX_STEP_PCT: float = float(
+    os.environ.get("MONITORING_AUTO_TUNE_MAX_STEP_PCT", "10.0")
+)
+
+# Absolute clamps the auto-tuned fields may never leave.
+MONITORING_TUNE_HORIZON_MIN_DAYS: float = 1.0
+MONITORING_TUNE_HORIZON_MAX_DAYS: float = 14.0
+MONITORING_TUNE_COMPOSITE_MIN: float = 0.1
+MONITORING_TUNE_COMPOSITE_MAX: float = 0.6
+
+# Overlay and audit-trail filenames under DATA_DIR/quality.
+MONITORING_TUNED_POLICY_FILENAME: str = "monitoring-policy-tuned.json"
+MONITORING_TUNE_AUDIT_FILENAME: str = "monitoring-policy-audit.jsonl"

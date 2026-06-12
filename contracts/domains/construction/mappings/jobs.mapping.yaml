@@ -8,7 +8,7 @@ metadata:
   sourceContract: jobs
   canonicalEntity: task
   canonicalModelRef: urn:xopt:model:canonical:0.1.0
-  mappingVersion: 1.0.0
+  mappingVersion: 1.1.0
   dataProductRole: serviceOrders
   permittedPlanningUses: [periodic-planning, rolling-dispatch]
 
@@ -38,13 +38,19 @@ fieldMappings:
     quantityKind: area
     planningUse: [duration-estimation]
     missingValuePolicy: reject-for-planning
-  # Construction work demand projects onto the generic work-quantity term too,
-  # proving the duration semantics are not area-specific.
-  - sourceField: plot_ha
+  # Earthworks-native work demand: volume work types carry m3 quantities the
+  # attachments' declared work rates convert into effort; area-shaped work
+  # carries the plot area in ha. plot_ha stays bound above as the coverage
+  # fallback when no native quantity is reported.
+  - sourceField: quantity_value
     binding: task.workQuantity
     semanticTerm: urn:xopt:attribute:work-quantity
-    canonicalUnit: ha
     quantityKind: work
+    planningUse: [duration-estimation]
+    missingValuePolicy: accept-optional
+  - sourceField: quantity_unit
+    binding: task.workQuantityUnit
+    semanticTerm: urn:xopt:attribute:work-quantity-unit
     planningUse: [duration-estimation]
     missingValuePolicy: accept-optional
   - sourceField: deadline

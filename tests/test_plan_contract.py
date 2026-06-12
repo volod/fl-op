@@ -116,3 +116,53 @@ def test_adapter_built_plan_conforms(dataset_dir) -> None:
     profile = registry.get_profile("agricultural-custom-services")
     plan = OrToolsPeriodicAdapter().plan(snapshot, profile)
     assert_plan_conforms(plan)
+
+
+class TestPlanOutputSchemas:
+    """Physical plan-output schemas let consumers validate plan artifacts
+    without this codebase."""
+
+    def test_generated_avro_round_trips_a_plan_payload(self):
+        import io
+        import json
+
+        import fastavro
+
+        from fl_op.contracts.plan_schema_gen import generate_plan_avro
+
+        schema = fastavro.parse_schema(json.loads(generate_plan_avro()))
+        payload = _plan().model_dump(mode="json", by_alias=True)
+
+        buffer = io.BytesIO()
+        fastavro.writer(buffer, schema, [payload])
+        buffer.seek(0)
+        decoded = list(fastavro.reader(buffer))
+        assert len(decoded) == 1
+        record = decoded[0]
+        assert record["plan_id"] == "plan-periodic-abc"
+        assert record["assignments"][0]["task_id"] == "t-1"
+        assert record["unassigned_tasks"][0]["reason_code"] == (
+            ReasonCode.OPTIMIZATION_TRADEOFF.value
+        )
+        assert record["material_reservations"][0]["quantity"] == 120.0
+
+    def test_parquet_descriptor_covers_envelope_and_records(self):
+        import json
+
+        from fl_op.contracts.plan_schema_gen import generate_plan_parquet
+
+        descriptor = json.loads(generate_plan_parquet())
+        assert descriptor["contract"] == "canonical-plan"
+        by_name = {f["name"]: f for f in descriptor["fields"]}
+        assert by_name["plan_id"]["arrow_type"] == "large_string"
+        assert by_name["assignments"]["arrow_type"].startswith("list<struct<")
+        struct_fields = {
+            f["name"] for f in by_name["material_reservations"]["struct_fields"]
+        }
+        assert {"reservation_id", "task_id", "quantity", "status"} <= struct_fields
+
+    def test_contracts_generate_emits_plan_schema(self, tmp_path):
+        from fl_op.contracts.schema_gen import run_generate
+
+        assert run_generate("avro", out_dir=tmp_path)
+        assert (tmp_path / "canonical-plan.avsc").exists()

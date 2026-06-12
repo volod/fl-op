@@ -49,6 +49,10 @@ _RAW_METRIC_SOIL_MOISTURE = "soil_moisture_pct"
 _SOIL_MOISTURE_MIN_PCT = 10.0
 _SOIL_MOISTURE_MAX_PCT = 90.0
 
+# Delivery delay between a reading being taken and arriving at the platform;
+# stamped as ingested_at so arrival order is explicit, not row order.
+_INGESTION_DELAY_MAX_S = 120.0
+
 _BATTERY_UNIT = "%"
 _MOISTURE_UNIT = "%"
 
@@ -107,6 +111,10 @@ def _generate_sensor_readings(
             start_battery = rng.uniform(_BATTERY_HEALTHY_MIN_PCT, _BATTERY_HEALTHY_MAX_PCT)
         drain_per_step = _BATTERY_DAILY_DRAIN_PCT / _READINGS_PER_DAY
 
+        def ingested(observed: datetime) -> str:
+            delay = timedelta(seconds=float(rng.uniform(0.0, _INGESTION_DELAY_MAX_S)))
+            return (observed + delay).isoformat()
+
         for t in range(n_steps):
             observed_at = now - (n_steps - 1 - t) * step
             battery = max(0.0, start_battery - t * drain_per_step)
@@ -120,6 +128,7 @@ def _generate_sensor_readings(
                     "unit": _BATTERY_UNIT,
                     "observed_at": observed_at.isoformat(),
                     "quality_flag": "ok",
+                    "ingested_at": ingested(observed_at),
                 }
             )
             seq += 1
@@ -133,6 +142,7 @@ def _generate_sensor_readings(
                     "unit": _MOISTURE_UNIT,
                     "observed_at": observed_at.isoformat(),
                     "quality_flag": "ok",
+                    "ingested_at": ingested(observed_at),
                 }
             )
             seq += 1
@@ -148,6 +158,7 @@ def _generate_sensor_readings(
                 "unit": "",
                 "observed_at": now.isoformat(),
                 "quality_flag": "ok",
+                "ingested_at": ingested(now),
             }
         )
         seq += 1

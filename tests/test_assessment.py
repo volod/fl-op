@@ -154,3 +154,25 @@ def test_long_series_is_aggregated_into_windows_preserving_endpoints() -> None:
     kept_values = [o.value for o in result.observations]
     assert values[0] in kept_values
     assert values[-1] in kept_values
+
+
+def test_window_representatives_carry_min_mean_max_aggregates() -> None:
+    """Downsampling preserves extremes: a spike inside a window survives as
+    the representative's window_min/window_max even when its reading is gone."""
+    values = [80.0] * 50
+    values[10] = 5.0  # spike that evenly-spaced sampling could drop
+    obs = _series(values)
+    result = assess_observations(obs, _NOW, as_of=_NOW)
+
+    aggregated = [o for o in result.observations if o.window_n is not None]
+    assert aggregated, "expected windowed representatives on a long series"
+    assert min(o.window_min for o in aggregated) == pytest.approx(5.0)
+    assert max(o.window_max for o in aggregated) == pytest.approx(80.0)
+    for rep in aggregated:
+        assert rep.window_min <= rep.window_mean <= rep.window_max
+        assert rep.window_n >= 1
+
+
+def test_short_series_readings_carry_no_window_aggregates() -> None:
+    result = assess_observations(_series([80.0, 79.5, 79.0]), _NOW, as_of=_NOW)
+    assert all(o.window_n is None for o in result.observations)

@@ -32,6 +32,41 @@ def is_service_task_id(task_id: str) -> bool:
     return task_id.startswith(SERVICE_TASK_PREFIX)
 
 
+def service_task_reasons(snapshot: "PlanningSnapshot") -> dict[str, str]:
+    """Monitoring-derived task reasons of a snapshot, persisted for the next
+    plan's withdrawal/escalation reconciliation."""
+    return {
+        t.task_id: t.source_ref
+        for t in snapshot.tasks
+        if t.order_id.startswith("monitoring-")
+    }
+
+
+def reconcile_previous_plan(
+    previous_plan: Optional[Plan],
+    snapshot: "PlanningSnapshot",
+    previous_service_reasons: dict[str, str],
+) -> list[CorrectiveAction]:
+    """Withdrawal/escalation reconciliation against a predecessor plan.
+
+    Mode-agnostic: rolling revisions use the underlying helpers directly (they
+    also need the force-resolve set); periodic plans call this to record the
+    same false-positive withdrawals and false-negative escalations against
+    their predecessor instead of silently dropping that history.
+    """
+    if previous_plan is None:
+        return []
+    current_task_ids = {t.task_id for t in snapshot.tasks}
+    actions = withdrawn_service_actions(
+        previous_plan, current_task_ids, snapshot, previous_service_reasons
+    )
+    previous_by_task = {a.task_id: a for a in previous_plan.assignments}
+    _, escalations = escalated_service_tasks(
+        snapshot, previous_service_reasons, previous_by_task
+    )
+    return [*actions, *escalations]
+
+
 def _service_asset_id(task_id: str) -> str:
     return task_id[len(SERVICE_TASK_PREFIX):]
 

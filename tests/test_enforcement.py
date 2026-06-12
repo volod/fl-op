@@ -52,16 +52,17 @@ _WEATHER = WeatherPolicySpec(sensitivity={"SPRAYING": ["wind", "rain"]})
 
 def test_weather_blocks_task_without_compliant_window() -> None:
     forecasts = [_forecast("w1", wind=15.0), _forecast("w2", wind=12.0)]
-    kept, infeasible = apply_weather_filter(
+    kept, infeasible, blocked = apply_weather_filter(
         [_task("t1", "SPRAYING")], _SITES, forecasts, _WEATHER
     )
     assert kept == []
     assert infeasible[0]["reason_code"] == ReasonCode.NO_VALID_WEATHER_WINDOW.value
+    assert blocked == {}
 
 
 def test_weather_passes_with_one_compliant_window() -> None:
     forecasts = [_forecast("w1", wind=15.0), _forecast("w2", wind=3.0)]
-    kept, infeasible = apply_weather_filter(
+    kept, infeasible, _ = apply_weather_filter(
         [_task("t1", "SPRAYING")], _SITES, forecasts, _WEATHER
     )
     assert len(kept) == 1
@@ -70,14 +71,38 @@ def test_weather_passes_with_one_compliant_window() -> None:
 
 def test_weather_ignores_insensitive_operations_and_missing_data() -> None:
     forecasts = [_forecast("w1", wind=25.0)]
-    kept, infeasible = apply_weather_filter(
+    kept, infeasible, blocked = apply_weather_filter(
         [_task("t1", "TILLAGE")], _SITES, forecasts, _WEATHER
     )
-    assert len(kept) == 1 and infeasible == []
-    kept, infeasible = apply_weather_filter(
+    assert len(kept) == 1 and infeasible == [] and blocked == {}
+    kept, infeasible, blocked = apply_weather_filter(
         [_task("t2", "SPRAYING")], _SITES, [], _WEATHER
     )
+    assert len(kept) == 1 and infeasible == [] and blocked == {}
+
+
+def test_weather_reports_non_compliant_windows_as_blocked_intervals() -> None:
+    forecasts = [
+        ForecastRow.from_canonical_dict(
+            {"forecast_id": "w1", "lat": 50.0, "lon": 28.0, "wind_speed": 15.0,
+             "valid_from": "2027-06-01T06:00:00+00:00",
+             "valid_to": "2027-06-01T12:00:00+00:00"}
+        ),
+        ForecastRow.from_canonical_dict(
+            {"forecast_id": "w2", "lat": 50.0, "lon": 28.0, "wind_speed": 3.0,
+             "valid_from": "2027-06-01T12:00:00+00:00",
+             "valid_to": "2027-06-01T18:00:00+00:00"}
+        ),
+    ]
+    kept, infeasible, blocked = apply_weather_filter(
+        [_task("t1", "SPRAYING")], _SITES, forecasts, _WEATHER
+    )
     assert len(kept) == 1 and infeasible == []
+    from datetime import datetime
+
+    start = int(datetime.fromisoformat("2027-06-01T06:00:00+00:00").timestamp())
+    end = int(datetime.fromisoformat("2027-06-01T12:00:00+00:00").timestamp())
+    assert blocked == {"t1": [(start, end)]}
 
 
 def _cluster(task_ids: list[str], operator_ref: str = "op_1") -> ClusterSpec:
@@ -105,6 +130,64 @@ def test_operator_qualification_drops_uncertified_tasks() -> None:
     assert infeasible[0]["reason_code"] == ReasonCode.NO_AVAILABLE_OPERATOR.value
 
 
+def test_operator_qualification_pairs_backup_for_uncovered_task() -> None:
+    cluster = _cluster(["t1", "t2"])
+    order_index = {"t1": _task("t1", "TILLAGE"), "t2": _task("t2", "SPRAYING")}
+    operators = {
+        "op_1": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_1", "certified_operations": "['TILLAGE']"}
+        ),
+        "op_2": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_2", "certified_operations": "['SPRAYING']"}
+        ),
+    }
+    infeasible = apply_operator_qualification([cluster], order_index, operators)
+    assert infeasible == []
+    assert cluster["task_ids"] == ["t1", "t2"]
+    assert cluster["task_operators"] == {"t2": "op_2"}
+
+
+def test_operator_pairing_skips_operators_claimed_by_other_clusters() -> None:
+    cluster_a = _cluster(["t1"], operator_ref="op_1")
+    cluster_b = _cluster([], operator_ref="op_2")
+    order_index = {"t1": _task("t1", "SPRAYING")}
+    operators = {
+        "op_1": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_1", "certified_operations": "['TILLAGE']"}
+        ),
+        # Qualified but already staffing another cluster: not a free backup.
+        "op_2": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_2", "certified_operations": "['SPRAYING']"}
+        ),
+    }
+    infeasible = apply_operator_qualification(
+        [cluster_a, cluster_b], order_index, operators
+    )
+    assert [i["task_id"] for i in infeasible] == ["t1"]
+    assert cluster_a["task_ids"] == []
+
+
+def test_operator_pairing_prefers_freest_backup() -> None:
+    cluster = _cluster(["t1"])
+    order_index = {"t1": _task("t1", "SPRAYING")}
+    operators = {
+        "op_1": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_1", "certified_operations": "['TILLAGE']"}
+        ),
+        "op_busy": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_busy", "certified_operations": "['SPRAYING']"}
+        ),
+        "op_free": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_free", "certified_operations": "['SPRAYING']"}
+        ),
+    }
+    infeasible = apply_operator_qualification(
+        [cluster], order_index, operators, {"op_busy": 0.2}
+    )
+    assert infeasible == []
+    assert cluster["task_operators"] == {"t1": "op_free"}
+
+
 def test_material_limit_serves_high_penalty_first() -> None:
     cluster = _cluster(["t_low", "t_high", "t_other"])
     order_index = {
@@ -116,11 +199,80 @@ def test_material_limit_serves_high_penalty_first() -> None:
         DepotRow.from_canonical_dict({"location_id": "depot_1", "inventory_material": 1000.0})
     ]
     demand = {"FERTILIZING": MaterialDemandSpec(material="fertilizer", perAreaHa=50.0)}
-    infeasible = apply_material_limits([cluster], order_index, depots, demand)
+    infeasible, reservations = apply_material_limits(
+        [cluster], order_index, depots, demand
+    )
     # 15 ha * 50 = 750 kg fits; the low-penalty 500 kg task exceeds the remaining 250.
     assert [i["task_id"] for i in infeasible] == ["t_low"]
     assert infeasible[0]["reason_code"] == ReasonCode.INSUFFICIENT_MATERIAL.value
     assert set(cluster["task_ids"]) == {"t_high", "t_other"}
+    # The admitted charge is the reservation: one mechanism for feasibility
+    # and the plan's MaterialReservation outputs.
+    assert len(reservations) == 1
+    reservation = reservations[0]
+    assert reservation["task_id"] == "t_high"
+    assert reservation["reservation_id"] == "res-t_high"
+    assert reservation["material_type"] == "fertilizer"
+    assert reservation["inventory_location_ref"] == "depot_1"
+    assert reservation["quantity"] == 750.0
+    assert reservation["status"] == "provisional"
+
+
+def test_reservation_canonical_conversion_and_assignment_linking() -> None:
+    from datetime import datetime, timezone
+
+    from fl_op.adapters.base import link_reservation_refs, reservation_to_canonical
+    from fl_op.canonical.enums import ReservationStatus
+    from fl_op.canonical.plan import Assignment
+
+    reservation = reservation_to_canonical(
+        {
+            "reservation_id": "res-t1",
+            "task_id": "t1",
+            "material_type": "fertilizer",
+            "inventory_location_ref": "depot_1",
+            "quantity": 750.0,
+            "canonical_unit": "kg",
+            "status": "confirmed",
+            "reserved_from": "2027-06-01T08:00:00+00:00",
+            "reserved_to": "2027-06-01T10:00:00+00:00",
+        }
+    )
+    assert reservation.status == ReservationStatus.CONFIRMED
+    assert reservation.reserved_from is not None
+    assert reservation.quantity == 750.0
+
+    def _assignment(task_id: str) -> Assignment:
+        when = datetime(2027, 6, 1, 8, tzinfo=timezone.utc)
+        return Assignment(
+            assignment_id=f"a-{task_id}", task_id=task_id, bundle_id="b0",
+            planned_start=when, planned_finish=when,
+        )
+
+    linked = link_reservation_refs(
+        [_assignment("t1"), _assignment("t2")], [reservation]
+    )
+    assert linked[0].material_reservation_refs == ["res-t1"]
+    assert linked[1].material_reservation_refs == []
+
+
+def test_material_reservations_settle_against_final_dispatch() -> None:
+    from fl_op.solver.enforcement import finalize_material_reservations
+
+    reservations = [
+        {"reservation_id": "res-t1", "task_id": "t1", "status": "provisional"},
+        {"reservation_id": "res-t2", "task_id": "t2", "status": "provisional"},
+    ]
+    dispatch = [
+        {"task_id": "t1", "scheduled_start": "2027-06-01T08:00:00+00:00",
+         "scheduled_end": "2027-06-01T10:00:00+00:00"},
+    ]
+    settled = finalize_material_reservations(reservations, dispatch)
+    by_id = {r["reservation_id"]: r for r in settled}
+    assert by_id["res-t1"]["status"] == "confirmed"
+    assert by_id["res-t1"]["reserved_from"] == "2027-06-01T08:00:00+00:00"
+    assert by_id["res-t1"]["reserved_to"] == "2027-06-01T10:00:00+00:00"
+    assert by_id["res-t2"]["status"] == "released"
 
 
 def test_allocator_prefers_operator_with_best_coverage() -> None:

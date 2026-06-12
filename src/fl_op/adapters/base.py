@@ -2,12 +2,12 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from fl_op.adapters.spi import AdapterManifest, ValidationReport
 from fl_op.canonical.bundle import compute_bundle_id
-from fl_op.canonical.enums import ReasonCode
-from fl_op.canonical.plan import Assignment, UnassignedTask
+from fl_op.canonical.enums import ReasonCode, ReservationStatus
+from fl_op.canonical.plan import Assignment, MaterialReservation, UnassignedTask
 from fl_op.core.constants import MAPPING_VERSION
 
 if TYPE_CHECKING:
@@ -39,6 +39,52 @@ def dispatch_to_assignment(dp: dict[str, Any]) -> Assignment:
         expected_margin_eur=float(dp.get("estimated_margin_eur", 0.0)),
         explanation_ref=f"explain://assignment/{dp.get('task_id', '')}",
     )
+
+
+def _parse_optional_ts(value: Any) -> Optional[datetime]:
+    try:
+        return datetime.fromisoformat(str(value)) if value else None
+    except ValueError:
+        return None
+
+
+def reservation_to_canonical(raw: dict[str, Any]) -> MaterialReservation:
+    """Convert a chain material-reservation record into the canonical model."""
+    return MaterialReservation(
+        reservation_id=raw.get("reservation_id", ""),
+        task_id=raw.get("task_id", ""),
+        material_type=raw.get("material_type", ""),
+        inventory_location_ref=raw.get("inventory_location_ref", ""),
+        quantity=float(raw.get("quantity", 0.0)),
+        canonical_unit=raw.get("canonical_unit", ""),
+        reserved_from=_parse_optional_ts(raw.get("reserved_from")),
+        reserved_to=_parse_optional_ts(raw.get("reserved_to")),
+        status=ReservationStatus(
+            raw.get("status", ReservationStatus.PROVISIONAL.value)
+        ),
+    )
+
+
+def link_reservation_refs(
+    assignments: list[Assignment],
+    reservations: list[MaterialReservation],
+) -> list[Assignment]:
+    """Stamp each assignment with its task's material-reservation ids.
+
+    Released reservations belong to unserved tasks and therefore never match
+    an assignment; only the confirmed charges end up referenced.
+    """
+    refs_by_task: dict[str, list[str]] = {}
+    for reservation in reservations:
+        refs_by_task.setdefault(reservation.task_id, []).append(
+            reservation.reservation_id
+        )
+    return [
+        a.model_copy(update={"material_reservation_refs": refs_by_task[a.task_id]})
+        if a.task_id in refs_by_task
+        else a
+        for a in assignments
+    ]
 
 
 def infeasible_to_unassigned(inf: dict[str, Any]) -> UnassignedTask:

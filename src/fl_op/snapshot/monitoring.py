@@ -21,13 +21,7 @@ from fl_op.canonical.observation import Observation
 from fl_op.canonical.task import Task
 from fl_op.contracts.profile import MonitoringPolicySpec
 from fl_op.core.constants import (
-    COMPOSITE_BATTERY_HEADROOM_PCT,
     COMPOSITE_MIN_SIGNALS,
-    COMPOSITE_SERVICE_HEADROOM_DAYS,
-    COMPOSITE_WEIGHT_BATTERY,
-    COMPOSITE_WEIGHT_DRIFT,
-    COMPOSITE_WEIGHT_HEALTH,
-    COMPOSITE_WEIGHT_SERVICE,
     HEALTH_STATE_SCORES,
     METRIC_BATTERY_LEVEL,
     METRIC_HEALTH_STATUS,
@@ -206,8 +200,8 @@ def _composite_reason(
     ):
         headroom = (
             battery_series[-1].value - policy.batteryLowThresholdPct
-        ) / COMPOSITE_BATTERY_HEADROOM_PCT
-        signals.append((COMPOSITE_WEIGHT_BATTERY, _clamp01(headroom)))
+        ) / policy.compositeBatteryHeadroomPct
+        signals.append((policy.compositeWeightBattery, _clamp01(headroom)))
 
     health_series = history.get((asset.asset_id, METRIC_HEALTH_STATUS), [])
     if health_series and health_series[-1].state_value and _confident(
@@ -215,17 +209,20 @@ def _composite_reason(
     ):
         state = health_series[-1].state_value.lower()
         score = HEALTH_STATE_SCORES.get(state, HEALTH_STATE_SCORES["unknown"])
-        signals.append((COMPOSITE_WEIGHT_HEALTH, score))
+        signals.append((policy.compositeWeightHealth, score))
 
     due = _service_due(asset)
     if due is not None:
         days_until_due = (due - now).total_seconds() / _SECONDS_PER_DAY
         signals.append(
-            (COMPOSITE_WEIGHT_SERVICE, _clamp01(days_until_due / COMPOSITE_SERVICE_HEADROOM_DAYS))
+            (
+                policy.compositeWeightService,
+                _clamp01(days_until_due / policy.compositeServiceHeadroomDays),
+            )
         )
 
     if drifting_metrics:
-        signals.append((COMPOSITE_WEIGHT_DRIFT, 0.0))
+        signals.append((policy.compositeWeightDrift, 0.0))
 
     if len(signals) < COMPOSITE_MIN_SIGNALS:
         return None
@@ -252,7 +249,8 @@ def derive_service_tasks(
     health score combining partial signals that individually stay below their
     rule thresholds. Readings below the policy's minimum confidence are
     ignored, so fault-suspected series never derive tasks. Policies resolve
-    per asset type via the profile's ``assetTypeOverrides``. The task is
+    per asset type via the profile's ``assetTypeOverrides`` and per asset
+    instance via ``assetOverrides`` (a single critical station). The task is
     anchored at the asset's home location reference so the solver can route a
     service-capable crew there; assets without an anchor location are reported
     and skipped.
@@ -264,7 +262,7 @@ def derive_service_tasks(
     for asset in assets:
         if asset.mobility != AssetMobility.STATIONARY.value:
             continue
-        effective = policy.for_asset_type(asset.asset_type)
+        effective = policy.for_asset(asset.asset_type, asset.asset_id)
         drifting = calibration_needs.get(asset.asset_id, [])
         battery_now = _battery_reason(asset, history, effective)
         reasons = [

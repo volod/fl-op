@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: attachments
-version: 1.0.0
+version: 1.1.0
 status: active
 name: Construction Attachments Asset Master
 domain: construction-earthworks
@@ -106,3 +106,15 @@ schema:
           - property: fieldGeneration
             value:
               proto: {fieldNumber: 8}
+      - name: work_rates
+        logicalType: object
+        physicalType: string
+        required: false
+        description: >-
+          JSON map of work-quantity unit to quantity processed per hour
+          (e.g. {"m3": 90.0}). Units absent from the map fall back to the
+          width-times-speed coverage model (area) or the nominal effort.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 9}

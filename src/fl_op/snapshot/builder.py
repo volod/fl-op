@@ -90,10 +90,20 @@ class SnapshotBuilder:
         self.engine = MappingEngine(self.registry)
         self.mapped_contracts = mapped_contract_ids(self.registry)
         profile_id = self.registry.active_profile_id
-        self.monitoring_policy = (
+        profile_policy = (
             self.registry.get_profile(profile_id).monitoring
             if profile_id
             else MonitoringPolicySpec()
+        )
+        # The guarded auto-tuning overlay layers on the reviewed profile
+        # policy; deleting the overlay file reverts to the profile as is.
+        from fl_op.snapshot.policy_tuning import (
+            apply_tuned_overrides,
+            load_tuned_overrides,
+        )
+
+        self.monitoring_policy = apply_tuned_overrides(
+            profile_policy, load_tuned_overrides()
         )
 
     def _version_dimensions(self) -> VersionDimensions:
@@ -179,8 +189,15 @@ class SnapshotBuilder:
         effective_at: Optional[datetime] = None,
         lineage_ref: str = "source://in-memory",
         missing_sources: Optional[list[tuple[str, str]]] = None,
+        source_watermarks: Optional[dict[str, datetime]] = None,
     ) -> PlanningSnapshot:
-        """Build a snapshot from already-loaded (and possibly event-mutated) rows."""
+        """Build a snapshot from already-loaded (and possibly event-mutated) rows.
+
+        ``source_watermarks`` carries the caller's visibility horizons for
+        event-mutated sources (task/asset/location/forecast contracts); they
+        merge with the observation watermarks derived from the readings, the
+        newest time winning per contract.
+        """
         effective_at = effective_at or datetime.now(tz=timezone.utc)
         generated_at = datetime.now(tz=timezone.utc)
 
@@ -190,8 +207,6 @@ class SnapshotBuilder:
         result.findings.extend(
             _missing_source_findings(missing_sources or [], generated_at)
         )
-        bundle_summary = summarize_bundles(result.assets)
-
         # Statistical assessment: bound series by the retention window, exclude
         # outlier and source-flagged readings, floor the confidence of
         # fault-suspected series, and detect metric drift before any monitoring
@@ -220,6 +235,10 @@ class SnapshotBuilder:
         )
         tasks = result.tasks + service_tasks
 
+        # Summarized after monitoring so the demand side reflects the actual
+        # order book, including derived service tasks.
+        bundle_summary = summarize_bundles(result.assets, tasks)
+
         if planning_mode == PlanningMode.ROLLING:
             horizon_to = effective_at + timedelta(hours=ROLLING_HORIZON_HOURS)
         else:
@@ -231,6 +250,12 @@ class SnapshotBuilder:
             n_entities_excluded=sum(len(v) for v in result.excluded.values()),
             observation_error_rates=assessment.error_rates,
         )
+
+        watermarks = dict(source_watermarks or {})
+        for contract_id, observed in assessment.source_watermarks.items():
+            current = watermarks.get(contract_id)
+            if current is None or observed > current:
+                watermarks[contract_id] = observed
 
         base = PlanningSnapshot(
             snapshot_id="pending",
@@ -249,7 +274,7 @@ class SnapshotBuilder:
             commitments=result.commitments,
             travel_links=result.travel_links,
             cost_rates=result.cost_rates,
-            source_watermarks=assessment.source_watermarks,
+            source_watermarks=watermarks,
             quality_findings=result.findings,
             quality_summary=quality_summary,
             lineage_ref=lineage_ref,

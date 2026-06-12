@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from fl_op.solver.allocation.scoring import ScoredLookup, score_vi_pair
+from fl_op.solver.allocation.scoring import FreeCapacity, ScoredLookup, score_vi_pair
 from fl_op.solver.allocation.state import AllocationState
 
 
@@ -17,6 +17,7 @@ def collect_pair_candidates(
     scored_lookup: ScoredLookup | None,
     state: AllocationState,
     max_vehicle_uses: int,
+    free_capacity: FreeCapacity | None = None,
 ) -> dict[tuple[str, str], float]:
     """Collect scored (vehicle_id, implement_id) candidates for one cluster."""
     candidates: dict[tuple[str, str], float] = {}
@@ -31,7 +32,10 @@ def collect_pair_candidates(
             if state.vehicle_assignment_count.get(vehicle_id, 0) >= max_vehicle_uses:
                 continue
 
-            score = score_vi_pair(order, power_margin, v_idx, i_idx, scored_lookup)
+            score = score_vi_pair(
+                order, power_margin, v_idx, i_idx, scored_lookup,
+                free_capacity, vehicle_id, implement_id,
+            )
             key = (vehicle_id, implement_id)
             candidates[key] = candidates.get(key, 0.0) + score
     return candidates

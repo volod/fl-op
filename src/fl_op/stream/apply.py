@@ -8,10 +8,12 @@ event vocabulary works for any domain pack without hardcoded column names.
 """
 
 import logging
+from datetime import datetime
 from typing import Any, Callable, Optional
 
 from fl_op.canonical.enums import TaskStatus
 from fl_op.contracts.registry import FileRegistry
+from fl_op.core.constants import METRIC_WORK_PROGRESS, WORK_PROGRESS_COMPLETE_PCT
 from fl_op.mapping.bindings import BindingTable, load_binding_table
 from fl_op.stream.source import (
     EVENT_ASSET_UNAVAILABLE,
@@ -21,6 +23,7 @@ from fl_op.stream.source import (
     EVENT_OBSERVATION_RECORDED,
     EVENT_ORDER_CANCELLED,
     EVENT_ORDER_CREATED,
+    EVENT_TASK_COMPLETED,
     EVENT_TASK_PROGRESS,
     EVENT_TASK_STARTED,
     ExecutionEvent,
@@ -28,11 +31,22 @@ from fl_op.stream.source import (
 
 logger = logging.getLogger(__name__)
 
-# Binding paths resolved against each contract's mapping document.
+# Binding paths resolved against each contract's mapping document. The generic
+# work quantity is preferred; the service area is its legacy alias (both may
+# resolve to the same physical column).
 _TASK_STATUS_BINDING = "task.status"
-_TASK_WORK_QUANTITY_BINDING = "task.areaHa"
+_TASK_DEADLINE_BINDING = "task.deadline"
+_TASK_WORK_QUANTITY_BINDINGS = ("task.workQuantity", "task.areaHa")
 
-# task.progress payload field: completed share of the task's work, [0, 1].
+# Observation bindings consulted for telemetry-derived task progress.
+_OBSERVATION_METRIC_BINDING = "observation.metric"
+_OBSERVATION_VALUE_BINDING = "observation.value"
+_OBSERVATION_ENTITY_REF_BINDING = "observation.entityRef"
+
+# task.progress payload fields: the absolute remaining work in the task's
+# work-quantity unit (exact, wins when present), or the completed share of the
+# task's work in [0, 1].
+PAYLOAD_REMAINING_QUANTITY = "remaining_quantity"
 PAYLOAD_COMPLETED_FRACTION = "completed_fraction"
 
 Sources = dict[str, list[dict[str, Any]]]
@@ -41,14 +55,30 @@ Sources = dict[str, list[dict[str, Any]]]
 class EventApplicator:
     """Mutates physical source rows in response to canonical execution events."""
 
-    def __init__(self, registry: Optional[FileRegistry] = None) -> None:
+    def __init__(
+        self,
+        registry: Optional[FileRegistry] = None,
+        dedup_store: Optional[Any] = None,
+    ) -> None:
         self.registry = registry or FileRegistry()
+        # Durable event-id store (stream/dedup.py): ids published by earlier
+        # runs are suppressed, surviving process restarts. None (the default
+        # and the JSONL development path) keeps in-memory idempotency only.
+        self._dedup_store = dedup_store
         self._tables: dict[str, BindingTable] = {}
         self._by_entity: dict[str, list[str]] = {}
         # Idempotency: event ids already applied in this run. At-least-once
         # delivery may replay an event; a replay must mutate nothing and
         # produce no revision.
         self._seen_event_ids: set[str] = set()
+        # Visibility horizon per event-mutated source contract: the newest
+        # applied event's observed time. The same role observation watermarks
+        # play for readings, extended to task/asset/location/forecast sources.
+        self.watermarks: dict[str, datetime] = {}
+        # Completion records captured before finished task rows disappear
+        # (task id, completion time, deadline); the driver drains them into
+        # the lead-time log after each batch.
+        self.completions: list[dict[str, Any]] = []
         active = self.registry.active_domain
         for cid in self.registry.list_contracts():
             entry = self.registry.get_entry(cid)
@@ -75,6 +105,21 @@ class EventApplicator:
         binding = self._tables[contract_id].by_binding_path().get(_TASK_STATUS_BINDING)
         return binding.source_field if binding else None
 
+    def _work_fields(self, contract_id: str) -> list[str]:
+        """Distinct physical columns carrying the task's work, preferred first.
+
+        Deduplicated by source field: a domain may bind the same column to
+        both the generic work quantity and the legacy area alias, and it must
+        be scaled only once.
+        """
+        by_path = self._tables[contract_id].by_binding_path()
+        fields: list[str] = []
+        for path in _TASK_WORK_QUANTITY_BINDINGS:
+            binding = by_path.get(path)
+            if binding is not None and binding.source_field not in fields:
+                fields.append(binding.source_field)
+        return fields
+
     # -- event handlers ----------------------------------------------------------
 
     def _set_task_started(self, sources: Sources, event: ExecutionEvent) -> None:
@@ -89,58 +134,132 @@ class EventApplicator:
     def _apply_task_progress(self, sources: Sources, event: ExecutionEvent) -> None:
         """Partial task completion: shrink the remaining work quantity.
 
-        The payload's ``completed_fraction`` scales the task's work-quantity
-        column down to the remaining share; a fully completed task is removed
-        (nothing is left to plan). Progress implies the task started.
+        An absolute ``remaining_quantity`` payload (in the task's work-quantity
+        unit) overwrites the work-quantity column exactly, suiting domains
+        without a meaningful completed share; otherwise ``completed_fraction``
+        scales every work-quantity column down to the remaining share. A fully
+        completed task is removed (nothing is left to plan). Progress implies
+        the task started.
         """
+        remaining = self._payload_float(event, PAYLOAD_REMAINING_QUANTITY)
+        fraction = 0.0
+        if remaining is None:
+            try:
+                fraction = float(event.payload.get(PAYLOAD_COMPLETED_FRACTION, 0.0))
+            except (TypeError, ValueError):
+                logger.warning(
+                    "task.progress for %s has unusable %s: %r",
+                    event.entity_ref,
+                    PAYLOAD_COMPLETED_FRACTION,
+                    event.payload.get(PAYLOAD_COMPLETED_FRACTION),
+                )
+                return
+        if (remaining is not None and remaining <= 0.0) or fraction >= 1.0:
+            self._complete_task(sources, event.entity_ref, event.observed_at, "progress")
+            return
+        self._scale_task_work(sources, event.entity_ref, fraction, remaining)
+
+    def _scale_task_work(
+        self,
+        sources: Sources,
+        task_ref: str,
+        fraction: float,
+        remaining: Optional[float],
+    ) -> None:
+        """Shrink a task's remaining work (shared by progress and telemetry)."""
+        for cid in self._contracts_for("task", sources):
+            key = self._key_field(cid)
+            status = self._status_field(cid)
+            work_fields = self._work_fields(cid)
+            if not key or not work_fields:
+                continue
+            for row in sources[cid]:
+                if str(row.get(key)) != task_ref:
+                    continue
+                if remaining is not None:
+                    # Exact remaining work goes to the preferred work-quantity
+                    # column only: a legacy area alias bound to a different
+                    # column carries a different unit and must not receive it.
+                    row[work_fields[0]] = round(remaining, 2)
+                else:
+                    for work_field in work_fields:
+                        try:
+                            scaled = float(row.get(work_field, 0.0)) * (1.0 - fraction)
+                        except (TypeError, ValueError):
+                            logger.warning(
+                                "task progress: %s has non-numeric %s",
+                                task_ref,
+                                work_field,
+                            )
+                            continue
+                        row[work_field] = round(scaled, 2)
+                if status:
+                    row[status] = TaskStatus.STARTED.value
+
+    def _apply_task_completed(self, sources: Sources, event: ExecutionEvent) -> None:
+        """Execution finished: the task leaves planning, its outcome recorded."""
+        self._complete_task(sources, event.entity_ref, event.observed_at, "event")
+
+    def _complete_task(
+        self, sources: Sources, task_ref: str, completed_at: str, via: str
+    ) -> None:
+        """Remove a finished task, capturing its commitments first.
+
+        The deadline is read off the row before it disappears so the
+        completion record can measure how much lead the execution had; the
+        driver drains ``self.completions`` into the lead-time log.
+        """
+        record: dict[str, Any] = {
+            "task_id": task_ref,
+            "completed_at": completed_at,
+            "via": via,
+            "deadline": None,
+        }
+        for cid in self._contracts_for("task", sources):
+            key = self._key_field(cid)
+            deadline_binding = (
+                self._tables[cid].by_binding_path().get(_TASK_DEADLINE_BINDING)
+            )
+            if not key:
+                continue
+            for row in sources[cid]:
+                if str(row.get(key)) == task_ref:
+                    if deadline_binding is not None:
+                        record["deadline"] = row.get(deadline_binding.source_field)
+                    break
+        self.completions.append(record)
+        self._remove_by_key(sources, task_ref, "task")
+
+    @staticmethod
+    def _payload_float(event: ExecutionEvent, key: str) -> Optional[float]:
+        """Parse one optional numeric payload field; None when absent or unusable."""
+        if key not in event.payload:
+            return None
         try:
-            fraction = float(event.payload.get(PAYLOAD_COMPLETED_FRACTION, 0.0))
+            return float(event.payload[key])
         except (TypeError, ValueError):
             logger.warning(
                 "task.progress for %s has unusable %s: %r",
                 event.entity_ref,
-                PAYLOAD_COMPLETED_FRACTION,
-                event.payload.get(PAYLOAD_COMPLETED_FRACTION),
+                key,
+                event.payload[key],
             )
-            return
-        if fraction >= 1.0:
-            self._remove_by_key(sources, event, "task")
-            return
-        for cid in self._contracts_for("task", sources):
-            key = self._key_field(cid)
-            status = self._status_field(cid)
-            work_binding = self._tables[cid].by_binding_path().get(_TASK_WORK_QUANTITY_BINDING)
-            if not key or work_binding is None:
-                continue
-            work_field = work_binding.source_field
-            for row in sources[cid]:
-                if str(row.get(key)) != event.entity_ref:
-                    continue
-                try:
-                    remaining = float(row.get(work_field, 0.0)) * (1.0 - fraction)
-                except (TypeError, ValueError):
-                    logger.warning(
-                        "task.progress: %s has non-numeric %s", event.entity_ref, work_field
-                    )
-                    continue
-                row[work_field] = round(remaining, 2)
-                if status:
-                    row[status] = TaskStatus.STARTED.value
+            return None
 
-    def _remove_by_key(self, sources: Sources, event: ExecutionEvent, entity: str) -> None:
+    def _remove_by_key(self, sources: Sources, entity_ref: str, entity: str) -> None:
         for cid in self._contracts_for(entity, sources):
             key = self._key_field(cid)
             if not key:
                 continue
             sources[cid] = [
-                row for row in sources[cid] if str(row.get(key)) != event.entity_ref
+                row for row in sources[cid] if str(row.get(key)) != entity_ref
             ]
 
     def _remove_task(self, sources: Sources, event: ExecutionEvent) -> None:
-        self._remove_by_key(sources, event, "task")
+        self._remove_by_key(sources, event.entity_ref, "task")
 
     def _remove_asset(self, sources: Sources, event: ExecutionEvent) -> None:
-        self._remove_by_key(sources, event, "asset")
+        self._remove_by_key(sources, event.entity_ref, "asset")
 
     def _append_payload(self, sources: Sources, event: ExecutionEvent, entity: str) -> None:
         """Add (or correct) one row in the entity's source collection.
@@ -173,6 +292,55 @@ class EventApplicator:
 
     def _append_observation(self, sources: Sources, event: ExecutionEvent) -> None:
         self._append_payload(sources, event, "observation")
+        self._derive_progress_from_telemetry(sources, event)
+
+    def _derive_progress_from_telemetry(
+        self, sources: Sources, event: ExecutionEvent
+    ) -> None:
+        """Telemetry-derived task progress: no explicit progress event needed.
+
+        An observation whose (normalized) metric is the canonical
+        work-progress code reports the completed share of a task's work in
+        percent; it scales the remaining work exactly like a task.progress
+        event, and reaching the completion percentage finishes the task like
+        a task.completed event.
+        """
+        for cid in self._contracts_for("observation", sources):
+            table = self._tables[cid]
+            by_path = table.by_binding_path()
+            metric_binding = by_path.get(_OBSERVATION_METRIC_BINDING)
+            value_binding = by_path.get(_OBSERVATION_VALUE_BINDING)
+            ref_binding = by_path.get(_OBSERVATION_ENTITY_REF_BINDING)
+            if metric_binding is None or value_binding is None or ref_binding is None:
+                continue
+            raw_metric = str(event.payload.get(metric_binding.source_field, ""))
+            metric = table.metric_codes.get(raw_metric, raw_metric)
+            if metric != METRIC_WORK_PROGRESS:
+                continue
+            task_ref = str(event.payload.get(ref_binding.source_field, ""))
+            if not task_ref:
+                continue
+            try:
+                progress_pct = float(event.payload.get(value_binding.source_field))
+            except (TypeError, ValueError):
+                logger.warning(
+                    "work-progress observation for %s has unusable value: %r",
+                    task_ref,
+                    event.payload.get(value_binding.source_field),
+                )
+                return
+            if progress_pct >= WORK_PROGRESS_COMPLETE_PCT:
+                self._complete_task(
+                    sources, task_ref, event.observed_at, "telemetry"
+                )
+            else:
+                self._scale_task_work(
+                    sources,
+                    task_ref,
+                    max(0.0, progress_pct) / WORK_PROGRESS_COMPLETE_PCT,
+                    None,
+                )
+            return
 
     def _upsert_entity(self, sources: Sources, event: ExecutionEvent) -> None:
         """Replace (or add) a corrected source row, resolved by its key column.
@@ -251,17 +419,56 @@ class EventApplicator:
                     "Skipping replayed event %s (%s)", event.event_id, event.event_type
                 )
                 return False
+            if self._dedup_store is not None and event.event_id in self._dedup_store:
+                logger.info(
+                    "Skipping event %s (%s): already published by an earlier run",
+                    event.event_id,
+                    event.event_type,
+                )
+                return False
             self._seen_event_ids.add(event.event_id)
         handler = self._HANDLERS.get(event.event_type)
         if handler is None:
             logger.warning("Unhandled event type '%s'; replanning anyway", event.event_type)
             return True
         handler(self, sources, event)
+        self._advance_watermarks(sources, event)
         return True
+
+    def _advance_watermarks(self, sources: Sources, event: ExecutionEvent) -> None:
+        """Record the newest applied event time per mutated source contract."""
+        entity = self._EVENT_ENTITY.get(event.event_type)
+        if not entity or not event.observed_at:
+            return
+        try:
+            observed = datetime.fromisoformat(
+                str(event.observed_at).replace("Z", "+00:00")
+            )
+        except ValueError:
+            return
+        for cid in self._contracts_for(entity, sources):
+            current = self.watermarks.get(cid)
+            if current is None or observed > current:
+                self.watermarks[cid] = observed
+
+    # Canonical entity each event type mutates; entity.corrected resolves its
+    # target by key column and is not watermarked.
+    _EVENT_ENTITY: dict[str, str] = {
+        EVENT_TASK_STARTED: "task",
+        EVENT_TASK_PROGRESS: "task",
+        EVENT_TASK_COMPLETED: "task",
+        EVENT_ORDER_CREATED: "task",
+        EVENT_ORDER_CANCELLED: "task",
+        EVENT_ASSET_UNAVAILABLE: "asset",
+        EVENT_INVENTORY_ADJUSTED: "location",
+        EVENT_FORECAST_UPDATED: "forecast",
+        EVENT_OBSERVATION_RECORDED: "observation",
+    }
 
     _HANDLERS: dict[str, Callable[["EventApplicator", Sources, ExecutionEvent], None]] = {
         EVENT_TASK_STARTED: _set_task_started,
         EVENT_TASK_PROGRESS: _apply_task_progress,
+        EVENT_TASK_COMPLETED: _apply_task_completed,
         EVENT_ORDER_CREATED: _append_task,
         EVENT_ORDER_CANCELLED: _remove_task,
         EVENT_ASSET_UNAVAILABLE: _remove_asset,

@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 # operator id removes them through the same binding-driven path.
 EVENT_TASK_STARTED = "task.started"
 EVENT_TASK_PROGRESS = "task.progress"
+EVENT_TASK_COMPLETED = "task.completed"
 EVENT_ORDER_CREATED = "order.created"
 EVENT_ORDER_CANCELLED = "order.cancelled"
 EVENT_ASSET_UNAVAILABLE = "asset.unavailable"
@@ -30,6 +31,7 @@ EVENT_INVENTORY_ADJUSTED = "inventory.adjusted"
 SUPPORTED_EVENT_TYPES = {
     EVENT_TASK_STARTED,
     EVENT_TASK_PROGRESS,
+    EVENT_TASK_COMPLETED,
     EVENT_ORDER_CREATED,
     EVENT_ORDER_CANCELLED,
     EVENT_ASSET_UNAVAILABLE,

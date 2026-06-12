@@ -1,7 +1,10 @@
 """Cross-run observation error-rate trending."""
 
+import json
 import pathlib
 from datetime import datetime, timezone
+
+import pytest
 
 from fl_op.canonical.common import QualitySummary, TimeInterval, VersionDimensions
 from fl_op.canonical.enums import PlanningMode
@@ -50,3 +53,26 @@ def test_zero_rates_are_not_recorded_as_degrading(tmp_path: pathlib.Path) -> Non
     for run in range(3):
         record_error_rates(_snapshot({"sensor-readings": 0.0}, run), trend)
     assert degrading_sources(trend) == {}
+
+
+def test_trend_file_is_compacted_to_newest_records(
+    tmp_path: pathlib.Path, monkeypatch
+) -> None:
+    """The append-only file cannot grow unboundedly: once over the cap it is
+    compacted in place to the newest records, and the trend verdict on the
+    retained window is unchanged."""
+    from fl_op.snapshot import quality_trend
+
+    monkeypatch.setattr(quality_trend, "QUALITY_TREND_MAX_RECORDS", 5)
+    trend = tmp_path / "rates.jsonl"
+    rates = [0.01 * run for run in range(12)]
+    for run, rate in enumerate(rates):
+        record_error_rates(_snapshot({"sensor-readings": rate}, run), trend)
+
+    lines = [ln for ln in trend.read_text().splitlines() if ln.strip()]
+    assert len(lines) == 5
+    kept_ids = [json.loads(ln)["snapshot_id"] for ln in lines]
+    assert kept_ids == [f"snap-{run}" for run in range(7, 12)]
+    assert degrading_sources(trend) == {
+        "sensor-readings": [pytest.approx(r) for r in rates[-3:]]
+    }

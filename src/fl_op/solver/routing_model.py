@@ -1,56 +1,105 @@
-"""OR-Tools routing model helpers: node geometry, warm-start, and solution extraction."""
+"""OR-Tools routing model helpers: node table, warm-start, and solution extraction."""
 
+import dataclasses
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from fl_op.solver.cost_rates import ResourcePrices
 from fl_op.solver.travel_time import (
     TravelLookup,
     _estimate_operation_seconds,
     travel_seconds,
 )
 
+# Routing node kinds. The depot is always node 0; each order contributes its
+# pickup node (paired pickup-and-delivery tasks only) followed by its task
+# node; optional depot reload visits close the table.
+NODE_DEPOT = "depot"
+NODE_TASK = "task"
+NODE_PICKUP = "pickup"
+NODE_RELOAD = "reload"
 
-def _build_node_geometry(
-    cluster_orders: list[dict[str, Any]],
-    field_map: dict[str, dict[str, Any]],
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class RoutingNode:
+    """One node of the routing graph.
+
+    ``order_idx`` indexes cluster_orders for task and pickup nodes and is -1
+    for the depot and reload nodes.
+    """
+
+    kind: str
+    order_idx: int
+    location_ref: str
+    lat: float
+    lon: float
+
+
+def build_node_table(
+    cluster_orders: list[Any],
+    field_map: dict[str, Any],
     depot_lat: float,
     depot_lon: float,
     depot_id: str = "",
-    travel_lookup: Optional[TravelLookup] = None,
-) -> tuple[list[float], list[float], list[list[int]]]:
-    """Return (node_lats, node_lons, time_matrix) for the routing model.
-
-    Node 0 is the depot; nodes 1..N are orders in cluster_orders order.
-    Arc times come from the travel network where a link exists for the
-    location pair, otherwise from the haversine estimate.
-    """
-    node_lats: list[float] = [depot_lat]
-    node_lons: list[float] = [depot_lon]
-    node_refs: list[str] = [depot_id]
-    for order in cluster_orders:
+    n_reload_nodes: int = 0,
+) -> list[RoutingNode]:
+    """Build the routing node table: depot, pickups/tasks, reload visits."""
+    nodes = [RoutingNode(NODE_DEPOT, -1, depot_id, depot_lat, depot_lon)]
+    for order_idx, order in enumerate(cluster_orders):
+        pickup_ref = str(getattr(order, "pickup_location_ref", "") or "")
+        if pickup_ref:
+            pickup = field_map.get(pickup_ref)
+            nodes.append(
+                RoutingNode(
+                    NODE_PICKUP,
+                    order_idx,
+                    pickup_ref,
+                    float(pickup.lat) if pickup else depot_lat,
+                    float(pickup.lon) if pickup else depot_lon,
+                )
+            )
         field = field_map.get(order.location_ref)
-        if field:
-            node_lats.append(float(field.lat))
-            node_lons.append(float(field.lon))
-        else:
-            node_lats.append(depot_lat)
-            node_lons.append(depot_lon)
-        node_refs.append(str(order.location_ref or ""))
+        nodes.append(
+            RoutingNode(
+                NODE_TASK,
+                order_idx,
+                str(order.location_ref or ""),
+                float(field.lat) if field else depot_lat,
+                float(field.lon) if field else depot_lon,
+            )
+        )
+    for _ in range(n_reload_nodes):
+        nodes.append(RoutingNode(NODE_RELOAD, -1, depot_id, depot_lat, depot_lon))
+    return nodes
 
-    n_nodes = len(node_lats)
-    time_matrix: list[list[int]] = [
+
+def task_node_indices(nodes: list[RoutingNode]) -> dict[int, int]:
+    """order_idx -> node-table index of the order's task node."""
+    return {n.order_idx: i for i, n in enumerate(nodes) if n.kind == NODE_TASK}
+
+
+def pickup_node_indices(nodes: list[RoutingNode]) -> dict[int, int]:
+    """order_idx -> node-table index of the order's pickup node."""
+    return {n.order_idx: i for i, n in enumerate(nodes) if n.kind == NODE_PICKUP}
+
+
+def build_time_matrix(
+    nodes: list[RoutingNode],
+    travel_lookup: Optional[TravelLookup] = None,
+) -> list[list[int]]:
+    """Pairwise arc times: network shortest path where one exists, haversine
+    otherwise."""
+    return [
         [
             travel_seconds(
-                node_refs[i], node_refs[j],
-                node_lats[i], node_lons[i], node_lats[j], node_lons[j],
+                a.location_ref, b.location_ref, a.lat, a.lon, b.lat, b.lon,
                 travel_lookup,
             )
-            for j in range(n_nodes)
+            for b in nodes
         ]
-        for i in range(n_nodes)
+        for a in nodes
     ]
-    return node_lats, node_lons, time_matrix
 
 
 def _build_initial_routes(
@@ -58,23 +107,30 @@ def _build_initial_routes(
     cluster_orders: list[dict[str, Any]],
     greedy_assignment: dict[str, tuple[int, int]],
     vehicle_index: dict[str, int],
+    nodes: list[RoutingNode],
 ) -> list[list[int]]:
-    """Build greedy warm-start route hints from prior greedy assignment."""
+    """Build greedy warm-start route hints from prior greedy assignment.
+
+    A paired order's pickup node is inserted right before its task node so
+    the hint satisfies the pickup-and-delivery constraints.
+    """
     idx_to_vid: dict[int, str] = {idx: vid for vid, idx in vehicle_index.items()}
+    task_nodes = task_node_indices(nodes)
+    pickup_nodes = pickup_node_indices(nodes)
     initial_routes: list[list[int]] = []
-    used_order_nodes: set[int] = set()
+    used_orders: set[int] = set()
 
     for rv in routing_vehicles:
         vid = rv["prime"].asset_id
         route: list[int] = []
-        for node_idx, order in enumerate(cluster_orders, start=1):
-            oid = order.task_id
-            ga = greedy_assignment.get(oid)
-            if ga is not None:
-                assigned_vid = idx_to_vid.get(ga[0])
-                if assigned_vid == vid and node_idx not in used_order_nodes:
-                    route.append(node_idx)
-                    used_order_nodes.add(node_idx)
+        for order_idx, order in enumerate(cluster_orders):
+            ga = greedy_assignment.get(order.task_id)
+            if ga is None or idx_to_vid.get(ga[0]) != vid or order_idx in used_orders:
+                continue
+            if order_idx in pickup_nodes:
+                route.append(pickup_nodes[order_idx])
+            route.append(task_nodes[order_idx])
+            used_orders.add(order_idx)
         initial_routes.append(route)
 
     return initial_routes
@@ -86,21 +142,26 @@ def _extract_dispatch_packages(
     manager: Any,
     routing_vehicles: list[dict[str, Any]],
     cluster_orders: list[dict[str, Any]],
-    field_map: dict[str, dict[str, Any]],
-    node_lats: list[float],
-    node_lons: list[float],
+    nodes: list[RoutingNode],
     time_dim: Any,
     cluster_id: str,
     depot_id: str,
     cluster_dict: dict[str, Any],
     now_epoch: int,
+    time_matrix: Optional[list[list[int]]] = None,
+    resource_prices: Optional[ResourcePrices] = None,
 ) -> tuple[list[dict[str, Any]], set[str]]:
     """Read the OR-Tools solution and build dispatch package dicts.
 
-    Returns (dispatch_packages, served_task_ids).
+    Returns (dispatch_packages, served_task_ids). One package per served task
+    node; pickup and reload stops are not packages of their own, but their
+    travel legs accumulate into the next task's inbound fuel. The margin is
+    the order revenue net of fuel and material at the resolved prices.
     """
     _FERTILIZER_FILL_RATIO = 0.8
 
+    if resource_prices is None:
+        resource_prices = ResourcePrices()
     dispatch_packages: list[dict[str, Any]] = []
     served_task_ids: set[str] = set()
 
@@ -108,14 +169,20 @@ def _extract_dispatch_packages(
         vid = rv["prime"].asset_id
         iid = rv["related"].asset_id
         index = routing.Start(rv_idx)
+        prev_node = 0
+        travel_s_in = 0
 
         while not routing.IsEnd(index):
-            node = manager.IndexToNode(index)
-            if node == 0:
+            node_idx = manager.IndexToNode(index)
+            node = nodes[node_idx]
+            if time_matrix is not None and node_idx != prev_node:
+                travel_s_in += time_matrix[prev_node][node_idx]
+            prev_node = node_idx
+            if node.kind != NODE_TASK:
                 index = solution.Value(routing.NextVar(index))
                 continue
 
-            order = cluster_orders[node - 1]
+            order = cluster_orders[node.order_idx]
             oid = order.task_id
             served_task_ids.add(oid)
 
@@ -123,7 +190,20 @@ def _extract_dispatch_packages(
             op_seconds = _estimate_operation_seconds(order, rv["related"])
             start_epoch = now_epoch + arrival_s
             end_epoch = start_epoch + op_seconds
-            op_hours = op_seconds / 3600.0
+            fuel_l = (
+                (op_seconds + travel_s_in)
+                / 3600.0
+                * float(rv["prime"].fuel_consumption_rate)
+            )
+            travel_s_in = 0
+            fertilizer_kg = (
+                float(rv["related"].material_capacity) * _FERTILIZER_FILL_RATIO
+            )
+            margin_eur = (
+                float(order.revenue)
+                - fuel_l * resource_prices.fuel_eur_per_l
+                - fertilizer_kg * resource_prices.material_eur_per_kg
+            )
 
             dispatch_packages.append(
                 {
@@ -131,19 +211,18 @@ def _extract_dispatch_packages(
                     "cluster_id": cluster_id,
                     "prime_asset_id": vid,
                     "related_asset_id": iid,
-                    "operator_asset_id": cluster_dict.get("operator_ref", ""),
+                    "operator_asset_id": (
+                        cluster_dict.get("task_operators", {}).get(oid)
+                        or cluster_dict.get("operator_ref", "")
+                    ),
                     "task_id": oid,
                     "depot_ref": depot_id,
                     "scheduled_start": datetime.fromtimestamp(start_epoch, tz=timezone.utc).isoformat(),
                     "scheduled_end": datetime.fromtimestamp(end_epoch, tz=timezone.utc).isoformat(),
-                    "route_waypoints": [{"lat": node_lats[node], "lon": node_lons[node]}],
-                    "estimated_fuel_l": round(
-                        op_hours * float(rv["prime"].fuel_consumption_rate), 2
-                    ),
-                    "estimated_fertilizer_kg": round(
-                        float(rv["related"].material_capacity) * _FERTILIZER_FILL_RATIO, 2
-                    ),
-                    "estimated_margin_eur": round(float(order.revenue), 2),
+                    "route_waypoints": [{"lat": node.lat, "lon": node.lon}],
+                    "estimated_fuel_l": round(fuel_l, 2),
+                    "estimated_fertilizer_kg": round(fertilizer_kg, 2),
+                    "estimated_margin_eur": round(margin_eur, 2),
                 }
             )
             index = solution.Value(routing.NextVar(index))

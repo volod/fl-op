@@ -6,6 +6,7 @@ operators, yards, sites, and jobs. The vocabulary is physical (machine
 classes, work types); the mapping pack projects it onto the canonical model.
 """
 
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -34,6 +35,22 @@ _ATTACHMENT_OPERATION_MAP: dict[str, list[str]] = {
     "drum_roller": ["COMPACTION"],
     "dump_bed": ["HAULING"],
 }
+
+# Work types whose native demand is excavated/moved volume (m3); the others
+# are area-shaped (ha) and keep the plot area as their quantity.
+_VOLUME_WORK_TYPES = ("EXCAVATION", "TRENCHING", "HAULING")
+_QUANTITY_UNIT_VOLUME = "m3"
+_QUANTITY_UNIT_AREA = "ha"
+
+# Native volume demand per job (m3) for volume-shaped work types.
+_JOB_QUANTITY_MIN_M3 = 100.0
+_JOB_QUANTITY_MAX_M3 = 5000.0
+
+# Attachment classes that move volume declare an m3-per-hour work rate;
+# area-shaped classes rely on the width-times-speed coverage model instead.
+_VOLUME_RATE_ATTACHMENT_CLASSES = ("bucket", "ripper", "trench_cutter", "dump_bed")
+_WORK_RATE_MIN_M3_PER_H = 40.0
+_WORK_RATE_MAX_M3_PER_H = 220.0
 
 _MACHINE_POWER_MEAN_KW = 180.0
 _MACHINE_POWER_SIGMA_LOG = 0.35
@@ -139,9 +156,14 @@ def _generate_attachments(
     min_speeds = rng.uniform(1.0, 3.0, n)
     max_speeds = min_speeds + rng.uniform(2.0, 8.0, n)
 
+    volume_rates = rng.uniform(_WORK_RATE_MIN_M3_PER_H, _WORK_RATE_MAX_M3_PER_H, n)
+
     attachments = []
     for i in range(n):
         a_class = str(classes[i])
+        rates: dict[str, float] = {}
+        if a_class in _VOLUME_RATE_ATTACHMENT_CLASSES:
+            rates[_QUANTITY_UNIT_VOLUME] = round(float(volume_rates[i]), 1)
         attachments.append(
             {
                 "attachment_id": f"attachment_{i:06d}",
@@ -152,6 +174,7 @@ def _generate_attachments(
                 "min_speed_kmh": round(float(min_speeds[i]), 1),
                 "max_speed_kmh": round(float(max_speeds[i]), 1),
                 "yard_id": yard_ids[int(assigned[i])],
+                "work_rates": json.dumps(rates),
             }
         )
     return attachments
@@ -223,19 +246,31 @@ def _generate_jobs(
     penalties = rng.uniform(_JOB_PENALTY_MIN_EUR_PER_DAY, _JOB_PENALTY_MAX_EUR_PER_DAY, n)
     revenues = rng.uniform(_JOB_REVENUE_MIN_EUR, _JOB_REVENUE_MAX_EUR, n)
     priorities = rng.integers(1, 11, size=n)
+    volumes = rng.uniform(_JOB_QUANTITY_MIN_M3, _JOB_QUANTITY_MAX_M3, n)
 
-    return [
-        {
-            "job_id": f"job_{i:06d}",
-            "contract_id": f"project_{i // 5:05d}",
-            "site_id": sites[i]["site_id"],
-            "work_type": str(work_types[i]),
-            "plot_ha": sites[i]["plot_ha"],
-            "deadline": (today + timedelta(days=int(deadline_days[i]))).isoformat(),
-            "penalty_per_day_eur": round(float(penalties[i]), 2),
-            "priority": int(priorities[i]),
-            "status": TaskStatus.PENDING.value,
-            "revenue_eur": round(float(revenues[i]), 2),
-        }
-        for i in range(n)
-    ]
+    jobs = []
+    for i in range(n):
+        work_type = str(work_types[i])
+        if work_type in _VOLUME_WORK_TYPES:
+            quantity_value = round(float(volumes[i]), 1)
+            quantity_unit = _QUANTITY_UNIT_VOLUME
+        else:
+            quantity_value = sites[i]["plot_ha"]
+            quantity_unit = _QUANTITY_UNIT_AREA
+        jobs.append(
+            {
+                "job_id": f"job_{i:06d}",
+                "contract_id": f"project_{i // 5:05d}",
+                "site_id": sites[i]["site_id"],
+                "work_type": work_type,
+                "plot_ha": sites[i]["plot_ha"],
+                "deadline": (today + timedelta(days=int(deadline_days[i]))).isoformat(),
+                "penalty_per_day_eur": round(float(penalties[i]), 2),
+                "priority": int(priorities[i]),
+                "status": TaskStatus.PENDING.value,
+                "revenue_eur": round(float(revenues[i]), 2),
+                "quantity_value": quantity_value,
+                "quantity_unit": quantity_unit,
+            }
+        )
+    return jobs

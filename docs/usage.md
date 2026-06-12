@@ -305,19 +305,30 @@ Artifacts land under `.data/snapshot/`, `.data/plan-periodic/`, and
 
 `fl-op tune` runs a seeded Optuna TPE study over the tunable solver
 parameters (cluster target size, greedy score weights, per-cluster time
-limit) against a recorded KPI baseline built from the same snapshot:
+limit) against recorded KPI baselines:
 
 ```bash
 .venv/bin/fl-op tune --data latest --trials 20 --seed 7
+.venv/bin/fl-op tune --data latest --extra-data .data/generate-data/20260601T120000 --jobs 4
+.venv/bin/fl-op tune-promote --best-params .data/tune/20260612T090000/best_params.json --reviewed-by ops
 ```
 
 Artifacts land under `.data/tune/<timestamp>/`: `baseline.json`,
 `trials.json`, and `best_params.json` (best parameters plus the improvement
-over the baseline objective). With `MLFLOW_LOGGING_ENABLED=1`, every trial,
-the tuning baseline, and every periodic/rolling plan run are logged as MLflow
-runs (KPIs, version dimensions, solve-telemetry summary) to a local SQLite
-store under `.data/mlruns` -- or to `MLFLOW_TRACKING_URI` if set -- so
-parameter experiments are comparable across datasets.
+over the baseline objective). By default the study records a Pareto frontier:
+maximize business objective, minimize instability, and minimize wall time.
+`--extra-data` averages the objective across datasets, and `--jobs > 1` uses
+Optuna RDB storage (`study.db` in the run directory unless `--storage` or
+`TUNE_STORAGE_URI` is set).
+
+`fl-op tune-promote` writes the reviewed overlay
+`.data/tune/solver-parameters-tuned.json`; periodic and rolling plan runs load
+that overlay on top of the checked-in profile defaults. With
+`MLFLOW_LOGGING_ENABLED=1`, every trial, the tuning baseline, and every
+periodic/rolling plan run are logged as MLflow runs (KPIs, version dimensions,
+solve-telemetry summary) to a local SQLite store under `.data/mlruns` -- or to
+`MLFLOW_TRACKING_URI` if set -- so parameter experiments are comparable across
+datasets.
 
 ---
 
@@ -330,6 +341,14 @@ default; FastAPI + uvicorn):
 .venv/bin/fl-op serve            # or: make serve
 ```
 
+Plan and feasibility routes are public only when `SERVE_AUTH_TOKEN` is unset
+for local development. Set `SERVE_AUTH_TOKEN` to require
+`Authorization: Bearer <token>`; binding outside loopback, for example
+`SERVE_HOST=0.0.0.0`, requires the token. `/health` remains unauthenticated
+for load balancers. By default the API reads artifacts from `$DATA_DIR`; set
+`SERVE_ARTIFACT_ROOT=/mnt/fl-op-artifacts` to serve a shared mounted artifact
+tree from several instances.
+
 | Endpoint | Meaning |
 |----------|---------|
 | `GET /health` | liveness probe |
@@ -341,7 +360,9 @@ default; FastAPI + uvicorn):
 
 `POST /feasibility` takes `{"order": {...}, "data": "latest", "schedule":
 "latest"}` and returns the same feasibility/candidate result as
-`fl-op query-contract`, without writing run artifacts.
+`fl-op query-contract`, without writing run artifacts. `data` and `schedule`
+may also be run ids (`20260612T120000`) or artifact-root-relative paths under
+`generate-data/` and `solve/`.
 
 ---
 
@@ -354,6 +375,12 @@ consumes `EVENT_BROKER_TOPIC` from `EVENT_BROKER_BOOTSTRAP_SERVERS` instead
 events identically, and a rolling run drains the visible backlog
 (`EVENT_BROKER_MAX_EMPTY_POLLS` consecutive empty polls) before publishing
 revisions.
+
+Integrations can register more source kinds with
+`fl_op.stream.broker.register_event_source(kind, factory,
+uses_dedup_store=True)`. Use the dedup flag for sources that may redeliver
+events after a process restart; leave it off for intentionally replayed files
+or test feeds.
 
 ---
 
@@ -394,9 +421,15 @@ $DATA_DIR/                       # default: .data/ -- override via DATA_DIR env 
   plan-rolling/<timestamp>/      # revisions/<n>/plan.json + revisions_summary.json
   revision-diff/<timestamp>/     # revision_diff.json + revision_diff.txt
   tune/<timestamp>/              # baseline.json, trials.json, best_params.json
+  tune/solver-parameters-tuned.json       # reviewed tuned solver overlay
+  cache/compat-matrix/            # content-keyed compatibility matrices
+  cache/preprocessing/            # candidate-filter and cluster-spec caches
+  cache/feasibility/              # exact /feasibility response cache
+  cache/solver-feedback/          # worker RSS and LNS objective-delta feedback
   mlruns/                        # local MLflow store (MLFLOW_LOGGING_ENABLED=1)
   quality/observation-error-rates.jsonl   # append-only cross-run error-rate trend
   quality/service-prognosis.jsonl         # per-revision service-prognosis outcomes
+  quality/completion-lead-times.jsonl     # task completion lead/schedule errors
 ```
 
 All solve/reschedule JSON files include `schema_version: "1.0"`, `run_metadata`

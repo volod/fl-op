@@ -45,7 +45,7 @@ a domain onto the ontology see [domain-mapping.md](domain-mapping.md).
 | `commitment` | A contractual obligation attached to work: deadline, penalty, hardness, validity window. Domains embedding these in order rows map them on `task` instead. | `odcs/commitment.odcs.yaml` |
 | `forecast` | A predicted environmental condition for a location and time interval (wind, precipitation, soil moisture). | `odcs/forecast.odcs.yaml` |
 | `observation` | A measured value about an entity at a point in time: sensor reading, telemetry sample, inspection result. One shape serves historical batches and realtime streams. | `odcs/observation.odcs.yaml` |
-| `execution-event` | The dynamics envelope: a typed trigger (`task.started`, `task.progress`, `order.created`, `order.cancelled`, `asset.unavailable`, `inventory.adjusted`, `forecast.updated`, `observation.recorded`, `entity.corrected`) that mutates state and forces a rolling re-solve. | `odcs/execution-event.odcs.yaml` |
+| `execution-event` | The dynamics envelope: a typed trigger (`task.started`, `task.progress`, `task.completed`, `order.created`, `order.cancelled`, `asset.unavailable`, `inventory.adjusted`, `forecast.updated`, `observation.recorded`, `entity.corrected`) that mutates state and forces a rolling re-solve. | `odcs/execution-event.odcs.yaml` |
 | `travel-link` | One directed travel-network edge between two locations with a measured travel time (distance-matrix entry / road-graph arc). The network may be sparse: pairs without a link fall back to haversine distance and asset travel speed. | `odcs/travel-link.odcs.yaml` |
 | `cost-rate` | A priced resource rate (fuel, consumable material) with an optional validity window. Engine cost constants are the fallback for unpriced resources. | `odcs/cost-rate.odcs.yaml` |
 | `plan` | The canonical OUTPUT contract: the plan/revision envelope plus assignment, unassigned-task, and material-reservation records. Produced by adapters and validated on publication (`contracts/plan_contract.py`), never consumed as snapshot input. | `odcs/plan.odcs.yaml` |
@@ -65,7 +65,7 @@ one comparable scale.
 |---|---|---|
 | `urn:xopt:identity:*` | Stable entity identifiers | `asset-id`, `task-id`, `observation-id` |
 | `urn:xopt:attribute:*` | Descriptive attributes | `operation-type`, `mobility`, `latitude`, `priority-class` |
-| `urn:xopt:capability:*` | Measurable or categorical abilities | `rated-power` (kW), `working-width` (m), `compatible-operations` |
+| `urn:xopt:capability:*` | Measurable or categorical abilities | `rated-power` (kW), `working-width` (m), `work-rates` (unit -> qty/h), `compatible-operations` |
 | `urn:xopt:availability:*` | Working-time windows | `shift-start`, `shift-end` (s) |
 | `urn:xopt:maintenance:*` | Maintenance master data | `last-service-at`, `service-interval` (d) |
 | `urn:xopt:commitment:*` | Obligations and their economics | `deadline`, `lateness-penalty` (EUR), `hardness` |
@@ -95,15 +95,17 @@ monitoring policy.
 | Rolling / dynamic dispatch with plan stability | execution-event, task status freeze, plan revisions | Implemented |
 | Condition-based maintenance of stationary equipment (sensor fields, fixed road/field gear) | asset `mobility` + `state.*`, observation metrics, derived `EQUIPMENT_SERVICE` tasks | Implemented (monitoring policy) |
 | Streamed telemetry driving replans | `observation.recorded` events appended to observation sources | Implemented |
-| Environment-windowed operations (weather) | forecast values per location/interval, profile `weatherPolicy` sensitivity | Implemented (any-compliant-window feasibility per task) |
-| Material/inventory feasibility | location `inventory.*`, profile `materialDemand` rates | Implemented (cumulative depot charge, penalty-priority) |
-| Operator qualification | `operator-certification` capability vs task operation types | Implemented (per-cluster operator coverage) |
+| Environment-windowed operations (weather) | forecast values per location/interval, profile `weatherPolicy` sensitivity | Implemented (in-model scheduling into compliant windows; pre-filter excludes tasks with none) |
+| Material/inventory feasibility | location `inventory.*`, profile `materialDemand` rates | Implemented (cumulative depot charge, penalty-priority; charges published as plan MaterialReservation records) |
+| Operator qualification | `operator-certification` capability vs task operation types | Implemented (cluster operator coverage + per-task backup pairing) |
 | Multi-stage work sequences | task `depends-on` relation | Implemented (chain-aware clustering, in-model precedence, cascade exclusion) |
 | Multiple workable time windows | task `workable-windows` | Implemented (pre-filter + in-model start intervals) |
-| Network-based travel times | travel-link entity | Implemented (direct link lookup with reverse/haversine fallback) |
-| Capacity-constrained delivery (CVRP-style) | asset `load-capacity` vs task `load-demand` | Implemented (cumulative route-load dimension, single-trip semantics) |
-| Restricted zones / time-restricted areas | location `prohibited-operations`, `restricted-windows` | Implemented (zone exclusion + start-interval blocking) |
-| Data-driven cost rates | cost-rate entity | Implemented (fuel/material price resolution with constant fallback) |
+| Network-based travel times | travel-link entity | Implemented (shortest-path closure over the link graph; reverse/haversine fallback) |
+| Capacity-constrained delivery (CVRP-style) | asset `load-capacity`/`load-capacities` vs task `load-demand`/`load-material` | Implemented (per-material dimensions, depot reload stops for multi-trip) |
+| Pickup-and-delivery pairing | task `pickup-location` | Implemented (paired nodes: same vehicle, pickup first, dropped together) |
+| Unit-uniform duration estimation | task `work-quantity`/`work-quantity-unit` vs asset `work-rates` | Implemented (rate wins; coverage model is the area fallback) |
+| Restricted zones / time-restricted areas | location `prohibited-operations`, `restricted-windows` | Implemented (zone exclusion + occupancy-aware interval blocking) |
+| Data-driven cost rates | cost-rate entity | Implemented (price resolution with constant fallback; fuel-priced routing arcs, net dispatch margins) |
 | Governed plan outputs | plan output contract | Implemented (publication-time binding validation) |
 | Standalone contractual commitments | commitment entity | Declared; engine consumes task-embedded deadline/penalty today |
 

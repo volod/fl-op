@@ -119,6 +119,11 @@ class Plan(BaseModel):
     material_reservations: list[MaterialReservation] = Field(default_factory=list)
     corrective_actions: list[CorrectiveAction] = Field(default_factory=list)
 
+    # The snapshot's visibility horizon per source contract at solve time:
+    # data visible beyond these is newer than what the plan considered, the
+    # signal watermark-driven replan triggering compares against.
+    source_watermarks: dict[str, datetime] = Field(default_factory=dict)
+
     score: dict[str, Any] = Field(default_factory=dict)
     quality_summary: QualitySummary = Field(default_factory=QualitySummary)
     risk_summary: RiskSummary = Field(default_factory=RiskSummary)

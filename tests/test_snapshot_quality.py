@@ -36,6 +36,26 @@ def test_bundle_summary_operation_counts_match_filtered_enumeration(
         assert len(filtered) == count, operation
 
 
+def test_bundle_summary_exposes_demand_side_scarcity(
+    dataset_dir: pathlib.Path,
+) -> None:
+    """The summary carries the order book's demand per operation and flags
+    demanded operations whose feasible-pair supply is below the task count."""
+    snapshot = SnapshotBuilder().build(dataset_dir, PlanningMode.PERIODIC)
+    summary = snapshot.bundle_summary
+
+    expected: dict[str, int] = {}
+    for task in snapshot.tasks:
+        if task.operation_type:
+            expected[task.operation_type] = expected.get(task.operation_type, 0) + 1
+    assert summary.tasks_by_operation == expected
+    assert summary.scarce_operations == sorted(
+        op
+        for op, n_tasks in expected.items()
+        if summary.pairs_by_operation.get(op, 0) < n_tasks
+    )
+
+
 def test_lazy_enumeration_filters_by_asset(dataset_dir: pathlib.Path) -> None:
     snapshot = SnapshotBuilder().build(dataset_dir, PlanningMode.PERIODIC)
     some_bundle = next(iter_bundles(snapshot.assets, MAPPING_VERSION))

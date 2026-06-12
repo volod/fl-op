@@ -5,11 +5,27 @@ planning time for a resource code, that rate wins; the engine cost constants
 are the fallback for unpriced resources.
 """
 
+import dataclasses
 import logging
 from datetime import datetime
 from typing import Any, Optional
 
+from fl_op.core.constants import FERTILIZER_COST_EUR_PER_KG, FUEL_COST_EUR_PER_L
+
 logger = logging.getLogger(__name__)
+
+
+@dataclasses.dataclass(frozen=True)
+class ResourcePrices:
+    """Resolved per-run resource prices, picklable across the worker pool.
+
+    Defaults are the engine cost constants; the chain overrides them with the
+    prices resolved from the snapshot's cost-rate entities, so routing arc
+    costs and dispatch margins are priced from the same data as KPIs.
+    """
+
+    fuel_eur_per_l: float = FUEL_COST_EUR_PER_L
+    material_eur_per_kg: float = FERTILIZER_COST_EUR_PER_KG
 
 
 def _parse_ts(raw: Any) -> Optional[datetime]:

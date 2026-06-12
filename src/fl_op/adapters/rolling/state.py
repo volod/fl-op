@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from fl_op.canonical.plan import Assignment, CorrectiveAction
+from fl_op.canonical.plan import Assignment, CorrectiveAction, MaterialReservation
 from fl_op.solver.chain import SolverChainResult
 
 
@@ -18,3 +18,6 @@ class RollingSolveResult:
     previous_by_task: dict[str, Assignment]
     now: datetime
     corrective_actions: list[CorrectiveAction] = field(default_factory=list)
+    # Previous-revision reservations of frozen/carried tasks, re-published so
+    # every revision's reservation list is self-contained.
+    carried_reservations: list[MaterialReservation] = field(default_factory=list)

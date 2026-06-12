@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: canonical-task
-version: 0.1.0
+version: 0.2.0
 status: active
 name: Canonical Task
 domain: canonical
@@ -81,6 +81,26 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: task.loadDemand, semanticTerm: urn:xopt:attribute:load-demand, canonicalUnit: kg, quantityKind: mass, planningUse: [capacity]}
+      - name: loadMaterial
+        logicalType: string
+        required: false
+        description: >-
+          Material code of the load demand; tasks sharing a code compete for
+          the same vehicle compartment. Empty means the unspecified aggregate
+          material.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.loadMaterial, semanticTerm: urn:xopt:attribute:load-material, planningUse: [capacity]}
+      - name: pickupLocationRef
+        logicalType: string
+        required: false
+        description: >-
+          Pickup location of a paired pickup-and-delivery task: the load is
+          picked up there and dropped at the task location (same vehicle,
+          pickup first). Absent means the load is carried from the depot.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.pickupLocationRef, semanticTerm: urn:xopt:relationship:pickup-location, planningUse: [capacity, geospatial]}
       - name: dependsOnTaskRef
         logicalType: string
         required: false

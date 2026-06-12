@@ -161,10 +161,12 @@ def _retained(series: list[Observation], as_of: Optional[datetime]) -> list[Obse
 
     Readings older than OBSERVATION_RETENTION_DAYS before ``as_of`` are
     dropped; series longer than OBSERVATION_MAX_SERIES_READINGS are bucketed
-    into that many equal time windows, keeping the last reading per window as
-    its representative (the oldest reading is always preserved so trend rules
-    keep their endpoints). A reconnecting station flushing a burst therefore
-    neither bloats the snapshot nor changes the series' time span.
+    into that many equal time windows. Each window keeps its last reading as
+    the representative, annotated with the window's min/mean/max value and
+    reading count, so spiky metrics keep their extremes through aggregation
+    (the oldest reading is always preserved so trend rules keep their
+    endpoints). A reconnecting station flushing a burst therefore neither
+    bloats the snapshot nor changes the series' time span.
     """
     if as_of is not None:
         cutoff = as_of - timedelta(days=OBSERVATION_RETENTION_DAYS)
@@ -177,17 +179,33 @@ def _retained(series: list[Observation], as_of: Optional[datetime]) -> list[Obse
     if span_s <= 0:
         return series[-OBSERVATION_MAX_SERIES_READINGS:]
     width_s = span_s / OBSERVATION_MAX_SERIES_READINGS
-    last_per_window: dict[int, Observation] = {}
+    per_window: dict[int, list[Observation]] = {}
     for obs in series:
         bucket = min(
             int((observed_ts(obs) - start).total_seconds() / width_s),
             OBSERVATION_MAX_SERIES_READINGS - 1,
         )
-        last_per_window[bucket] = obs
-    kept = [last_per_window[b] for b in sorted(last_per_window)]
-    if kept[0] is not series[0]:
+        per_window.setdefault(bucket, []).append(obs)
+    kept = [_window_representative(per_window[b]) for b in sorted(per_window)]
+    if kept[0].observation_id != series[0].observation_id:
         kept.insert(0, series[0])
     return kept
+
+
+def _window_representative(window: list[Observation]) -> Observation:
+    """Last reading of one downsampling window, carrying window aggregates."""
+    representative = window[-1]
+    values = [o.value for o in window if o.value is not None]
+    if not values:
+        return representative
+    return representative.model_copy(
+        update={
+            "window_min": min(values),
+            "window_mean": sum(values) / len(values),
+            "window_max": max(values),
+            "window_n": len(window),
+        }
+    )
 
 
 def _skew_excluded(
@@ -200,6 +218,18 @@ def _skew_excluded(
     trusted = [o for o in series if o.observed_at is None or observed_ts(o) <= horizon]
     future = [o for o in series if o.observed_at is not None and observed_ts(o) > horizon]
     return trusted, future
+
+
+def _arrival_sorted(series: list[Observation]) -> list[Observation]:
+    """Series in arrival order: by ingested-at when every reading carries it.
+
+    Explicit ingestion timestamps make arrival order exact across restarts;
+    a series with any reading missing them keeps source row order (the
+    legacy approximation).
+    """
+    if series and all(o.ingested_at is not None for o in series):
+        return sorted(series, key=lambda o: o.ingested_at)
+    return series
 
 
 def _regression_detail(arrival_order: list[Observation]) -> str:
@@ -241,7 +271,7 @@ def assess_observations(
     for key in sorted(history):
         entity_ref, metric = key
 
-        regression = _regression_detail(arrival_order[key])
+        regression = _regression_detail(_arrival_sorted(arrival_order[key]))
         if regression:
             result.findings.append(
                 _series_finding(

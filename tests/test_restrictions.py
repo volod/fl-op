@@ -137,3 +137,96 @@ class TestRoutingRestriction:
         assert {d["task_id"] for d in dispatch} == {"o0"}, infeasible
         scheduled = datetime.fromisoformat(dispatch[0]["scheduled_start"])
         assert scheduled >= restriction_end - timedelta(minutes=5)
+
+
+class TestRoutingOccupancy:
+    """Service-duration-aware occupancy: execution may not run into a block."""
+
+    @staticmethod
+    def _inputs(service_minutes: int):
+        from fl_op.solver.types import DepotRow, PrimeMoverRow, RelatedRow
+
+        cd = {
+            "cluster_id": "cl0", "depot_ref": "d0", "task_ids": ["o0"],
+            "allocated_prime_related": {"v0": ["i0"]},
+            "total_penalty_per_day": 100.0,
+        }
+        order = TaskRow.from_canonical_dict({
+            "task_id": "o0", "location_ref": "f0", "operation_type": "SPRAYING",
+            "area": "10", "deadline": _iso(_now() + timedelta(days=30)),
+            "penalty_per_day": "100", "status": "pending", "revenue": "2000",
+            "service_duration_min": str(service_minutes),
+        })
+        vehicles = [PrimeMoverRow.from_canonical_dict({
+            "asset_id": "v0", "rated_power": "150", "lat": "48.5", "lon": "32.0",
+            "home_depot_ref": "d0", "travel_speed": "15",
+        })]
+        implements = [RelatedRow.from_canonical_dict({
+            "asset_id": "i0", "compatible_operations": "['SPRAYING']",
+            "required_power": "100", "working_width": "24", "max_speed": "12",
+        })]
+        depots = [DepotRow.from_canonical_dict(
+            {"location_id": "d0", "lat": "48.5", "lon": "32.0"})]
+        return cd, [order], vehicles, implements, depots
+
+    def test_execution_cannot_run_into_restriction_window(self):
+        """A 4 h job before a block starting in 2 h must wait for the block end.
+
+        The start itself lies outside the restriction window, so start-only
+        semantics would schedule immediately; occupancy semantics push the
+        start past the window end.
+        """
+        from fl_op.solver.cluster_solver import solve_cluster
+
+        block_start = _now() + timedelta(hours=2)
+        block_end = _now() + timedelta(hours=6)
+        window = str([f"{_iso(block_start)}/{_iso(block_end)}"])
+        cd, orders, vehicles, implements, depots = self._inputs(service_minutes=240)
+        fields = [_site(windows=window)]
+
+        dispatch, infeasible = solve_cluster(
+            cd, orders, vehicles, implements, fields, depots,
+            {}, {"v0": 0}, {"i0": 0},
+        )
+        assert {d["task_id"] for d in dispatch} == {"o0"}, infeasible
+        scheduled = datetime.fromisoformat(dispatch[0]["scheduled_start"])
+        assert scheduled >= block_end - timedelta(minutes=5)
+
+    def test_short_job_still_fits_before_restriction_window(self):
+        """A 1 h job fits before a block starting in 2 h; no needless delay."""
+        from fl_op.solver.cluster_solver import solve_cluster
+
+        block_start = _now() + timedelta(hours=2)
+        block_end = _now() + timedelta(hours=6)
+        window = str([f"{_iso(block_start)}/{_iso(block_end)}"])
+        cd, orders, vehicles, implements, depots = self._inputs(service_minutes=60)
+        fields = [_site(windows=window)]
+
+        dispatch, infeasible = solve_cluster(
+            cd, orders, vehicles, implements, fields, depots,
+            {}, {"v0": 0}, {"i0": 0},
+        )
+        assert {d["task_id"] for d in dispatch} == {"o0"}, infeasible
+        end = datetime.fromisoformat(dispatch[0]["scheduled_end"])
+        assert end <= block_start + timedelta(minutes=5)
+
+    def test_execution_scheduled_outside_non_compliant_weather_window(self):
+        """A weather-blocked interval keeps the whole execution out of it."""
+        from fl_op.solver.cluster_solver import solve_cluster
+
+        now_epoch = int(_now().timestamp())
+        block_start = now_epoch + 2 * 3600
+        block_end = now_epoch + 6 * 3600
+        cd, orders, vehicles, implements, depots = self._inputs(service_minutes=240)
+        fields = [_site()]
+
+        dispatch, infeasible = solve_cluster(
+            cd, orders, vehicles, implements, fields, depots,
+            {}, {"v0": 0}, {"i0": 0},
+            now_epoch=now_epoch,
+            weather_blocked={"o0": [(block_start, block_end)]},
+        )
+        assert {d["task_id"] for d in dispatch} == {"o0"}, infeasible
+        start = datetime.fromisoformat(dispatch[0]["scheduled_start"]).timestamp()
+        end = datetime.fromisoformat(dispatch[0]["scheduled_end"]).timestamp()
+        assert end <= block_start + 300 or start >= block_end - 300

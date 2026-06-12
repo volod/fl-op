@@ -94,6 +94,22 @@ def run_generate(
             logger.error("Generation failed for %s [%s]: %s", cid, fmt, exc)
             all_ok = False
 
+    # The canonical plan OUTPUT contract gets physical schemas too, so
+    # downstream consumers can validate published plan artifacts without
+    # this codebase.
+    from fl_op.contracts.plan_schema_gen import (
+        PLAN_CONTRACT_ID,
+        PLAN_OUTPUT_FORMATS,
+        write_plan_schema,
+    )
+
+    if fmt in PLAN_OUTPUT_FORMATS and contract_id in (None, PLAN_CONTRACT_ID):
+        try:
+            write_plan_schema(fmt, out_dir, root)
+        except (GenerationError, ValueError) as exc:
+            logger.error("Generation failed for %s [%s]: %s", PLAN_CONTRACT_ID, fmt, exc)
+            all_ok = False
+
     return all_ok
 
 

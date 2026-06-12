@@ -33,6 +33,32 @@ def parse_list(raw: Any) -> list[Any]:
     return [raw]
 
 
+def parse_rate_map(raw: Any) -> dict[str, float]:
+    """Parse a unit-to-rate map that may arrive as a stringified dict.
+
+    Non-numeric and non-positive rates are dropped: a declared rate must be
+    usable as a divisor in duration estimation.
+    """
+    if isinstance(raw, str):
+        try:
+            raw = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            logger.warning("Skipping unparseable rate map %r", raw)
+            return {}
+    if not isinstance(raw, dict):
+        return {}
+    rates: dict[str, float] = {}
+    for unit, rate in raw.items():
+        try:
+            value = float(rate)
+        except (TypeError, ValueError):
+            logger.warning("Skipping non-numeric rate %r for unit %r", rate, unit)
+            continue
+        if value > 0:
+            rates[str(unit)] = value
+    return rates
+
+
 def parse_timestamp(raw: Any) -> datetime:
     """Parse an ISO-8601 timestamp, tolerating a trailing 'Z'."""
     if isinstance(raw, datetime):
@@ -48,6 +74,8 @@ def coerce_value(meta: XOptFieldMeta, raw: Any) -> Any:
         return parse_list(raw)
     if kind == "interval-set":
         return parse_list(raw)
+    if kind == "rate-map":
+        return parse_rate_map(raw)
     if kind == "timestamp":
         return parse_timestamp(raw)
     if kind in _INTEGER_KINDS:

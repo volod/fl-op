@@ -95,8 +95,13 @@ class OrToolsRollingAdapter:
         """Full compile -> normalize producing a revision linked to a parent."""
         config = config or {}
         from fl_op.solver.enforcement import EnforcementPolicy
+        from fl_op.tuning.solver_profile import solver_parameters_for_profile
 
         config.setdefault("enforcement", EnforcementPolicy.from_profile(profile))
+        # Profile allocation defaults plus optional reviewed tuned overlay.
+        config["parameters"] = solver_parameters_for_profile(
+            profile, explicit=config.get("parameters")
+        )
         raw = self.compile(snapshot, profile, config)
         plan = self.normalize(self.solve(raw, config), snapshot, profile)
         previous_plan: Optional[Plan] = config.get("previous_plan")

@@ -130,6 +130,42 @@ def test_task_progress_completion_removes_task(applicator: EventApplicator) -> N
     assert [o["order_id"] for o in sources["orders"]] == ["order_1"]
 
 
+def test_task_progress_absolute_remaining_overwrites_work(
+    applicator: EventApplicator,
+) -> None:
+    sources = _sources()
+    event = _event(
+        EVENT_TASK_PROGRESS, entity_ref="order_1", payload={"remaining_quantity": 37.5}
+    )
+    applicator.apply(sources, event)
+    assert sources["orders"][0]["area_ha"] == 37.5
+    assert sources["orders"][0]["status"] == "started"
+
+
+def test_task_progress_zero_remaining_removes_task(
+    applicator: EventApplicator,
+) -> None:
+    sources = _sources()
+    event = _event(
+        EVENT_TASK_PROGRESS, entity_ref="order_2", payload={"remaining_quantity": 0.0}
+    )
+    applicator.apply(sources, event)
+    assert [o["order_id"] for o in sources["orders"]] == ["order_1"]
+
+
+def test_task_progress_absolute_remaining_wins_over_fraction(
+    applicator: EventApplicator,
+) -> None:
+    sources = _sources()
+    event = _event(
+        EVENT_TASK_PROGRESS,
+        entity_ref="order_1",
+        payload={"remaining_quantity": 80.0, "completed_fraction": 0.5},
+    )
+    applicator.apply(sources, event)
+    assert sources["orders"][0]["area_ha"] == 80.0
+
+
 def test_operator_unavailable_via_asset_event(applicator: EventApplicator) -> None:
     sources = _sources()
     applicator.apply(sources, _event(EVENT_ASSET_UNAVAILABLE, entity_ref="operator_1"))
@@ -162,3 +198,89 @@ def test_unknown_event_type_is_noop(applicator: EventApplicator) -> None:
     sources = _sources()
     applicator.apply(sources, _event("custom.unknown", entity_ref="x"))
     assert sources == _sources()
+
+
+def test_task_completed_removes_task_and_records_lead_time_evidence() -> None:
+    applicator = EventApplicator()
+    sources = {
+        "orders": [
+            {"order_id": "order_1", "status": "started", "area_ha": "100.0",
+             "deadline": "2026-06-07T00:00:00+00:00"},
+        ]
+    }
+    from fl_op.stream.source import EVENT_TASK_COMPLETED
+
+    applicator.apply(sources, _event(EVENT_TASK_COMPLETED, entity_ref="order_1"))
+    assert sources["orders"] == []
+    assert len(applicator.completions) == 1
+    completion = applicator.completions[0]
+    assert completion["task_id"] == "order_1"
+    assert completion["deadline"] == "2026-06-07T00:00:00+00:00"
+    assert completion["via"] == "event"
+
+
+def test_full_progress_also_records_a_completion() -> None:
+    applicator = EventApplicator()
+    sources = {"orders": [{"order_id": "order_1", "status": "started",
+                           "area_ha": "10.0", "deadline": "2026-06-07T00:00:00+00:00"}]}
+    event = _event(EVENT_TASK_PROGRESS, entity_ref="order_1",
+                   payload={"completed_fraction": 1.0})
+    applicator.apply(sources, event)
+    assert sources["orders"] == []
+    assert applicator.completions[0]["via"] == "progress"
+
+
+def test_work_progress_telemetry_scales_remaining_work() -> None:
+    """A work-progress observation drives task progress without an explicit
+    task.progress event (raw metric normalized via the mapping's codes)."""
+    applicator = EventApplicator()
+    sources = _sources()
+    reading = {
+        "reading_id": "r-progress",
+        "sensor_id": "order_1",
+        "metric": "work_progress_pct",
+        "value": 40.0,
+        "observed_at": "2026-06-05T08:00:00+00:00",
+    }
+    applicator.apply(
+        sources,
+        _event(EVENT_OBSERVATION_RECORDED, entity_ref="order_1", payload=reading),
+    )
+    assert sources["orders"][0]["area_ha"] == 60.0
+    assert sources["orders"][0]["status"] == "started"
+
+
+def test_work_progress_telemetry_at_completion_finishes_the_task() -> None:
+    applicator = EventApplicator()
+    sources = _sources()
+    reading = {
+        "reading_id": "r-done",
+        "sensor_id": "order_2",
+        "metric": "work_progress_pct",
+        "value": 100.0,
+        "observed_at": "2026-06-05T09:00:00+00:00",
+    }
+    applicator.apply(
+        sources,
+        _event(EVENT_OBSERVATION_RECORDED, entity_ref="order_2", payload=reading),
+    )
+    assert [o["order_id"] for o in sources["orders"]] == ["order_1"]
+    assert applicator.completions[0]["via"] == "telemetry"
+
+
+def test_other_metrics_do_not_touch_tasks() -> None:
+    applicator = EventApplicator()
+    sources = _sources()
+    reading = {
+        "reading_id": "r-batt",
+        "sensor_id": "order_1",
+        "metric": "battery_pct",
+        "value": 50.0,
+        "observed_at": "2026-06-05T08:00:00+00:00",
+    }
+    applicator.apply(
+        sources,
+        _event(EVENT_OBSERVATION_RECORDED, entity_ref="order_1", payload=reading),
+    )
+    assert sources["orders"][0]["area_ha"] == "100.0"
+    assert applicator.completions == []

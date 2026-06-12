@@ -76,8 +76,9 @@ declaration order. Adding a dataset to
 a domain therefore means adding the ODCS + mapping + registry entry; the engine
 picks it up automatically. The same holds in the stream layer: execution events
 resolve their target collection and key column from the mapping documents
-(canonical entity + identity binding), so `task.started`, `asset.unavailable`,
-or `observation.recorded` work for any domain without column-name knowledge.
+(canonical entity + identity binding), so `task.started`, `task.completed`,
+`asset.unavailable`, or `observation.recorded` work for any domain without
+column-name knowledge.
 
 ## Extra (analytical) fields
 

@@ -220,3 +220,68 @@ class TestGlobalAssignmentModel:
         )
         assigned = [c.get("operator_ref") for c in result]
         assert sorted(a for a in assigned if a) == ["op0", "op1"]
+
+
+class TestCountVsMarginObjective:
+    """countPriority blends count-first allocation against pure score."""
+
+    @staticmethod
+    def _contended_inputs():
+        """One pair dominates on score; serving both clusters costs margin."""
+        setup, orders, operators, feasible, _scored, clusters = (
+            _starved_cluster_inputs()
+        )
+        scored = {
+            "o_high": [(1000.0, 0, 0), (90.0, 1, 1)],
+            "o_low": [(50.0, 0, 0)],
+        }
+        return setup, orders, operators, feasible, scored, clusters
+
+    def test_full_count_priority_allocates_both_clusters(self):
+        setup, orders, operators, feasible, scored, clusters = self._contended_inputs()
+        _vr, _ir, _compat, pm, v_idx, i_idx = setup
+        result = allocate_resources(
+            clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+            count_priority=1.0,
+        )
+        by_id = {c["cluster_id"]: c for c in result}
+        assert by_id["c_high"]["allocated_prime_related"] == {"v1": ["i1"]}
+        assert by_id["c_low"]["allocated_prime_related"] == {"v0": ["i0"]}
+
+    def test_zero_count_priority_prefers_the_high_margin_allocation(self):
+        setup, orders, operators, feasible, scored, clusters = self._contended_inputs()
+        _vr, _ir, _compat, pm, v_idx, i_idx = setup
+        result = allocate_resources(
+            clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+            count_priority=0.0,
+        )
+        by_id = {c["cluster_id"]: c for c in result}
+        assert by_id["c_high"]["allocated_prime_related"] == {"v0": ["i0"]}
+        assert by_id["c_low"]["allocated_prime_related"] == {}
+
+
+class TestHoldAwareScoring:
+    def test_build_free_capacity_fraction(self):
+        from fl_op.solver.allocation.scoring import build_free_capacity
+
+        now = 1_000_000
+        held = {
+            "v0": [(now, now + 12 * 3600)],
+            "i0": [(now - 100, now - 50)],
+        }
+        capacity = build_free_capacity(held, now, horizon_s=24 * 3600)
+        assert capacity["v0"] == 0.5
+        assert capacity["i0"] == 1.0
+
+    def test_held_implement_discounted_among_equals(self):
+        _vr, _ir, _compat, pm, v_idx, i_idx = _build_setup(2, 2)
+        orders = [_order("o0", 500)]
+        operators = [_operator("op0")]
+        feasible = {"o0": [(0, 0), (1, 1)]}
+        scored = {"o0": [(100.0, 0, 0), (100.0, 1, 1)]}
+        cluster = _cluster("cluster_a", ["o0"], 500.0)
+        result = allocate_resources(
+            [cluster], orders, operators, pm, v_idx, i_idx, feasible, scored,
+            free_capacity={"i0": 0.5},
+        )
+        assert result[0]["allocated_prime_related"] == {"v1": ["i1"]}

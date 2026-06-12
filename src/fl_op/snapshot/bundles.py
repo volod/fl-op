@@ -25,6 +25,7 @@ from fl_op.core.constants import POWER_MARGIN_PCT, URN_CAPABILITY_PREFIX
 
 if TYPE_CHECKING:
     from fl_op.canonical.asset import Asset
+    from fl_op.canonical.task import Task
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +71,15 @@ def _pair_matrix(
         return required[np.newaxis, :] <= max_required
 
 
-def summarize_bundles(assets: list["Asset"]) -> BundleFeasibilitySummary:
-    """Exact feasibility summary over the full bundle cross product."""
+def summarize_bundles(
+    assets: list["Asset"], tasks: Optional[list["Task"]] = None
+) -> BundleFeasibilitySummary:
+    """Exact feasibility summary over the full bundle cross product.
+
+    With ``tasks`` (the order book) the summary also carries the demand side:
+    task counts per demanded operation type, and the demanded operations whose
+    feasible-pair supply falls below the task count (scarcity explanation).
+    """
     prime_movers, implements = _split_roles(assets)
     pairs = _pair_matrix(prime_movers, implements)
 
@@ -85,6 +93,18 @@ def summarize_bundles(assets: list["Asset"]) -> BundleFeasibilitySummary:
             op_name = str(op)
             pairs_by_operation[op_name] = pairs_by_operation.get(op_name, 0) + count
 
+    tasks_by_operation: dict[str, int] = {}
+    for task in tasks or []:
+        op_name = str(task.operation_type or "")
+        if not op_name:
+            continue
+        tasks_by_operation[op_name] = tasks_by_operation.get(op_name, 0) + 1
+    scarce_operations = sorted(
+        op
+        for op, n_tasks in tasks_by_operation.items()
+        if pairs_by_operation.get(op, 0) < n_tasks
+    )
+
     summary = BundleFeasibilitySummary(
         n_prime_movers=len(prime_movers),
         n_related_equipment=len(implements),
@@ -92,12 +112,15 @@ def summarize_bundles(assets: list["Asset"]) -> BundleFeasibilitySummary:
         pairs_by_operation=dict(sorted(pairs_by_operation.items())),
         n_unmatched_prime_movers=int((~pairs.any(axis=1)).sum()) if implements else len(prime_movers),
         n_unmatched_related_equipment=int((~pairs.any(axis=0)).sum()) if prime_movers else len(implements),
+        tasks_by_operation=dict(sorted(tasks_by_operation.items())),
+        scarce_operations=scarce_operations,
     )
     logger.info(
-        "Bundle feasibility: %d prime movers x %d related -> %d feasible pairs",
+        "Bundle feasibility: %d prime movers x %d related -> %d feasible pairs%s",
         summary.n_prime_movers,
         summary.n_related_equipment,
         summary.n_feasible_pairs,
+        f"; scarce operations: {scarce_operations}" if scarce_operations else "",
     )
     return summary
 

@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: canonical-asset
-version: 0.1.0
+version: 0.3.0
 status: active
 name: Canonical Asset
 domain: canonical
@@ -144,6 +144,17 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: asset.capabilities.maxOperatingSpeed, semanticTerm: urn:xopt:capability:max-operating-speed, canonicalUnit: km/h, quantityKind: speed, planningUse: [duration-estimation]}
+      - name: workRates
+        logicalType: object
+        required: false
+        description: >-
+          Work quantity processed per hour, keyed by work-quantity unit code
+          ("ha", "m3", "items"). Converts any unit kind into effort for
+          duration estimation; units absent from the map fall back to the
+          width-times-speed coverage model (area) or the nominal effort.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.workRates, semanticTerm: urn:xopt:capability:work-rates, quantityKind: rate-map, planningUse: [duration-estimation]}
       - name: materialCapacity
         logicalType: number
         required: false
@@ -160,6 +171,15 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: asset.capabilities.loadCapacity, semanticTerm: urn:xopt:capability:load-capacity, canonicalUnit: kg, quantityKind: mass, planningUse: [capacity]}
+      - name: loadCapacities
+        logicalType: object
+        required: false
+        description: >-
+          Per-material compartment capacities (material code -> kg).
+          Materials absent from the map fall back to loadCapacity.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.loadCapacities, semanticTerm: urn:xopt:capability:load-capacities, quantityKind: rate-map, planningUse: [capacity]}
       - name: compatibleOperations
         logicalType: array
         required: false

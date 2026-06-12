@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: sensor-readings
-version: 1.0.0
+version: 1.1.0
 status: active
 name: Sensor Readings
 domain: agricultural-custom-services
@@ -112,3 +112,14 @@ schema:
           - property: fieldGeneration
             value:
               proto: {fieldNumber: 8}
+      - name: ingested_at
+        logicalType: string
+        physicalType: string
+        required: false
+        description: >-
+          ISO-8601 timestamp the reading arrived at the platform; makes
+          arrival order exact across restarts.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 9}

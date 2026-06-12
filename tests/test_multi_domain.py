@@ -142,6 +142,32 @@ class TestConstructionSnapshot:
         assert machine.asset_id.startswith("machine_")
         assert machine.rated_power > 0
 
+    def test_volume_jobs_carry_native_quantity_and_rates(
+        self, construction_dataset_dir, construction_domain
+    ):
+        """Earthworks-native m3 quantities and attachment work rates project
+        through the canonical work-rate capability surface."""
+        from fl_op.snapshot import SnapshotBuilder
+        from fl_op.solver.inputs import (
+            SECTION_RELATED,
+            SECTION_TASKS,
+            build_solver_inputs,
+        )
+
+        registry = FileRegistry()
+        snapshot = SnapshotBuilder(registry).build(construction_dataset_dir)
+        rows = build_solver_inputs(snapshot, registry)
+
+        units = {t.work_quantity_unit for t in rows[SECTION_TASKS]}
+        assert units <= {"m3", "ha"}
+        volume_tasks = [t for t in rows[SECTION_TASKS] if t.work_quantity_unit == "m3"]
+        assert volume_tasks, "expected volume-shaped jobs in the dataset"
+        assert all(t.work_quantity > 0 for t in volume_tasks)
+
+        rated = [r for r in rows[SECTION_RELATED] if r.work_rates]
+        assert rated, "expected attachments declaring work rates"
+        assert all(r.work_rates.get("m3", 0) > 0 for r in rated)
+
 
 class TestConstructionPlanEndToEnd:
     def test_every_job_assigned_or_explained(self, construction_plan):

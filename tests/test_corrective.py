@@ -107,6 +107,37 @@ def test_carried_assignment_with_lost_asset_is_recorded() -> None:
     assert actions[0].task_id == "order_2"
 
 
+def test_periodic_reconciliation_records_withdrawals_and_escalations() -> None:
+    """The mode-agnostic reconciliation gives periodic plans the same
+    false-positive/false-negative record-keeping rolling revisions get."""
+    from fl_op.adapters.rolling.corrective import reconcile_previous_plan
+
+    previous = _plan(
+        [
+            _assignment("service-sensor_1", ["vehicle_1"]),
+            _assignment("service-sensor_2", ["vehicle_2"]),
+        ]
+    )
+    # sensor_1's prognosis vanished (false positive); sensor_2's escalated
+    # (false negative: it was derived without escalation last time).
+    snapshot = _snapshot(
+        tasks=[_service_task("sensor_2", "escalated:battery-critical:3.0pct")]
+    )
+    reasons = {
+        "service-sensor_1": "monitoring:sensor_1:battery-low:18.0pct",
+        "service-sensor_2": "monitoring:sensor_2:battery-low:19.0pct",
+    }
+    actions = reconcile_previous_plan(previous, snapshot, reasons)
+    by_action = {a.action: a for a in actions}
+    withdrawn = by_action[CorrectiveActionType.SERVICE_WITHDRAWN]
+    assert withdrawn.task_id == "service-sensor_1"
+    assert "battery-low:18.0pct" in withdrawn.detail
+    escalated = by_action[CorrectiveActionType.SERVICE_ESCALATED]
+    assert escalated.task_id == "service-sensor_2"
+
+    assert reconcile_previous_plan(None, snapshot, reasons) == []
+
+
 def test_withdrawn_service_task_records_derivation_and_evidence() -> None:
     previous_plan = _plan([_assignment("service-sensor_1", ["vehicle_1"])])
     reasons = {"service-sensor_1": "monitoring:sensor_1:battery-low:15.0pct"}

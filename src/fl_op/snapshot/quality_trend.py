@@ -16,6 +16,7 @@ from fl_op.core.constants import (
     ERROR_RATE_TREND_MIN_RUNS,
     QUALITY_TREND_DIRNAME,
     QUALITY_TREND_FILENAME,
+    QUALITY_TREND_MAX_RECORDS,
 )
 from fl_op.core.paths import DATA_ROOT
 
@@ -46,8 +47,32 @@ def record_error_rates(
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("a") as fh:
             fh.write(json.dumps(record) + "\n")
+        _compact(target)
     except OSError as exc:
         logger.warning("Could not append quality trend record to %s: %s", target, exc)
+
+
+def _compact(target: pathlib.Path, max_records: Optional[int] = None) -> None:
+    """Rewrite the trend file with only the newest records once it grows too big.
+
+    The atomic replace keeps the file readable for concurrent consumers; the
+    retained window is far larger than any trend rule needs, so compaction
+    never changes a degradation verdict.
+    """
+    limit = max_records if max_records is not None else QUALITY_TREND_MAX_RECORDS
+    records = _load_records(target)
+    if len(records) <= limit:
+        return
+    kept = records[-limit:]
+    tmp = target.with_name(target.name + ".tmp")
+    tmp.write_text("".join(json.dumps(r) + "\n" for r in kept))
+    tmp.replace(target)
+    logger.info(
+        "Compacted quality trend %s: %d -> %d records",
+        target,
+        len(records),
+        len(kept),
+    )
 
 
 def _load_records(path: pathlib.Path) -> list[dict[str, Any]]:

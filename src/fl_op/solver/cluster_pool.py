@@ -40,6 +40,8 @@ from fl_op.canonical.enums import ReasonCode
 from fl_op.core import constants
 from fl_op.core.constants import CLUSTER_SOLVE_TIME_LIMIT_S, SOLVER_WORKERS
 from fl_op.solver.cluster.routing import HeldWindows
+from fl_op.solver.cost_rates import ResourcePrices
+from fl_op.solver.enforcement import BlockedWindows
 from fl_op.solver.travel_time import TravelLookup
 from fl_op.solver.types import ClusterSpec
 
@@ -96,7 +98,10 @@ def _estimate_worker_memory_mb(clusters: list[ClusterSpec]) -> float:
         * constants.SOLVER_MODEL_BYTES_PER_CELL
         / _BYTES_PER_MB
     )
-    return constants.SOLVER_WORKER_BASE_MEMORY_MB + model_mb
+    estimated_mb = constants.SOLVER_WORKER_BASE_MEMORY_MB + model_mb
+    from fl_op.solver.performance_feedback import calibrated_worker_memory_mb
+
+    return calibrated_worker_memory_mb(estimated_mb)
 
 
 def compute_pool_sizing(clusters: list[ClusterSpec]) -> PoolSizing:
@@ -166,13 +171,17 @@ def _worker_fn(
     held_windows: Optional[HeldWindows] = None,
     travel_lookup: Optional[TravelLookup] = None,
     solve_time_limit_s: Optional[int] = None,
+    now_epoch: Optional[int] = None,
+    weather_blocked: Optional[BlockedWindows] = None,
+    resource_prices: Optional[ResourcePrices] = None,
 ) -> tuple[list[dict], list[dict], dict[str, Any]]:
-    """Top-level worker function — module-level def required for pickling."""
+    """Top-level worker function - module-level def required for pickling."""
     from fl_op.solver.cluster_solver import solve_cluster_instrumented
     return solve_cluster_instrumented(
         cluster_dict, orders, vehicles, implements, fields, depots,
         greedy_assignment, vehicle_index, implement_index, held_windows,
-        travel_lookup, solve_time_limit_s,
+        travel_lookup, solve_time_limit_s, now_epoch, weather_blocked,
+        resource_prices,
     )
 
 
@@ -189,12 +198,20 @@ def pool_solve(
     held_windows: Optional[HeldWindows] = None,
     travel_lookup: Optional[TravelLookup] = None,
     solve_time_limit_s: Optional[int] = None,
+    now_epoch: Optional[int] = None,
+    weather_blocked: Optional[BlockedWindows] = None,
+    resource_prices: Optional[ResourcePrices] = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Solve all clusters in parallel.
 
     Returns (all_dispatch, all_infeasible, cluster_telemetry): one
     machine-readable solve record per cluster, including synthesized records
-    for crashed workers and pool-timeout cancellations.
+    for crashed workers and pool-timeout cancellations. ``now_epoch`` is the
+    planning time origin shared by every worker (snapshot effective time);
+    None lets each worker fall back to wall-clock now. ``weather_blocked``
+    maps task ids to blocked epoch intervals (non-compliant forecast windows)
+    the routing model must keep execution out of. ``resource_prices`` are the
+    resolved fuel/material prices for arc costs and dispatch margins.
     """
     if not clusters:
         return [], [], []
@@ -202,10 +219,10 @@ def pool_solve(
     sizing = compute_pool_sizing(clusters)
     n_workers = sizing.n_workers
 
-    # The optional LNS improvement pass adds its own per-cluster budget.
-    lns_budget_s = (
-        constants.CLUSTER_LNS_TIME_LIMIT_S if constants.CLUSTER_LNS_ENABLED else 0
-    )
+    cluster_dicts = [dict(c) for c in clusters]
+    # The optional LNS improvement pass adds its own per-cluster budget, now
+    # scaled from retained objective-delta feedback.
+    lns_budget_s = _assign_lns_budgets(cluster_dicts)
     cluster_limit_s = (
         solve_time_limit_s
         if solve_time_limit_s is not None
@@ -233,8 +250,6 @@ def pool_solve(
     all_dispatch: list[dict[str, Any]] = []
     all_infeasible: list[dict[str, Any]] = []
     cluster_telemetry: list[dict[str, Any]] = []
-    cluster_dicts = [dict(c) for c in clusters]
-
     ctx = multiprocessing.get_context("spawn")
     with ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx, initializer=_pool_initializer) as executor:
         future_to_cluster: dict[
@@ -244,7 +259,8 @@ def pool_solve(
                 _worker_fn,
                 cd, orders, vehicles, implements, fields, depots,
                 greedy_assignment, vehicle_index, implement_index, held_windows,
-                travel_lookup, solve_time_limit_s,
+                travel_lookup, solve_time_limit_s, now_epoch, weather_blocked,
+                resource_prices,
             ): cd
             for cd in cluster_dicts
         }
@@ -307,4 +323,25 @@ def pool_solve(
                         }
                     )
 
+    from fl_op.solver.performance_feedback import record_solver_feedback
+
+    record_solver_feedback(cluster_telemetry)
     return all_dispatch, all_infeasible, cluster_telemetry
+
+
+def _assign_lns_budgets(cluster_dicts: list[dict[str, Any]]) -> int:
+    """Stamp per-cluster LNS budgets; return the largest budget assigned."""
+    if not constants.CLUSTER_LNS_ENABLED:
+        return 0
+    from fl_op.solver.performance_feedback import lns_budget_multiplier
+
+    multiplier = lns_budget_multiplier()
+    max_budget = 0
+    for cluster in cluster_dicts:
+        total_penalty = float(cluster.get("total_penalty_per_day", 0.0) or 0.0)
+        if total_penalty < constants.CLUSTER_LNS_MIN_PENALTY_EUR_PER_DAY:
+            continue
+        budget = max(1, int(round(constants.CLUSTER_LNS_TIME_LIMIT_S * multiplier)))
+        cluster["lns_time_limit_s"] = budget
+        max_budget = max(max_budget, budget)
+    return max_budget

@@ -5,6 +5,7 @@ import json
 import pathlib
 import sys
 import types
+from types import SimpleNamespace
 
 import pytest
 
@@ -84,6 +85,97 @@ def test_tune_baseline_uses_trial_scale_time_budget(tune_run) -> None:
         baseline["baseline_params"]["cluster_solve_time_limit_s"]
         <= constants.TUNE_TIME_LIMIT_MAX_S
     )
+
+
+def test_tune_records_multi_objective_metadata(tune_run) -> None:
+    trials = json.loads((tune_run / "trials.json").read_text())
+    best = json.loads((tune_run / "best_params.json").read_text())
+
+    assert trials["multi_objective"] is True
+    assert trials["objective_names"] == [
+        "business_objective",
+        "plan_instability_penalty",
+        "wall_time_s",
+    ]
+    assert best["objective_directions"] == ["maximize", "minimize", "minimize"]
+    assert best["pareto_trials"]
+    assert all("wall_time_s" in t["objectives"] for t in trials["trials"])
+
+
+def test_tune_can_average_multiple_datasets(dataset_dir, tmp_path, monkeypatch) -> None:
+    from fl_op.tuning import optuna_tuner
+
+    monkeypatch.setattr("fl_op.solver.chain.run_solver_chain", _fake_chain)
+    monkeypatch.setattr(optuna_tuner, "DATA_ROOT", tmp_path)
+    out_dir = optuna_tuner.run_tune(
+        str(dataset_dir),
+        extra_data_dirs=[str(dataset_dir)],
+        n_trials=2,
+        seed=13,
+    )
+
+    baseline = json.loads((out_dir / "baseline.json").read_text())
+    best = json.loads((out_dir / "best_params.json").read_text())
+    assert baseline["kpis"]["n_dataset_cases"] == 2
+    assert len(baseline["cases"]) == 2
+    assert len(best["snapshot_hashes"]) == 2
+
+
+def test_parallel_tune_defaults_to_local_rdb_storage(
+    dataset_dir, tmp_path, monkeypatch
+) -> None:
+    from fl_op.tuning import optuna_tuner
+
+    monkeypatch.setattr("fl_op.solver.chain.run_solver_chain", _fake_chain)
+    monkeypatch.setattr(optuna_tuner, "DATA_ROOT", tmp_path)
+    out_dir = optuna_tuner.run_tune(
+        str(dataset_dir),
+        n_trials=2,
+        seed=17,
+        n_jobs=2,
+    )
+
+    best = json.loads((out_dir / "best_params.json").read_text())
+    assert best["n_jobs"] == 2
+    assert best["storage"].startswith("sqlite:///")
+    assert (out_dir / "study.db").exists()
+
+
+def test_promote_best_params_creates_reviewed_overlay(tmp_path) -> None:
+    from fl_op.tuning.solver_profile import (
+        load_tuned_solver_parameters,
+        promote_best_params,
+        solver_parameters_for_profile,
+    )
+
+    best_path = tmp_path / "best_params.json"
+    best_path.write_text(
+        json.dumps(
+            {
+                "best_params": {
+                    "cluster_target_size": 42,
+                    "score_weight_margin": 1.5,
+                    "unknown": "ignored",
+                },
+                "snapshot_hash": "abc",
+                "n_trials": 4,
+            }
+        )
+    )
+    overlay = tmp_path / "solver-parameters-tuned.json"
+    promote_best_params(best_path, output_path=overlay, reviewed_by="tester")
+
+    overrides = load_tuned_solver_parameters(overlay)
+    assert overrides["cluster_target_size"] == 42
+    assert overrides["score_weight_margin"] == pytest.approx(1.5)
+    assert "unknown" not in overrides
+
+    profile = SimpleNamespace(
+        allocationPolicy=SimpleNamespace(countPriority=0.25)
+    )
+    params = solver_parameters_for_profile(profile, tuned_path=overlay)
+    assert params.cluster_target_size == 42
+    assert params.assignment_count_priority == pytest.approx(0.25)
 
 
 def test_mlflow_logging_disabled_returns_none(monkeypatch) -> None:

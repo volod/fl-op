@@ -63,3 +63,52 @@ def test_plan_is_immutable(periodic_plan) -> None:
     _, plan = periodic_plan
     with pytest.raises(ValidationError):
         plan.status = PlanStatus.PUBLISHED
+
+
+def test_plan_carries_its_visibility_horizon(periodic_plan) -> None:
+    """The published plan records the snapshot's source watermarks, the
+    reference point watermark-driven replan triggering compares against."""
+    snapshot, plan = periodic_plan
+    assert plan.source_watermarks == snapshot.source_watermarks
+    assert "sensor-readings" in plan.source_watermarks
+
+
+def test_material_charging_and_reservations_are_one_mechanism(periodic_plan) -> None:
+    """A fertilizing task is either admitted (its charge published as a
+    reservation) or excluded with INSUFFICIENT_MATERIAL -- never both, and
+    reservations never cover operations without declared demand."""
+    from fl_op.canonical.enums import ReservationStatus
+
+    snapshot, plan = periodic_plan
+    fertilizing = {
+        t.task_id for t in snapshot.tasks if t.operation_type == "FERTILIZING"
+    }
+    assert fertilizing, "dataset should contain fertilizing orders"
+
+    reserved = {r.task_id for r in plan.material_reservations}
+    insufficient = {
+        u.task_id
+        for u in plan.unassigned_tasks
+        if u.reason_code == ReasonCode.INSUFFICIENT_MATERIAL
+    }
+    assert reserved <= fertilizing
+    assert insufficient <= fertilizing
+    assert reserved.isdisjoint(insufficient)
+    assert reserved | insufficient, (
+        "material enforcement should have admitted or excluded some "
+        "fertilizing task"
+    )
+
+    assigned = {a.task_id: a for a in plan.assignments}
+    for reservation in plan.material_reservations:
+        assert reservation.quantity > 0
+        assert reservation.canonical_unit == "kg"
+        assignment = assigned.get(reservation.task_id)
+        if assignment is not None:
+            assert reservation.status == ReservationStatus.CONFIRMED
+            assert reservation.reserved_from == assignment.planned_start
+            assert assignment.material_reservation_refs == [
+                reservation.reservation_id
+            ]
+        else:
+            assert reservation.status == ReservationStatus.RELEASED

@@ -104,6 +104,14 @@ def compile_rolling_state(
     )
 
     preserved = frozen_ids | {a.task_id for a in carried_forward}
+    # Reservations of preserved tasks travel into the new revision unchanged,
+    # so its reservation list stays self-contained (re-solved tasks get fresh
+    # reservations from the chain's material charging).
+    carried_reservations = [
+        r
+        for r in (previous_plan.material_reservations if previous_plan else [])
+        if r.task_id in preserved
+    ]
     tasks_to_resolve = {t.task_id for t in snapshot.tasks if t.task_id not in preserved}
     from fl_op.solver.inputs import build_solver_inputs
 
@@ -112,6 +120,8 @@ def compile_rolling_state(
         tasks_to_resolve,
         [*frozen_assignments, *carried_forward],
         enforcement=config.get("enforcement"),
+        now=now,
+        parameters=config.get("parameters"),
     )
 
     logger.info(
@@ -128,6 +138,7 @@ def compile_rolling_state(
         previous_by_task=previous_by_task,
         now=now,
         corrective_actions=corrective_actions,
+        carried_reservations=carried_reservations,
     )
 
 
@@ -156,6 +167,8 @@ def _resolve_tasks(
     tasks_to_resolve: set[str],
     held_assignments: list[Assignment],
     enforcement: Any = None,
+    now: Optional[datetime] = None,
+    parameters: Any = None,
 ):
     if not tasks_to_resolve:
         return None
@@ -172,51 +185,45 @@ def _resolve_tasks(
     # re-solve treats its prime movers and related equipment correctly.
     prime_mover_ids = {r.asset_id for r in solver_rows.get(SECTION_PRIME_MOVERS, [])}
     related_ids = {r.asset_id for r in solver_rows.get(SECTION_RELATED, [])}
+    operator_ids = {r.asset_id for r in solver_rows.get(SECTION_OPERATORS, [])}
 
-    # Held prime movers stay available to the incremental re-solve: their
-    # frozen/carried assignment windows travel along as busy time windows
-    # (vehicle break intervals in the routing model), so a held vehicle is
-    # reused only in a real non-overlapping gap, never double-booked. Held
-    # related equipment and operators are bound to their assignment for its
-    # whole duration and remain excluded.
-    held_vehicle_windows = _held_vehicle_windows(held_assignments, prime_mover_ids)
-    held_implements = {
-        aid
-        for assignment in held_assignments
-        for aid in assignment.asset_ids
-        if aid in related_ids
-    }
-    held_operators = {op for assignment in held_assignments for op in assignment.operator_ids}
+    # Every held asset stays available to the incremental re-solve as a
+    # resource calendar: its frozen/carried assignment windows travel along
+    # as busy intervals. Prime movers and related equipment get exact
+    # in-model gap reuse (the routing model blocks the pair's busy intervals
+    # as vehicle breaks); operator calendars feed hold-aware allocation
+    # scoring (operators are not time-modelled inside routing).
+    held_windows = _held_asset_windows(
+        held_assignments, prime_mover_ids | related_ids | operator_ids
+    )
 
     payload = dict(solver_rows)
     payload[SECTION_TASKS] = [
         o for o in payload.get(SECTION_TASKS, []) if o.task_id in tasks_to_resolve
     ]
-    payload[SECTION_RELATED] = [
-        im
-        for im in payload.get(SECTION_RELATED, [])
-        if im.asset_id not in held_implements
-    ]
-    payload[SECTION_OPERATORS] = [
-        op
-        for op in payload.get(SECTION_OPERATORS, [])
-        if op.asset_id not in held_operators
-    ]
+    # The chain's planning time origin is the revision's event/effective time,
+    # so held-window offsets and routing deadlines are exact under replayed
+    # and synthetic timelines, never skewed by wall-clock now.
     return run_solver_chain(
-        payload, enforcement=enforcement, held_windows=held_vehicle_windows
+        payload,
+        enforcement=enforcement,
+        held_windows=held_windows,
+        now=now,
+        parameters=parameters,
     )
 
 
-def _held_vehicle_windows(
+def _held_asset_windows(
     held_assignments: list[Assignment],
-    prime_mover_ids: set[str],
+    known_asset_ids: set[str],
 ) -> dict[str, list[tuple[int, int]]]:
-    """Map each held prime mover to its busy [start, end) epoch-second intervals."""
+    """Map each held asset (prime mover, related equipment, operator) to its
+    busy [start, end) epoch-second intervals."""
     windows: dict[str, list[tuple[int, int]]] = {}
     for assignment in held_assignments:
         start = int(assignment.planned_start.timestamp())
         end = int(assignment.planned_finish.timestamp())
-        for aid in assignment.asset_ids:
-            if aid in prime_mover_ids:
+        for aid in [*assignment.asset_ids, *assignment.operator_ids]:
+            if aid in known_asset_ids:
                 windows.setdefault(aid, []).append((start, end))
     return windows

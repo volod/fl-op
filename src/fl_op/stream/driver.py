@@ -35,12 +35,16 @@ class Revision:
 
     When events are coalesced (convergence window), ``event`` is the last
     event of the converged batch and ``n_coalesced_events`` its size.
+    ``applied_event_ids`` lists every event id the revision's rebuild
+    applied; after publication they go into the durable dedup store so a
+    broker redelivery never produces a duplicate revision.
     """
 
     event: Optional[ExecutionEvent]
     plan: Plan
     snapshot_id: str
     n_coalesced_events: int = 1
+    applied_event_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -60,11 +64,12 @@ class StreamDriver:
         self,
         registry: Optional[FileRegistry] = None,
         adapter: Optional[OrToolsRollingAdapter] = None,
+        dedup_store: Optional[Any] = None,
     ) -> None:
         self.registry = registry or FileRegistry()
         self.builder = SnapshotBuilder(self.registry)
         self.adapter = adapter or OrToolsRollingAdapter()
-        self.applicator = EventApplicator(self.registry)
+        self.applicator = EventApplicator(self.registry, dedup_store)
         profile_id = self.registry.active_profile_id
         if profile_id is None:
             raise ValueError("Registry declares no active domain profile")
@@ -116,13 +121,26 @@ class StreamDriver:
 
         for batch in _coalesce(events, convergence_window_s, effective_at):
             applied = [self.applicator.apply(working, event) for event in batch]
+            # Completions captured by this batch are measured against the
+            # plan the tasks were executing under (the previous revision).
+            if self.applicator.completions:
+                from fl_op.stream.lead_time import record_completions
+
+                record_completions(self.applicator.completions, previous_plan)
+                self.applicator.completions = []
             if not any(applied):
                 continue
+            applied_event_ids = [
+                event.event_id
+                for event, was_applied in zip(batch, applied)
+                if was_applied and event.event_id
+            ]
             last_event = batch[-1]
             now = _event_now(last_event, effective_at)
             snapshot = self.builder.build_from_sources(
                 working, PlanningMode.ROLLING, effective_at,
                 lineage_ref=f"stream://{last_event.event_id}",
+                source_watermarks=dict(self.applicator.watermarks),
             )
             plan = self.adapter.plan(
                 snapshot,
@@ -139,13 +157,26 @@ class StreamDriver:
                     plan=plan,
                     snapshot_id=snapshot.snapshot_id,
                     n_coalesced_events=sum(applied),
+                    applied_event_ids=applied_event_ids,
                 )
             )
             record_prognosis_outcomes(plan)
             previous_plan = plan
             previous_service_reasons = _service_reasons(snapshot)
 
-        log_threshold_recommendations(prognosis_accuracy())
+        accuracy = prognosis_accuracy()
+        log_threshold_recommendations(accuracy)
+        from fl_op.stream.lead_time import lead_time_stats
+
+        stats = lead_time_stats()
+        if stats:
+            logger.info("Completion lead times: %s", stats)
+        from fl_op.core import constants as _constants
+
+        if _constants.MONITORING_AUTO_TUNE_ENABLED:
+            from fl_op.snapshot.policy_tuning import auto_tune_monitoring_policy
+
+            auto_tune_monitoring_policy(accuracy, self.builder.monitoring_policy)
         logger.info("Stream produced %d revisions", len(result.revisions))
         return result
 
@@ -169,13 +200,10 @@ def _coalesce(
 
 
 def _service_reasons(snapshot: Any) -> dict[str, str]:
-    """Monitoring-derived task reasons of a snapshot, for the next revision's
-    corrective reconciliation (withdrawal and escalation records)."""
-    return {
-        t.task_id: t.source_ref
-        for t in snapshot.tasks
-        if t.order_id.startswith("monitoring-")
-    }
+    """Monitoring-derived task reasons, for the next revision's reconciliation."""
+    from fl_op.adapters.rolling.corrective import service_task_reasons
+
+    return service_task_reasons(snapshot)
 
 
 def _event_now(event: ExecutionEvent, fallback: datetime) -> datetime:

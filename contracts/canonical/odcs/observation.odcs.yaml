@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: canonical-observation
-version: 0.1.0
+version: 0.2.0
 status: active
 name: Canonical Observation
 domain: canonical
@@ -83,3 +83,13 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: observation.observedAt, semanticTerm: urn:xopt:time:observed-at, quantityKind: timestamp, planningUse: [monitoring]}
+      - name: ingestedAt
+        logicalType: string
+        required: false
+        description: >-
+          Timestamp the reading arrived at the platform (ISO-8601). Makes
+          arrival order exact across restarts; absent readings fall back to
+          source row order.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: observation.ingestedAt, semanticTerm: urn:xopt:time:ingested-at, quantityKind: timestamp, planningUse: [monitoring]}

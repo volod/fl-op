@@ -2,7 +2,7 @@
 
 import pathlib
 
-from fl_op.solver.routing_model import _build_node_geometry
+from fl_op.solver.routing_model import build_node_table, build_time_matrix
 from fl_op.solver.travel_time import _haversine_s, build_travel_lookup, travel_seconds
 from fl_op.solver.types import SiteRow, TaskRow, TravelLinkRow
 
@@ -41,6 +41,122 @@ class TestTravelLookup:
         assert travel_seconds("d0", "f0", 48.5, 32.0, 48.9, 32.4, None) == expected
 
 
+class TestShortestPathComposition:
+    def test_two_hop_path_is_composed(self):
+        lookup = build_travel_lookup(
+            [_link("a", "b", 600.0, "l0"), _link("b", "c", 900.0, "l1")]
+        )
+        assert lookup[("a", "c")] == 1500
+
+    def test_composed_route_beats_longer_direct_link(self):
+        lookup = build_travel_lookup(
+            [
+                _link("a", "c", 5000.0, "l0"),
+                _link("a", "b", 600.0, "l1"),
+                _link("b", "c", 900.0, "l2"),
+            ]
+        )
+        assert lookup[("a", "c")] == 1500
+
+    def test_composition_is_directed(self):
+        lookup = build_travel_lookup(
+            [_link("a", "b", 600.0, "l0"), _link("b", "c", 900.0, "l1")]
+        )
+        assert ("c", "a") not in lookup
+
+    def test_oversized_network_keeps_direct_links_only(self, monkeypatch):
+        from fl_op.solver import travel_time
+
+        monkeypatch.setattr(travel_time, "TRAVEL_NETWORK_MAX_COMPOSE_NODES", 2)
+        lookup = build_travel_lookup(
+            [_link("a", "b", 600.0, "l0"), _link("b", "c", 900.0, "l1")]
+        )
+        assert ("a", "c") not in lookup
+        assert lookup[("a", "b")] == 600
+
+
+class TestNetworkTimesInClustering:
+    @staticmethod
+    def _depot(did: str, lat: float, lon: float):
+        from fl_op.solver.types import DepotRow
+
+        return DepotRow.from_canonical_dict(
+            {"location_id": did, "lat": lat, "lon": lon}
+        )
+
+    def test_network_time_overrides_geographic_nearest_depot(self):
+        """The road network reaches f0 cheaply from the farther depot."""
+        from fl_op.solver.preprocessing import cluster_orders_by_depot
+
+        order = TaskRow.from_canonical_dict({"task_id": "o0", "location_ref": "f0"})
+        field = SiteRow.from_canonical_dict(
+            {"location_id": "f0", "lat": 48.5, "lon": 32.0}
+        )
+        near = self._depot("d_near", 48.55, 32.0)
+        far = self._depot("d_far", 49.5, 32.0)
+        # Haversine: d_near ~5.6 km (~1334 s), d_far ~111 km. The link makes
+        # d_far the fastest road origin.
+        lookup = build_travel_lookup([_link("d_far", "f0", 300.0)])
+        assignment = cluster_orders_by_depot([order], [field], [near, far], lookup)
+        assert assignment["d_far"] == ["o0"]
+
+    def test_without_lookup_geographic_nearest_wins(self):
+        from fl_op.solver.preprocessing import cluster_orders_by_depot
+
+        order = TaskRow.from_canonical_dict({"task_id": "o0", "location_ref": "f0"})
+        field = SiteRow.from_canonical_dict(
+            {"location_id": "f0", "lat": 48.5, "lon": 32.0}
+        )
+        near = self._depot("d_near", 48.55, 32.0)
+        far = self._depot("d_far", 49.5, 32.0)
+        assignment = cluster_orders_by_depot([order], [field], [near, far], None)
+        assert assignment["d_near"] == ["o0"]
+
+
+class TestNetworkTimesInGreedy:
+    def test_network_reposition_flips_pair_ordering(self):
+        """A road link from the far vehicle's depot makes it the cheaper pick."""
+        from fl_op.solver.greedy import vectorized_score
+        from fl_op.solver.types import PrimeMoverRow, RelatedRow
+
+        def vehicle(vid: str, lat: float, depot: str) -> PrimeMoverRow:
+            return PrimeMoverRow.from_canonical_dict({
+                "asset_id": vid, "rated_power": "150", "lat": lat, "lon": 32.0,
+                "home_depot_ref": depot, "travel_speed": "15",
+                "fuel_consumption_rate": "18",
+            })
+
+        v_near = vehicle("v_near", 48.55, "d_near")
+        v_far = vehicle("v_far", 49.5, "d_far")
+        implement = RelatedRow.from_canonical_dict({
+            "asset_id": "i0", "compatible_operations": "['SPRAYING']",
+            "required_power": "100",
+        })
+        field = SiteRow.from_canonical_dict(
+            {"location_id": "f0", "lat": 48.5, "lon": 32.0}
+        )
+        order = TaskRow.from_canonical_dict({
+            "task_id": "o0", "location_ref": "f0", "operation_type": "SPRAYING",
+            "area": "10", "revenue": "2000",
+        })
+        feasible = {"o0": [(0, 0), (1, 0)]}
+        v_index = {"v_near": 0, "v_far": 1}
+        i_index = {"i0": 0}
+
+        baseline = vectorized_score(
+            [order], [v_near, v_far], [implement], [field],
+            feasible, v_index, i_index,
+        )
+        assert baseline["o0"][0][1] == 0  # nearest vehicle wins on haversine
+
+        lookup = build_travel_lookup([_link("d_far", "f0", 60.0)])
+        networked = vectorized_score(
+            [order], [v_near, v_far], [implement], [field],
+            feasible, v_index, i_index, travel_lookup=lookup,
+        )
+        assert networked["o0"][0][1] == 1  # road access flips the ordering
+
+
 class TestNodeGeometry:
     def _order(self, oid: str, fid: str) -> TaskRow:
         return TaskRow.from_canonical_dict({"task_id": oid, "location_ref": fid})
@@ -52,16 +168,16 @@ class TestNodeGeometry:
         orders = [self._order("o0", "f0")]
         field_map = {"f0": self._field("f0", 48.9, 32.4)}
         lookup = {("d0", "f0"): 1234, ("f0", "d0"): 4321}
-        _, _, matrix = _build_node_geometry(
-            orders, field_map, 48.5, 32.0, "d0", lookup
-        )
+        nodes = build_node_table(orders, field_map, 48.5, 32.0, "d0")
+        matrix = build_time_matrix(nodes, lookup)
         assert matrix[0][1] == 1234
         assert matrix[1][0] == 4321
 
     def test_matrix_falls_back_to_haversine_without_links(self):
         orders = [self._order("o0", "f0")]
         field_map = {"f0": self._field("f0", 48.9, 32.4)}
-        _, _, matrix = _build_node_geometry(orders, field_map, 48.5, 32.0, "d0", {})
+        nodes = build_node_table(orders, field_map, 48.5, 32.0, "d0")
+        matrix = build_time_matrix(nodes, {})
         assert matrix[0][1] == _haversine_s(48.5, 32.0, 48.9, 32.4)
 
 

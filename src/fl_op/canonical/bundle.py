@@ -49,6 +49,11 @@ class BundleFeasibilitySummary(BaseModel):
     # Resources no feasible pair can use (explanation: dead capacity).
     n_unmatched_prime_movers: int = 0
     n_unmatched_related_equipment: int = 0
+    # Demand side: tasks in the order book per demanded operation type.
+    tasks_by_operation: dict[str, int] = Field(default_factory=dict)
+    # Demanded operations whose feasible-pair supply is below the task count
+    # (explanation: operations short on bundles for this actual order book).
+    scarce_operations: list[str] = Field(default_factory=list)
 
 
 class OperationalBundle(BaseModel):

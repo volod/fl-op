@@ -12,6 +12,8 @@ from fl_op.canonical.enums import ReasonCode
 from fl_op.solver.cluster.infeasible import mark_all_infeasible
 from fl_op.solver.cluster.routing import HeldWindows
 from fl_op.solver.cluster.solve import solve_cluster_inner
+from fl_op.solver.cost_rates import ResourcePrices
+from fl_op.solver.enforcement import BlockedWindows
 from fl_op.solver.solve_telemetry import STATUS_WORKER_ERROR, ClusterSolveTelemetry
 from fl_op.solver.travel_time import TravelLookup
 
@@ -31,6 +33,9 @@ def solve_cluster_instrumented(
     held_windows: Optional[HeldWindows] = None,
     travel_lookup: Optional[TravelLookup] = None,
     solve_time_limit_s: Optional[int] = None,
+    now_epoch: Optional[int] = None,
+    weather_blocked: Optional[BlockedWindows] = None,
+    resource_prices: Optional[ResourcePrices] = None,
 ) -> tuple[list[dict], list[dict], ClusterSolveTelemetry]:
     """Solve one cluster with machine-readable diagnostics.
 
@@ -38,7 +43,7 @@ def solve_cluster_instrumented(
     returns a 3-tuple, even when no solution is found. Never raises.
     """
     try:
-        return solve_cluster_inner(
+        dispatch, infeasible, telemetry = solve_cluster_inner(
             cluster_dict,
             orders,
             vehicles,
@@ -50,7 +55,12 @@ def solve_cluster_instrumented(
             held_windows,
             travel_lookup,
             solve_time_limit_s,
+            now_epoch,
+            weather_blocked,
+            resource_prices,
         )
+        _stamp_worker_rss(telemetry)
+        return dispatch, infeasible, telemetry
     except Exception as exc:
         logger.error(
             "Cluster %s solver exception: %s",
@@ -71,6 +81,7 @@ def solve_cluster_instrumented(
             "n_unserved": len(infeasible),
             "detail": str(exc),
         }
+        _stamp_worker_rss(telemetry)
         return dispatch, infeasible, telemetry
 
 
@@ -87,6 +98,9 @@ def solve_cluster(
     held_windows: Optional[HeldWindows] = None,
     travel_lookup: Optional[TravelLookup] = None,
     solve_time_limit_s: Optional[int] = None,
+    now_epoch: Optional[int] = None,
+    weather_blocked: Optional[BlockedWindows] = None,
+    resource_prices: Optional[ResourcePrices] = None,
 ) -> tuple[list[dict], list[dict]]:
     """Solve one geographic cluster; return (dispatch_packages, infeasible_orders).
 
@@ -107,8 +121,20 @@ def solve_cluster(
         held_windows,
         travel_lookup,
         solve_time_limit_s,
+        now_epoch,
+        weather_blocked,
+        resource_prices,
     )
     return dispatch, infeasible
+
+
+def _stamp_worker_rss(telemetry: ClusterSolveTelemetry) -> None:
+    try:
+        from fl_op.core.telemetry import current_process_max_rss_mb
+
+        telemetry["worker_max_rss_mb"] = round(current_process_max_rss_mb(), 2)
+    except Exception:  # noqa: BLE001 - diagnostics must never fail a solve
+        pass
 
 
 __all__ = ["solve_cluster", "solve_cluster_instrumented"]

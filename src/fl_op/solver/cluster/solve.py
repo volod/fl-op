@@ -5,6 +5,8 @@ from typing import Any, Optional
 
 from fl_op.solver.cluster.context import prepare_cluster_context
 from fl_op.solver.cluster.routing import HeldWindows, solve_routing_context
+from fl_op.solver.cost_rates import ResourcePrices
+from fl_op.solver.enforcement import BlockedWindows
 from fl_op.solver.solve_telemetry import (
     STATUS_EMPTY,
     STATUS_INPUT_ERROR,
@@ -27,6 +29,9 @@ def solve_cluster_inner(
     held_windows: Optional[HeldWindows] = None,
     travel_lookup: Optional[TravelLookup] = None,
     solve_time_limit_s: Optional[int] = None,
+    now_epoch: Optional[int] = None,
+    weather_blocked: Optional[BlockedWindows] = None,
+    resource_prices: Optional[ResourcePrices] = None,
 ) -> tuple[list[dict], list[dict], ClusterSolveTelemetry]:
     """Prepare and solve one cluster.
 
@@ -40,6 +45,7 @@ def solve_cluster_inner(
         all_fields,
         all_depots,
         travel_lookup,
+        weather_blocked,
     )
     if early_result is not None:
         dispatch, infeasible = early_result
@@ -61,6 +67,8 @@ def solve_cluster_inner(
         vehicle_index,
         held_windows,
         solve_time_limit_s,
+        now_epoch,
+        resource_prices,
     )
     logger.debug(
         "Cluster %s: %d dispatched, %d infeasible",

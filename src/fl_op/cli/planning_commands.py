@@ -196,6 +196,36 @@ def plan_rolling(data: str, events: str | None, effective_at: str | None) -> Non
     )
 
 
+@plan_group.command("freshness")
+@data_option
+@click.option(
+    "--plan",
+    default="latest",
+    show_default=True,
+    help="Published plan run dir (plan-periodic or plan-rolling), or 'latest'.",
+)
+@click.option(
+    "--replan",
+    is_flag=True,
+    default=False,
+    help="Trigger a rolling replan automatically when the plan is stale.",
+)
+@click.option(
+    "--events",
+    required=False,
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    help="Events file for the triggered replan.",
+)
+def plan_freshness(data: str, plan: str, replan: bool, events: str | None) -> None:
+    """Compare a plan's visibility horizon against the data visible now."""
+    from fl_op.planning.plans import run_plan_freshness
+
+    run_plan_freshness(
+        str(resolve_data_dir(data)), plan_dir=plan, replan=replan, events_path=events
+    )
+
+
 @plan_group.command("diff-revisions")
 @click.option(
     "--plan",

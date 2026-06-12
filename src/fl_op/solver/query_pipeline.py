@@ -7,14 +7,16 @@ API); ``run_query`` wraps it with the CLI artifact and stdout behavior.
 import json
 import logging
 import pathlib
+import hashlib
 from datetime import datetime, timezone
 from typing import Any
 
+from fl_op.core import constants
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
 from fl_op.core.paths import DATA_ROOT
 from fl_op.canonical.enums import ReasonCode
 from fl_op.io import detect_format, get_codec, locate_source
-from fl_op.solver.feasibility import build_compat_matrix
+from fl_op.solver.feasibility import cached_compat_matrix
 from fl_op.solver.query import (
     _build_vehicle_time_index,
     _compute_conflict_risk,
@@ -33,11 +35,16 @@ def evaluate_query(
     from fl_op.contracts.registry import FileRegistry
     from fl_op.solver.greedy import vectorized_score
     from fl_op.solver.inputs import to_canonical_row, to_canonical_rows
-    from fl_op.solver.preprocessing import filter_feasible_vehicle_implement_pairs
+    from fl_op.solver.preprocessing import cached_feasible_vehicle_implement_pairs
 
     data_path = pathlib.Path(data_dir)
     codec = get_codec(detect_format(data_path))
     sched_path = pathlib.Path(schedule_dir)
+    cache_key = feasibility_request_cache_key(data_path, sched_path, order, codec)
+    cached = _read_feasibility_cache(cache_key)
+    if cached is not None:
+        logger.info("Feasibility request cache hit: %s", cache_key[:12])
+        return cached
 
     registry = FileRegistry()
     # Translate raw physical rows (and the new order) into canonical-keyed rows so
@@ -64,20 +71,22 @@ def evaluate_query(
     vehicle_index = {v.asset_id: i for i, v in enumerate(vehicles_raw)}
     implement_index = {im.asset_id: i for i, im in enumerate(implements_raw)}
 
-    compat, _ = build_compat_matrix(vehicles_raw, implements_raw)
+    compat, _ = cached_compat_matrix(vehicles_raw, implements_raw)
 
-    feasible_pairs = filter_feasible_vehicle_implement_pairs(
+    feasible_pairs = cached_feasible_vehicle_implement_pairs(
         [new_order], vehicles_raw, implements_raw, compat, vehicle_index, implement_index
     )
 
     if not feasible_pairs.get(new_order.task_id):
-        return {
+        result = {
             "schema_version": ARTIFACT_SCHEMA_VERSION,
             "task_id": new_order.task_id,
             "feasible": False,
             "reason_code": ReasonCode.NO_COMPATIBLE_BUNDLE.value,
             "candidates": [],
         }
+        _write_feasibility_cache(cache_key, result)
+        return result
 
     scored = vectorized_score(
         [new_order], vehicles_raw, implements_raw, fields_raw,
@@ -114,12 +123,109 @@ def evaluate_query(
     candidates.sort(key=lambda c: (-c["estimated_margin_eur"], c["prime_asset_id"]))
     candidates = candidates[:_TOP_CANDIDATES]
 
-    return {
+    result = {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
         "task_id": oid,
         "feasible": len(candidates) > 0,
         "candidates": candidates,
     }
+    _write_feasibility_cache(cache_key, result)
+    return result
+
+
+def feasibility_request_cache_key(
+    data_path: pathlib.Path,
+    schedule_path: pathlib.Path,
+    order: dict[str, Any],
+    codec: Any,
+) -> str:
+    """Stable hash for one /feasibility request.
+
+    The key includes bytes of every source file the query reads, schedule.json,
+    and the request order payload, so a changed dataset/schedule/order misses
+    even when the path is reused.
+    """
+    digest = hashlib.sha256()
+    digest.update(b"feasibility-v1")
+    for filename in ("vehicles.csv", "implements.csv", "fields.csv"):
+        source = locate_source(data_path, filename, codec)
+        digest.update(str(source.name).encode("utf-8"))
+        digest.update(_file_digest(source).encode("ascii"))
+    digest.update(b"schedule")
+    digest.update(_file_digest(schedule_path / "schedule.json").encode("ascii"))
+    digest.update(
+        json.dumps(order, separators=(",", ":"), sort_keys=True, default=str).encode(
+            "utf-8"
+        )
+    )
+    return digest.hexdigest()
+
+
+def _file_digest(path: pathlib.Path) -> str:
+    if not path.exists():
+        return "missing"
+    hasher = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _feasibility_cache_path(cache_key: str) -> pathlib.Path:
+    return DATA_ROOT / constants.FEASIBILITY_CACHE_DIRNAME / f"{cache_key}.json"
+
+
+def _read_feasibility_cache(cache_key: str) -> dict[str, Any] | None:
+    if not constants.FEASIBILITY_CACHE_ENABLED:
+        return None
+    path = _feasibility_cache_path(cache_key)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Feasibility cache read failed (%s); rebuilding", exc)
+        return None
+    if payload.get("kind") != "feasibility-response":
+        return None
+    value = payload.get("value")
+    return value if isinstance(value, dict) else None
+
+
+def _write_feasibility_cache(cache_key: str, result: dict[str, Any]) -> None:
+    if not constants.FEASIBILITY_CACHE_ENABLED:
+        return
+    path = _feasibility_cache_path(cache_key)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "kind": "feasibility-response",
+                    "schema_version": 1,
+                    "value": result,
+                },
+                indent=2,
+                sort_keys=True,
+                default=str,
+            )
+        )
+        _prune_feasibility_cache(path.parent)
+    except OSError as exc:
+        logger.warning("Feasibility cache write failed (%s); continuing uncached", exc)
+
+
+def _prune_feasibility_cache(cache_dir: pathlib.Path) -> None:
+    try:
+        entries = sorted(cache_dir.glob("*.json"), key=lambda p: p.stat().st_mtime)
+    except OSError:
+        return
+    stale_count = max(0, len(entries) - constants.FEASIBILITY_CACHE_MAX_ENTRIES)
+    for stale in entries[:stale_count]:
+        try:
+            stale.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def run_query(data_dir: str, schedule_dir: str, order_path: str) -> None:

@@ -42,6 +42,9 @@ class ClusterSpec(TypedDict, total=False):
     allocated_prime_related: Required[dict[str, list[str]]]
     # operator asset_id assigned to the cluster (filled by allocation)
     operator_ref: str
+    # task_id -> backup operator asset_id for tasks the cluster operator is
+    # not certified for (filled by qualification enforcement)
+    task_operators: dict[str, str]
     # sum of task penalty_per_day for priority-ordering
     total_penalty_per_day: Required[float]
 
@@ -145,6 +148,9 @@ class PrimeMoverRow(_SolverRow):
     travel_speed: float = TRAVEL_SPEED_DEFAULT_KMH
     # Total mass carried on one route; 0 means the load is unconstrained.
     load_capacity: float = 0.0
+    # Per-material compartment capacities (material code -> kg); materials
+    # absent from the map fall back to load_capacity.
+    load_capacities: Any = dataclasses.field(default_factory=dict)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -160,6 +166,8 @@ class RelatedRow(_SolverRow):
     min_speed: float = 0.0
     max_speed: float = RELATED_OPERATING_SPEED_DEFAULT
     material_capacity: float = 0.0
+    # Work quantity processed per hour, keyed by work-quantity unit ("m3", ...).
+    work_rates: Any = dataclasses.field(default_factory=dict)
     compatible_operations: Any = dataclasses.field(default_factory=list)
 
 
@@ -261,6 +269,11 @@ class TaskRow(_SolverRow):
     depends_on_task_ref: str = ""
     # Mass the bundle must carry to the task; 0 means no load demand.
     load_demand: float = 0.0
+    # Material code of the load demand ("" = unspecified aggregate material).
+    load_material: str = ""
+    # Pickup location of a paired pickup-and-delivery task; "" means the
+    # load is carried from the depot.
+    pickup_location_ref: str = ""
     deadline: Optional[str] = None
     penalty_per_day: float = 0.0
     priority_class: str = ""

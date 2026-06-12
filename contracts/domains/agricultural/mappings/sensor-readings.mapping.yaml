@@ -10,7 +10,7 @@ metadata:
   sourceContract: sensor-readings
   canonicalEntity: observation
   canonicalModelRef: urn:xopt:model:canonical:0.1.0
-  mappingVersion: 1.1.0
+  mappingVersion: 1.2.0
   dataProductRole: equipmentTelemetry
   permittedPlanningUses: [periodic-planning, rolling-dispatch]
   # Value-level normalization: raw station metric codes -> canonical metric
@@ -19,6 +19,9 @@ metadata:
     battery_pct: battery-level
     health_state: health-status
     soil_moisture_pct: soil-moisture
+    # Machine-reported completed share of a task's work (entity ref = task
+    # id): drives telemetry-derived progress without explicit progress events.
+    work_progress_pct: work-progress
 
 fieldMappings:
   - sourceField: reading_id
@@ -60,5 +63,11 @@ fieldMappings:
   - sourceField: quality_flag
     binding: observation.qualityFlag
     semanticTerm: urn:xopt:observation:quality-flag
+    planningUse: [monitoring]
+    missingValuePolicy: accept-optional
+  - sourceField: ingested_at
+    binding: observation.ingestedAt
+    semanticTerm: urn:xopt:time:ingested-at
+    quantityKind: timestamp
     planningUse: [monitoring]
     missingValuePolicy: accept-optional

@@ -87,6 +87,8 @@ def build_task(table: BindingTable, acc: dict[str, Any]) -> Task:
         work_quantity_unit=str(acc.get("workQuantityUnit", "")),
         service_duration_minutes=int(float(duration)) if duration else None,
         load_demand_kg=float(acc["loadDemand"]) if "loadDemand" in acc else None,
+        load_material=str(acc.get("loadMaterial", "")),
+        pickup_location_ref=str(acc.get("pickupLocationRef") or "") or None,
         time_windows=parse_time_intervals(acc.get("timeWindows")),
         depends_on_task_ref=str(acc.get("dependsOnTaskRef") or "") or None,
         deadline=acc.get("deadline"),
@@ -154,6 +156,7 @@ def build_observation(table: BindingTable, acc: dict[str, Any]) -> Observation:
         state_value=str(acc.get("stateValue", "")),
         unit=acc.get("unit"),
         observed_at=acc.get("observedAt"),
+        ingested_at=acc.get("ingestedAt"),
         quality_flag=str(acc.get("qualityFlag", "")),
         source_ref=f"{table.contract_id}:{acc['observationId']}",
     )

@@ -27,7 +27,7 @@ import numpy as np
 
 from fl_op.core import constants
 from fl_op.solver.allocation.limits import cluster_resource_limit
-from fl_op.solver.allocation.scoring import ScoredLookup, score_vi_pair
+from fl_op.solver.allocation.scoring import FreeCapacity, ScoredLookup, score_vi_pair
 from fl_op.solver.allocation.state import MAX_VEHICLE_ASSIGNMENTS
 from fl_op.solver.enforcement import ops_set
 from fl_op.solver.types import ClusterSpec
@@ -48,6 +48,8 @@ def allocate_resources_global(
     implement_index: dict[str, int],
     feasible_pairs: dict[str, list[tuple[int, int]]],
     scored_lookup: ScoredLookup | None,
+    free_capacity: FreeCapacity | None = None,
+    count_priority: float = constants.GLOBAL_ASSIGNMENT_COUNT_PRIORITY,
 ) -> Optional[list[ClusterSpec]]:
     """Solve the global assignment; mutate and return penalty-sorted clusters.
 
@@ -72,6 +74,7 @@ def allocate_resources_global(
         idx_to_implement,
         power_margin,
         scored_lookup,
+        free_capacity,
     )
     n_candidates = sum(len(cands) for _, cands, _, _ in cluster_candidates)
     if n_candidates > constants.GLOBAL_ASSIGNMENT_MAX_MODEL_CANDIDATES:
@@ -83,9 +86,11 @@ def allocate_resources_global(
         return None
 
     model = cp_model.CpModel()
-    pair_vars, pair_terms = _add_pair_assignment_block(model, cluster_candidates)
+    pair_vars, pair_terms = _add_pair_assignment_block(
+        model, cluster_candidates, count_priority
+    )
     operator_vars, operator_terms = _add_operator_assignment_block(
-        model, cluster_candidates, operators
+        model, cluster_candidates, operators, free_capacity
     )
     model.Maximize(sum([*pair_terms, *operator_terms]))
 
@@ -120,6 +125,7 @@ def _collect_cluster_candidates(
     idx_to_implement: dict[int, str],
     power_margin: np.ndarray,
     scored_lookup: ScoredLookup | None,
+    free_capacity: FreeCapacity | None = None,
 ) -> list[_ClusterCandidates]:
     """Score every feasible (vehicle, implement) pair per cluster, keep top-K."""
     cluster_candidates: list[_ClusterCandidates] = []
@@ -134,7 +140,10 @@ def _collect_cluster_candidates(
                 implement_id = idx_to_implement.get(i_idx)
                 if vehicle_id is None or implement_id is None:
                     continue
-                score = score_vi_pair(order, power_margin, v_idx, i_idx, scored_lookup)
+                score = score_vi_pair(
+                    order, power_margin, v_idx, i_idx, scored_lookup,
+                    free_capacity, vehicle_id, implement_id,
+                )
                 key = (vehicle_id, implement_id)
                 candidates[key] = candidates.get(key, 0.0) + score
         top = _truncate_with_diversity(candidates)
@@ -182,6 +191,7 @@ def _truncate_with_diversity(
 def _add_pair_assignment_block(
     model: Any,
     cluster_candidates: list[_ClusterCandidates],
+    count_priority: float = constants.GLOBAL_ASSIGNMENT_COUNT_PRIORITY,
 ) -> tuple[dict[tuple[int, str, str], Any], list[Any]]:
     """Add x[cluster, vehicle, implement] variables, limits, and reward terms."""
     all_scores = [
@@ -192,9 +202,13 @@ def _add_pair_assignment_block(
     min_score = min(all_scores)
     scale = constants.GLOBAL_ASSIGNMENT_SCORE_SCALE
     max_scaled = int(round((max(all_scores) - min_score) * scale))
-    # Every reward exceeds the total score spread, so allocation count
-    # dominates the objective and scores only break ties.
-    base_reward = max_scaled + 1
+    # At full count priority every reward exceeds the total score spread, so
+    # allocation count dominates the objective and scores only break ties.
+    # Lower priorities shrink that count bias toward pure score maximization
+    # (0.0: a contested resource goes to the highest-scoring cluster even if
+    # another cluster then stays unallocated).
+    count_priority = min(1.0, max(0.0, count_priority))
+    base_reward = int(round((max_scaled + 1) * count_priority))
 
     pair_vars: dict[tuple[int, str, str], Any] = {}
     implement_uses: dict[str, list[Any]] = {}
@@ -230,11 +244,13 @@ def _add_operator_assignment_block(
     model: Any,
     cluster_candidates: list[_ClusterCandidates],
     operators: list[Any],
+    free_capacity: FreeCapacity | None = None,
 ) -> tuple[dict[tuple[int, str], Any], list[Any]]:
     """Add y[cluster, operator] variables: one operator per cluster at most."""
     if not operators:
         return {}, []
 
+    free_capacity = free_capacity or {}
     rewards: dict[tuple[int, str], int] = {}
     for c_idx, (cluster, _cands, _limit, operations) in enumerate(cluster_candidates):
         for operator in operators:
@@ -242,12 +258,18 @@ def _add_operator_assignment_block(
             reward = coverage * constants.OPERATOR_COVERAGE_REWARD
             if operator.home_depot_ref == cluster["depot_ref"]:
                 reward += constants.OPERATOR_DEPOT_MATCH_REWARD
+            # Hold-aware discount: among equally covering operators the one
+            # with the freer calendar wins (coverage still dominates).
+            busy_share = 1.0 - free_capacity.get(operator.asset_id, 1.0)
+            reward -= int(round(constants.OPERATOR_HOLD_DISCOUNT_REWARD * busy_share))
             rewards[(c_idx, operator.asset_id)] = reward
     if not rewards:
         return {}, []
     # Same count-first construction as the pair block: staffing one more
-    # cluster always beats a better-qualified operator elsewhere.
-    base_reward = max(rewards.values()) + 1
+    # cluster always beats a better-qualified operator elsewhere. The base
+    # shift spans the reward spread so it stays count-first even when hold
+    # discounts push some rewards negative.
+    base_reward = max(rewards.values()) - min(rewards.values()) + 1
 
     operator_vars: dict[tuple[int, str], Any] = {}
     operator_uses: dict[str, list[Any]] = {}

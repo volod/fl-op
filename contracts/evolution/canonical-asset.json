@@ -41,6 +41,11 @@
       "physicalType": "",
       "required": false
     },
+    "loadCapacities": {
+      "logicalType": "object",
+      "physicalType": "",
+      "required": false
+    },
     "loadCapacity": {
       "logicalType": "number",
       "physicalType": "",
@@ -111,6 +116,11 @@
       "physicalType": "",
       "required": false
     },
+    "workRates": {
+      "logicalType": "object",
+      "physicalType": "",
+      "required": false
+    },
     "workingWidth": {
       "logicalType": "number",
       "physicalType": "",
@@ -118,5 +128,5 @@
     }
   },
   "odcsId": "canonical-asset",
-  "version": "0.1.0"
+  "version": "0.3.0"
 }

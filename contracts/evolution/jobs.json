@@ -31,6 +31,16 @@
       "physicalType": "int",
       "required": false
     },
+    "quantity_unit": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "quantity_value": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
     "revenue_eur": {
       "logicalType": "number",
       "physicalType": "double",
@@ -53,5 +63,5 @@
     }
   },
   "odcsId": "jobs",
-  "version": "1.0.0"
+  "version": "1.1.0"
 }

@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from fl_op.canonical.enums import ReasonCode
 from fl_op.solver.cluster.infeasible import mark_all_infeasible
+from fl_op.solver.enforcement import BlockedWindows
 from fl_op.solver.travel_time import TravelLookup
 
 
@@ -22,6 +23,9 @@ class ClusterContext:
     depot_lon: float
     # Directed (from, to) location-pair travel times from the travel network.
     travel_lookup: TravelLookup = field(default_factory=dict)
+    # task_id -> blocked epoch intervals (non-compliant weather windows) the
+    # routing model must keep execution out of, occupancy-aware.
+    weather_blocked: BlockedWindows = field(default_factory=dict)
 
 
 def prepare_cluster_context(
@@ -32,6 +36,7 @@ def prepare_cluster_context(
     all_fields: list[dict[str, Any]],
     all_depots: list[dict[str, Any]],
     travel_lookup: Optional[TravelLookup] = None,
+    weather_blocked: Optional[BlockedWindows] = None,
 ) -> tuple[Optional[ClusterContext], Optional[tuple[list[dict], list[dict]]]]:
     """Build routing context or return an early infeasibility result."""
     cluster_id = cluster_dict.get("cluster_id", "")
@@ -78,6 +83,7 @@ def prepare_cluster_context(
         depot_lat=float(depot.lat),
         depot_lon=float(depot.lon),
         travel_lookup=travel_lookup or {},
+        weather_blocked=weather_blocked or {},
     ), None
 
 

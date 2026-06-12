@@ -1,16 +1,22 @@
-"""Performance machinery: compat-matrix cache and memory-aware pool sizing."""
+"""Performance machinery: caches, feedback, and memory-aware pool sizing."""
+
+import json
 
 import numpy as np
 import pytest
 
-from fl_op.solver import cluster_pool, feasibility
+from fl_op.solver import cluster_pool, feasibility, preprocessing
 from fl_op.solver.cluster_pool import compute_pool_sizing
 from fl_op.solver.feasibility import (
     build_compat_matrix,
     cached_compat_matrix,
     compat_cache_key,
 )
-from fl_op.solver.types import PrimeMoverRow, RelatedRow
+from fl_op.solver.preprocessing import (
+    cached_cluster_specs,
+    cached_feasible_vehicle_implement_pairs,
+)
+from fl_op.solver.types import DepotRow, PrimeMoverRow, RelatedRow, SiteRow, TaskRow
 
 
 def _vehicle(vid: str, power: float = 150.0) -> PrimeMoverRow:
@@ -18,7 +24,36 @@ def _vehicle(vid: str, power: float = 150.0) -> PrimeMoverRow:
 
 
 def _implement(iid: str, power: float = 100.0) -> RelatedRow:
-    return RelatedRow.from_canonical_dict({"asset_id": iid, "required_power": power})
+    return RelatedRow.from_canonical_dict(
+        {
+            "asset_id": iid,
+            "required_power": power,
+            "compatible_operations": ["SPRAYING"],
+        }
+    )
+
+
+def _order(oid: str = "o0") -> TaskRow:
+    return TaskRow.from_canonical_dict(
+        {
+            "task_id": oid,
+            "operation_type": "SPRAYING",
+            "location_ref": "f0",
+            "penalty_per_day": 100.0,
+        }
+    )
+
+
+def _field() -> SiteRow:
+    return SiteRow.from_canonical_dict(
+        {"location_id": "f0", "lat": 48.0, "lon": 32.0}
+    )
+
+
+def _depot() -> DepotRow:
+    return DepotRow.from_canonical_dict(
+        {"location_id": "d0", "lat": 48.0, "lon": 32.0}
+    )
 
 
 def _cluster(n_tasks: int, n_vehicles: int = 1) -> dict:
@@ -81,6 +116,73 @@ class TestCachedCompatMatrix:
         assert len(list(self.cache_dir.glob("*.npz"))) == 2
 
 
+class TestPreprocessingCache:
+    @pytest.fixture(autouse=True)
+    def _isolated_cache(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(preprocessing, "DATA_ROOT", tmp_path)
+        monkeypatch.setattr(
+            preprocessing.constants, "PREPROCESSING_CACHE_ENABLED", True
+        )
+        self.cache_dir = tmp_path / preprocessing.constants.PREPROCESSING_CACHE_DIRNAME
+
+    def test_candidate_filter_cache_hit_avoids_rebuild(self, monkeypatch):
+        vehicles = [_vehicle("v0")]
+        implements = [_implement("i0")]
+        orders = [_order()]
+        compat, _ = build_compat_matrix(vehicles, implements)
+        result = cached_feasible_vehicle_implement_pairs(
+            orders, vehicles, implements, compat, {"v0": 0}, {"i0": 0}
+        )
+        assert result == {"o0": [(0, 0)]}
+
+        def fail_rebuild(*_args, **_kwargs):
+            raise AssertionError("candidate filter rebuilt despite cache hit")
+
+        monkeypatch.setattr(
+            preprocessing, "filter_feasible_vehicle_implement_pairs", fail_rebuild
+        )
+        cached = cached_feasible_vehicle_implement_pairs(
+            orders, vehicles, implements, compat, {"v0": 0}, {"i0": 0}
+        )
+        assert cached == result
+        assert len(list((self.cache_dir / "candidate-filter").glob("*.json"))) == 1
+
+    def test_cluster_specs_cache_hit_avoids_rebuild(self, monkeypatch):
+        orders = [_order()]
+        clusters = cached_cluster_specs(
+            orders,
+            [_field()],
+            [_depot()],
+            [_vehicle("v0")],
+            [_implement("i0")],
+            np.array([[True]]),
+            {"v0": 0},
+            {"i0": 0},
+            order_index={"o0": orders[0]},
+            target_size=10,
+        )
+        assert clusters[0]["task_ids"] == ["o0"]
+
+        def fail_rebuild(*_args, **_kwargs):
+            raise AssertionError("cluster specs rebuilt despite cache hit")
+
+        monkeypatch.setattr(preprocessing, "build_cluster_specs", fail_rebuild)
+        cached = cached_cluster_specs(
+            orders,
+            [_field()],
+            [_depot()],
+            [_vehicle("v0")],
+            [_implement("i0")],
+            np.array([[True]]),
+            {"v0": 0},
+            {"i0": 0},
+            order_index={"o0": orders[0]},
+            target_size=10,
+        )
+        assert cached == clusters
+        assert len(list((self.cache_dir / "cluster-specs").glob("*.json"))) == 1
+
+
 class TestPoolSizing:
     def test_explicit_solver_workers_wins(self, monkeypatch):
         monkeypatch.setattr(cluster_pool, "SOLVER_WORKERS", 3)
@@ -111,3 +213,63 @@ class TestPoolSizing:
         large = cluster_pool._estimate_worker_memory_mb([_cluster(500, n_vehicles=20)])
         assert large > small
         assert small >= cluster_pool.constants.SOLVER_WORKER_BASE_MEMORY_MB
+
+    def test_worker_rss_feedback_calibrates_estimate(self, tmp_path, monkeypatch):
+        from fl_op.solver import performance_feedback
+
+        monkeypatch.setattr(performance_feedback, "DATA_ROOT", tmp_path)
+        monkeypatch.setattr(cluster_pool, "SOLVER_WORKERS", 0)
+        monkeypatch.setattr(cluster_pool.constants, "SOLVER_FEEDBACK_ENABLED", True)
+        feedback_dir = tmp_path / cluster_pool.constants.SOLVER_FEEDBACK_DIRNAME
+        feedback_dir.mkdir(parents=True)
+        (feedback_dir / cluster_pool.constants.SOLVER_MEMORY_FEEDBACK_FILENAME).write_text(
+            json.dumps({"max_worker_rss_mb": 777.0})
+        )
+
+        assert cluster_pool._estimate_worker_memory_mb([_cluster(5)]) >= 777.0
+
+    def test_lns_budget_uses_objective_delta_feedback(self, tmp_path, monkeypatch):
+        from fl_op.solver import performance_feedback
+
+        monkeypatch.setattr(performance_feedback, "DATA_ROOT", tmp_path)
+        monkeypatch.setattr(cluster_pool.constants, "SOLVER_FEEDBACK_ENABLED", True)
+        monkeypatch.setattr(cluster_pool.constants, "CLUSTER_LNS_ENABLED", True)
+        monkeypatch.setattr(cluster_pool.constants, "CLUSTER_LNS_TIME_LIMIT_S", 10)
+        monkeypatch.setattr(
+            cluster_pool.constants, "CLUSTER_LNS_MIN_PENALTY_EUR_PER_DAY", 50.0
+        )
+        monkeypatch.setattr(
+            cluster_pool.constants, "CLUSTER_LNS_FEEDBACK_REFERENCE_DELTA", 1000.0
+        )
+        performance_feedback.record_solver_feedback(
+            [{"lns_attempted": True, "lns_objective_delta": -3000}]
+        )
+
+        clusters = [_cluster(3)]
+        clusters[0]["total_penalty_per_day"] = 100.0
+        max_budget = cluster_pool._assign_lns_budgets(clusters)
+        assert max_budget == 30
+        assert clusters[0]["lns_time_limit_s"] == 30
+
+
+def test_feasibility_request_cache_reuses_response(
+    dataset_dir, small_entities, tmp_path, monkeypatch
+) -> None:
+    from fl_op.solver import query_pipeline
+
+    schedule_dir = tmp_path / "solve"
+    schedule_dir.mkdir()
+    (schedule_dir / "schedule.json").write_text(json.dumps({"schedule": []}))
+    monkeypatch.setattr(query_pipeline, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(query_pipeline.constants, "FEASIBILITY_CACHE_ENABLED", True)
+
+    order = dict(small_entities["orders"][0])
+    first = query_pipeline.evaluate_query(str(dataset_dir), str(schedule_dir), order)
+    assert list((tmp_path / query_pipeline.constants.FEASIBILITY_CACHE_DIRNAME).glob("*.json"))
+
+    def fail_rebuild(*_args, **_kwargs):
+        raise AssertionError("query rebuilt despite feasibility cache hit")
+
+    monkeypatch.setattr(query_pipeline, "cached_compat_matrix", fail_rebuild)
+    second = query_pipeline.evaluate_query(str(dataset_dir), str(schedule_dir), order)
+    assert second == first

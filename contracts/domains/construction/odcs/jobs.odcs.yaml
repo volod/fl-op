@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: jobs
-version: 1.0.0
+version: 1.1.0
 status: active
 name: Construction Jobs
 domain: construction-earthworks
@@ -124,3 +124,23 @@ schema:
           - property: fieldGeneration
             value:
               proto: {fieldNumber: 10}
+      - name: quantity_value
+        logicalType: number
+        physicalType: double
+        required: false
+        description: >-
+          Earthworks-native work demand in the unit declared by quantity_unit
+          (excavated volume in m3, graded area in ha).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 11}
+      - name: quantity_unit
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Unit of quantity_value ("m3", "ha").
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 12}

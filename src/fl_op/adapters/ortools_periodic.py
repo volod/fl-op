@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any
 from fl_op.adapters.base import (
     dispatch_to_assignment,
     infeasible_to_unassigned,
+    link_reservation_refs,
+    reservation_to_canonical,
     validate_profile_against_features,
 )
 from fl_op.adapters.spi import AdapterHealth, AdapterManifest, ValidationReport
@@ -84,7 +86,12 @@ class OrToolsPeriodicAdapter:
         return build_solver_inputs(snapshot)
 
     def solve(self, solver_input: dict[str, Any], config: dict[str, Any]) -> SolverChainResult:
-        return run_solver_chain(solver_input, enforcement=config.get("enforcement"))
+        return run_solver_chain(
+            solver_input,
+            enforcement=config.get("enforcement"),
+            now=config.get("now"),
+            parameters=config.get("parameters"),
+        )
 
     def normalize(
         self,
@@ -114,11 +121,33 @@ class OrToolsPeriodicAdapter:
         if not report.ok:
             raise ValueError(f"profile incompatible with adapter: {report.messages}")
         from fl_op.solver.enforcement import EnforcementPolicy
+        from fl_op.tuning.solver_profile import solver_parameters_for_profile
 
         config.setdefault("enforcement", EnforcementPolicy.from_profile(profile))
+        # Profile allocation defaults plus optional reviewed tuned overlay.
+        config["parameters"] = solver_parameters_for_profile(
+            profile, explicit=config.get("parameters")
+        )
+        # Planning time origin: the snapshot effective time, so deadlines and
+        # window filters are reproducible for replayed/synthetic snapshots.
+        config.setdefault("now", snapshot.effective_at)
         compiled = self.compile(snapshot, profile, config)
         raw = self.solve(compiled, config)
-        return self.normalize(raw, snapshot, profile)
+        plan = self.normalize(raw, snapshot, profile)
+        # Withdrawal/escalation reconciliation against the previous periodic
+        # plan: the same corrective record-keeping rolling revisions get.
+        previous_plan = config.get("previous_plan")
+        if previous_plan is not None:
+            from fl_op.adapters.rolling.corrective import reconcile_previous_plan
+
+            actions = reconcile_previous_plan(
+                previous_plan,
+                snapshot,
+                config.get("previous_service_reasons") or {},
+            )
+            if actions:
+                plan = plan.model_copy(update={"corrective_actions": actions})
+        return plan
 
 
 def _ortools_version() -> str:
@@ -144,6 +173,10 @@ def _build_plan(
 
     assignments = [dispatch_to_assignment(dp) for dp in raw.dispatch]
     unassigned = [infeasible_to_unassigned(inf) for inf in raw.infeasible]
+    reservations = [
+        reservation_to_canonical(r) for r in raw.material_reservations
+    ]
+    assignments = link_reservation_refs(assignments, reservations)
 
     from fl_op.solver.solve_telemetry import summarize_cluster_telemetry
 
@@ -189,8 +222,10 @@ def _build_plan(
         status=PlanStatus.DRAFT,
         assignments=assignments,
         unassigned_tasks=unassigned,
+        material_reservations=reservations,
         score=score,
         quality_summary=snapshot.quality_summary,
         risk_summary=risk,
+        source_watermarks=snapshot.source_watermarks,
         lineage_ref=snapshot.lineage_ref,
     )

@@ -41,6 +41,8 @@ class ClusterSolveTelemetry(TypedDict, total=False):
     lns_attempted: bool
     lns_improved: bool
     lns_objective_delta: int
+    lns_time_limit_s: int
+    worker_max_rss_mb: float
     n_dispatched: int
     n_unserved: int
     detail: str
@@ -75,6 +77,11 @@ def summarize_cluster_telemetry(
     for record in records:
         status = record.get("status", "unknown")
         statuses[status] = statuses.get(status, 0) + 1
+    rss_values = [
+        float(r.get("worker_max_rss_mb", 0.0))
+        for r in records
+        if r.get("worker_max_rss_mb") is not None
+    ]
     return {
         "n_clusters": len(records),
         "statuses": statuses,
@@ -87,4 +94,8 @@ def summarize_cluster_telemetry(
         "total_lns_objective_delta": sum(
             int(r.get("lns_objective_delta", 0)) for r in records
         ),
+        "max_worker_rss_mb": round(max(rss_values), 2) if rss_values else 0.0,
+        "mean_worker_rss_mb": round(sum(rss_values) / len(rss_values), 2)
+        if rss_values
+        else 0.0,
     }
