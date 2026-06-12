@@ -107,7 +107,7 @@ make contracts-gen # generate Avro, Protobuf, ES, and Parquet schemas from ODCS
 make contracts     # validate the full suite (canonical model + per-domain mappings)
 make canonical-validate    # validate only the canonical optimization model
 make validate-construction # prove the construction pack maps onto the canonical model
-make validate-roadside     # validate the roadside-infrastructure example pack
+make validate-roadside     # validate the roadside-infrastructure runnable pack
 make data          # default benchmark (manual, ~10 min)
 uv run pytest      # run test suite (< 120 s)
 ```

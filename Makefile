@@ -61,8 +61,8 @@ canonical-validate: venv
 validate-construction: venv
 	$(FL_OP) contracts validate-domain --domain construction
 
-# Validate the roadside-infrastructure example pack (stationary signage along
-# road segments with inspection rounds as observation sources).
+# Validate the roadside-infrastructure runnable pack (stationary signage along
+# road segments with inspection rounds driving service visits).
 validate-roadside: venv
 	$(FL_OP) contracts validate-domain --domain roadside
 

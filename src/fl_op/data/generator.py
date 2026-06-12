@@ -38,7 +38,7 @@ def run_generate(
     seed: int | None,
     data_path: str | None,
     fmt: str = DEFAULT_DATA_FORMAT,
-) -> None:
+) -> pathlib.Path:
     """Generate synthetic (or augmented real) fleet dataset.
 
     Output directory: $DATA_DIR/generate-data/<ISO-timestamp>/
@@ -120,6 +120,7 @@ def run_generate(
         "Generated: %d vehicles, %d implements, %d orders, %d depots -> %s",
         len(vehicles), len(implements), len(orders), len(depots), out_dir,
     )
+    return out_dir
 
 
 _CONSTRUCTION_TABULAR_DATASETS = [
@@ -134,7 +135,7 @@ def run_generate_construction(
     n_yards: int,
     seed: int | None,
     fmt: str = DEFAULT_DATA_FORMAT,
-) -> None:
+) -> pathlib.Path:
     """Generate a synthetic construction-earthworks dataset.
 
     Output directory: $DATA_DIR/generate-data/<ISO-timestamp>/, holding the
@@ -194,4 +195,30 @@ def run_generate_construction(
     logger.info(
         "Generated: %d machines, %d attachments, %d jobs, %d yards -> %s",
         len(machines), len(attachments), len(jobs), len(yards), out_dir,
+    )
+    return out_dir
+
+
+def generate_agricultural_domain(request: Any) -> pathlib.Path:
+    """Registry adapter for the agricultural generator."""
+    return run_generate(
+        n_vehicles=request.vehicles,
+        n_implements=request.implements,
+        n_orders=request.orders,
+        n_depots=request.depots,
+        seed=request.seed,
+        data_path=request.data_path,
+        fmt=request.fmt,
+    )
+
+
+def generate_construction_domain(request: Any) -> pathlib.Path:
+    """Registry adapter for the construction generator."""
+    return run_generate_construction(
+        n_machines=request.vehicles,
+        n_attachments=request.implements,
+        n_jobs=request.orders,
+        n_yards=request.depots,
+        seed=request.seed,
+        fmt=request.fmt,
     )

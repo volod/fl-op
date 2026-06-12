@@ -16,23 +16,29 @@ from fl_op.canonical.enums import PlanningMode
 from fl_op.contracts.registry import FileRegistry
 
 _CONSTRUCTION_COUNTS = {"machines": 12, "attachments": 40, "jobs": 10, "yards": 3}
+_ROADSIDE_COUNTS = {"vehicles": 4, "kits": 8, "signs": 10, "depots": 2}
 
 
 @pytest.fixture(scope="module")
 def construction_dataset_dir(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
     """Generate a small construction dataset once per module."""
-    from fl_op.data.generator import run_generate_construction
+    from fl_op.data.domain_generators import GenerationRequest, run_domain_generator
 
     base = tmp_path_factory.mktemp("construction-data")
+    registry = FileRegistry()
     orig_cwd = os.getcwd()
     os.chdir(base)
     try:
-        run_generate_construction(
-            n_machines=_CONSTRUCTION_COUNTS["machines"],
-            n_attachments=_CONSTRUCTION_COUNTS["attachments"],
-            n_jobs=_CONSTRUCTION_COUNTS["jobs"],
-            n_yards=_CONSTRUCTION_COUNTS["yards"],
-            seed=21,
+        run_domain_generator(
+            "construction",
+            GenerationRequest(
+                vehicles=_CONSTRUCTION_COUNTS["machines"],
+                implements=_CONSTRUCTION_COUNTS["attachments"],
+                orders=_CONSTRUCTION_COUNTS["jobs"],
+                depots=_CONSTRUCTION_COUNTS["yards"],
+                seed=21,
+            ),
+            registry=registry,
         )
         dirs = sorted((base / ".data" / "generate-data").iterdir())
         return dirs[-1]
@@ -68,6 +74,61 @@ def construction_plan(construction_dataset_dir, construction_domain):
     return snapshot, plan
 
 
+@pytest.fixture(scope="module")
+def roadside_dataset_dir(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
+    """Generate a small roadside dataset once per module."""
+    from fl_op.data.domain_generators import GenerationRequest, run_domain_generator
+
+    base = tmp_path_factory.mktemp("roadside-data")
+    registry = FileRegistry()
+    orig_cwd = os.getcwd()
+    os.chdir(base)
+    try:
+        run_domain_generator(
+            "roadside",
+            GenerationRequest(
+                vehicles=_ROADSIDE_COUNTS["vehicles"],
+                implements=_ROADSIDE_COUNTS["kits"],
+                orders=_ROADSIDE_COUNTS["signs"],
+                depots=_ROADSIDE_COUNTS["depots"],
+                seed=33,
+            ),
+            registry=registry,
+        )
+        dirs = sorted((base / ".data" / "generate-data").iterdir())
+        return dirs[-1]
+    finally:
+        os.chdir(orig_cwd)
+
+
+@pytest.fixture(scope="module")
+def roadside_domain():
+    """Activate the roadside domain for the duration of the module."""
+    prior = os.environ.get("ACTIVE_DOMAIN")
+    os.environ["ACTIVE_DOMAIN"] = "roadside"
+    try:
+        yield "roadside"
+    finally:
+        if prior is None:
+            os.environ.pop("ACTIVE_DOMAIN", None)
+        else:
+            os.environ["ACTIVE_DOMAIN"] = prior
+
+
+@pytest.fixture(scope="module")
+def roadside_plan(roadside_dataset_dir, roadside_domain):
+    from fl_op.adapters.ortools_periodic import OrToolsPeriodicAdapter
+    from fl_op.snapshot import SnapshotBuilder
+
+    registry = FileRegistry()
+    snapshot = SnapshotBuilder(registry).build(
+        roadside_dataset_dir, PlanningMode.PERIODIC
+    )
+    profile = registry.get_profile(registry.active_profile_id)
+    plan = OrToolsPeriodicAdapter().plan(snapshot, profile)
+    return snapshot, plan
+
+
 class TestActiveDomainOverride:
     def test_default_active_domain_is_registry_index(self):
         assert FileRegistry().active_domain == "agricultural"
@@ -77,6 +138,18 @@ class TestActiveDomainOverride:
         registry = FileRegistry()
         assert registry.active_domain == "construction"
         assert registry.active_profile_id == "construction-earthworks"
+
+    def test_domain_local_contract_ids_resolve_inside_domain(self):
+        registry = FileRegistry()
+        assert registry.resolve_contract_id("operators", domain="construction") == (
+            "construction-operators"
+        )
+        assert registry.resolve_contract_id("operators", domain="agricultural") == (
+            "operators"
+        )
+        assert registry.resolve_contract_id("roadside/service-vehicles") == (
+            "roadside-service-vehicles"
+        )
 
     def test_unknown_override_is_rejected(self, monkeypatch):
         monkeypatch.setenv("ACTIVE_DOMAIN", "ghost-domain")
@@ -197,7 +270,12 @@ class TestRoadsidePack:
 
         report = validate_domain("roadside")
         assert report.ok, report.errors
-        assert set(report.entities_covered) == {"asset", "location", "observation"}
+        assert set(report.entities_covered) == {
+            "asset",
+            "location",
+            "observation",
+            "task",
+        }
 
     def test_inspection_metric_codes_normalize_to_canonical(self):
         from fl_op.contracts.mapping_loader import load_mapping
@@ -223,3 +301,54 @@ class TestRoadsidePack:
         assert radar.serviceDeadlineDays == 2
         # Unspecified override fields inherit the base policy.
         assert radar.batteryForecastHorizonDays == base.batteryForecastHorizonDays
+
+    def test_roadside_generator_writes_registered_sources(self, roadside_dataset_dir):
+        from fl_op.io import detect_format, get_codec, locate_source
+
+        registry = FileRegistry()
+        codec = get_codec(detect_format(roadside_dataset_dir))
+        for cid in registry.list_contracts():
+            entry = registry.get_entry(cid)
+            if entry.domain != "roadside":
+                continue
+            path = (
+                roadside_dataset_dir / entry.source_file
+                if entry.source_format == "jsonl"
+                else locate_source(roadside_dataset_dir, entry.source_file, codec)
+            )
+            assert path.exists(), cid
+
+    def test_roadside_snapshot_derives_dispatchable_service_tasks(
+        self, roadside_plan
+    ):
+        from fl_op.solver.inputs import (
+            SECTION_OPERATORS,
+            SECTION_PRIME_MOVERS,
+            SECTION_RELATED,
+            SECTION_TASKS,
+            build_solver_inputs,
+        )
+
+        snapshot, _ = roadside_plan
+        service_tasks = [
+            task for task in snapshot.tasks if task.source_ref.startswith("monitoring:")
+        ]
+        assert service_tasks, "inspection findings should derive service visits"
+        assert all(task.operation_type == "EQUIPMENT_SERVICE" for task in service_tasks)
+
+        registry = FileRegistry()
+        rows = build_solver_inputs(snapshot, registry)
+        assert len(rows[SECTION_PRIME_MOVERS]) == _ROADSIDE_COUNTS["vehicles"]
+        assert len(rows[SECTION_RELATED]) == _ROADSIDE_COUNTS["kits"]
+        assert len(rows[SECTION_OPERATORS]) == _ROADSIDE_COUNTS["vehicles"]
+        assert len(rows[SECTION_TASKS]) == len(snapshot.tasks)
+
+    def test_roadside_plan_dispatches_monitoring_visits(self, roadside_plan):
+        snapshot, plan = roadside_plan
+        service_task_ids = {t.task_id for t in snapshot.tasks}
+        covered = {a.task_id for a in plan.assignments} | {
+            u.task_id for u in plan.unassigned_tasks
+        }
+        assert covered == service_task_ids
+        assert plan.assignments, "roadside service visits should be dispatchable"
+        assert any(a.task_id.startswith("service-sign_") for a in plan.assignments)

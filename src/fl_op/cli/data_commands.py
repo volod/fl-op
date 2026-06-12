@@ -4,6 +4,7 @@ import os
 
 import click
 
+from fl_op.contracts.registry import FileRegistry
 from fl_op.core.constants import (
     DEFAULT_DATA_FORMAT,
     DEFAULT_GENERATE_DEPOTS,
@@ -13,6 +14,17 @@ from fl_op.core.constants import (
 )
 
 _SEED_ENV: int | None = int(os.environ["SEED"]) if os.environ.get("SEED") else None
+
+
+def _domain_help() -> str:
+    try:
+        domains = ", ".join(FileRegistry().domain_ids())
+    except Exception:  # noqa: BLE001 - help text should not break CLI import
+        domains = "registered domains"
+    return (
+        "Domain pack to generate data for. Counts map onto the domain's "
+        f"entities; available generator domains: {domains}."
+    )
 
 
 @click.command("generate-data")
@@ -65,12 +77,7 @@ _SEED_ENV: int | None = int(os.environ["SEED"]) if os.environ.get("SEED") else N
     "--domain",
     default="agricultural",
     show_default=True,
-    type=click.Choice(["agricultural", "construction"]),
-    help=(
-        "Domain pack to generate data for. Counts map onto the domain's "
-        "entities (construction: vehicles=machines, implements=attachments, "
-        "orders=jobs, depots=yards)."
-    ),
+    help=_domain_help(),
 )
 def generate_data(
     vehicles: int,
@@ -83,30 +90,23 @@ def generate_data(
     domain: str,
 ) -> None:
     """Generate a synthetic (or augmented real) dataset for a domain pack."""
-    if domain == "construction":
-        from fl_op.data.generator import run_generate_construction
+    from fl_op.data.domain_generators import GenerationRequest, run_domain_generator
 
-        run_generate_construction(
-            n_machines=vehicles,
-            n_attachments=implements,
-            n_jobs=orders,
-            n_yards=depots,
-            seed=seed,
-            fmt=fmt,
+    try:
+        run_domain_generator(
+            domain,
+            GenerationRequest(
+                vehicles=vehicles,
+                implements=implements,
+                orders=orders,
+                depots=depots,
+                seed=seed,
+                data_path=data_path,
+                fmt=fmt,
+            ),
         )
-        return
-
-    from fl_op.data.generator import run_generate
-
-    run_generate(
-        n_vehicles=vehicles,
-        n_implements=implements,
-        n_orders=orders,
-        n_depots=depots,
-        seed=seed,
-        data_path=data_path,
-        fmt=fmt,
-    )
+    except (KeyError, ValueError, TypeError, AttributeError) as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 def register_data_commands(cli: click.Group) -> None:

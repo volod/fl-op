@@ -13,9 +13,13 @@ metadata:
 
 # Input contracts consumed to build a planning snapshot.
 inputContracts:
+  - service-vehicles
+  - service-kits
+  - technicians
   - signage
   - road-segments
   - service-depots
+  - maintenance-jobs
   - inspection-rounds
 
 planningModes:
@@ -34,6 +38,12 @@ bundleGeneration:
       - operator
 
 constraints:
+  - id: compatible-equipment
+    severity: hard
+    enforced: true
+  - id: sufficient-power
+    severity: hard
+    enforced: true
   - id: asset-available
     severity: hard
     enforced: true
@@ -63,6 +73,8 @@ monitoring:
   batteryForecastHorizonDays: 5.0
   servicePriorityClass: 2
   serviceDeadlineDays: 5
+  serviceDurationMinutes: 45
+  servicePenaltyPerDayEur: 900
   assetTypeOverrides:
     speed_radar:
       batteryLowThresholdPct: 35.0

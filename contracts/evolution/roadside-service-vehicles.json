@@ -1,0 +1,16 @@
+{
+  "contractId": "roadside-service-vehicles",
+  "odcsId": "service-vehicles",
+  "version": "1.0.0",
+  "fields": {
+    "vehicle_id": {"logicalType": "string", "physicalType": "string", "required": true},
+    "vehicle_class": {"logicalType": "string", "physicalType": "string", "required": true},
+    "engine_power_kw": {"logicalType": "number", "physicalType": "double", "required": true},
+    "tank_litres": {"logicalType": "number", "physicalType": "double", "required": false},
+    "burn_l_per_h": {"logicalType": "number", "physicalType": "double", "required": false},
+    "current_lat": {"logicalType": "number", "physicalType": "double", "required": true},
+    "current_lon": {"logicalType": "number", "physicalType": "double", "required": true},
+    "depot_id": {"logicalType": "string", "physicalType": "string", "required": true},
+    "transit_speed_kmh": {"logicalType": "number", "physicalType": "double", "required": false}
+  }
+}

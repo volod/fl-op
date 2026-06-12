@@ -41,26 +41,41 @@ schema:
         physicalType: string
         required: true
         description: Stable identifier of the road segment.
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 1}}
       - name: road_ref
         logicalType: string
         physicalType: string
         required: false
         description: Human-readable road reference (route number, street).
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 2}}
       - name: midpoint_lat
         logicalType: number
         physicalType: double
         required: true
         description: Segment midpoint latitude (service-visit anchor).
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 3}}
       - name: midpoint_lon
         logicalType: number
         physicalType: double
         required: true
         description: Segment midpoint longitude (service-visit anchor).
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 4}}
       - name: surface_type
         logicalType: string
         physicalType: string
         required: false
         description: Surface classification (asphalt, concrete, gravel).
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 5}}
       - name: closure_windows
         logicalType: array
         physicalType: string
@@ -68,9 +83,15 @@ schema:
         description: >-
           ISO-8601 "from/to" intervals when no roadside work may start on the
           segment (peak-traffic curfews), stringified list.
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 6}}
       # Extra real-data field, retained for analysis; not mapped to the canonical model.
       - name: length_km
         logicalType: number
         physicalType: double
         required: false
         description: Segment length (analytical, not used by the optimizer).
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 7}}

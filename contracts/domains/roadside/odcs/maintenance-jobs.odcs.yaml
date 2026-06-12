@@ -1,0 +1,101 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: maintenance-jobs
+version: 1.0.0
+status: active
+name: Roadside Maintenance Jobs
+domain: roadside-infrastructure
+tenant: road-ops
+description:
+  purpose: Optional externally-created roadside maintenance tasks.
+  usage: Provides the task projection table; monitoring-derived service tasks use the same mapping.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: maintenance-jobs.csv
+schema:
+  - name: maintenanceJobs
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.roadside.work
+            recordName: MaintenanceJob
+            recordDoc: "Optional roadside maintenance task, mapped to canonical Task."
+          proto:
+            package: org.example.roadside.work
+            messageName: MaintenanceJob
+            syntax: proto3
+          es:
+            indexName: maintenance-jobs
+            dynamic: strict
+    properties:
+      - name: job_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable task identifier.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 1}}}]
+      - name: work_order_id
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Owning maintenance work order.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 2}}}]
+      - name: road_segment_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Road segment where the job is performed.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 3}}}]
+      - name: operation_type
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Required operation type.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 4}}}]
+      - name: service_area_ha
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Nominal service area.
+        customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 5}}}]
+      - name: service_duration_minutes
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Fixed service duration.
+        customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 6}}}]
+      - name: deadline
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Deadline timestamp.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 7}}}]
+      - name: penalty_per_day_eur
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Lateness penalty.
+        customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 8}}}]
+      - name: priority
+        logicalType: integer
+        physicalType: int
+        required: false
+        description: Priority class.
+        customProperties: [{property: fieldGeneration, value: {avro: {default: 5}, proto: {fieldNumber: 9}}}]
+      - name: status
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Lifecycle status.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 10}}}]
+      - name: estimated_revenue_eur
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Expected value of completing the job.
+        customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 11}}}]

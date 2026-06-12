@@ -20,18 +20,23 @@ the system survives the gap between its entity model and the physical world see
 3. **Engine** (`src/fl_op/{snapshot,solver,adapters}`) - consumes canonical
    entities only; no dependency on any domain model layer.
 
-Three domain packs exist today: agricultural custom services and construction
-earthworks are runnable end to end (registered contracts, data generators,
-profiles), roadside infrastructure is a validation-level example pack
-(stationary signage along road segments, inspection rounds as observations).
+Three domain packs exist today and are runnable end to end with registered
+contracts, data generators, and profiles: agricultural custom services,
+construction earthworks, and roadside infrastructure. The roadside pack is
+monitoring-driven: service vehicles, service kits, and technicians dispatch
+`EQUIPMENT_SERVICE` visits derived from inspection findings about stationary
+signage and sensor assets along road segments.
 The construction pack is earthworks-native: volume-shaped jobs (excavation,
 trenching, hauling) carry m3 quantities and volume-moving attachments declare
 m3-per-hour work rates, so durations come from the rate, not an area proxy.
 One domain is active per run: registry.yaml `activeDomain`, overridable with
-`ACTIVE_DOMAIN=construction`. Solver inputs resolve their binding tables by
-canonical entity and asset role, never by contract id, so switching domains
-needs no engine change (`fl-op generate-data --domain construction`, then
-`ACTIVE_DOMAIN=construction fl-op plan periodic --data latest`).
+`ACTIVE_DOMAIN=construction` or `ACTIVE_DOMAIN=roadside`. The `generate-data`
+command's `--domain` option resolves the generator callable declared by that
+domain's registry entry, and profile input contract refs resolve inside the
+active domain (`operators` can mean construction operators in the
+construction profile).
+Solver inputs resolve their binding tables by canonical entity and asset role,
+never by contract id, so switching domains needs no engine change.
 
 ## Data and contracts
 
@@ -61,7 +66,8 @@ contract's optimization-mapped vs extra (analytical) physical fields.
 2. Map source rows into canonical assets, locations, tasks, forecasts,
    observations, commitments, travel links, cost rates, and operational
    bundles. Which datasets are mapped is derived from the registry (active
-   domain + mapping entity), and entity dispatch is a registered emitter table
+   domain + mapping entity); domain-local contract aliases are resolved by
+   the registry, and entity dispatch is a registered emitter table
    (`mapping/builders.py:ENTITY_EMITTERS`), so new datasets and entities plug
    in without engine changes.
 3. Statistically assess observation series (`snapshot/assessment.py`):

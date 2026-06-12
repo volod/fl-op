@@ -8,13 +8,13 @@ metadata:
   semanticModelRef: urn:xopt:model:construction-earthworks:0.1.0
   canonicalModelRef: urn:xopt:model:canonical:0.1.0
 
-# Input contracts consumed to build a planning snapshot (registry contract
-# ids; the construction operator master registers as construction-operators
-# because the agricultural pack already claims the 'operators' id).
+# Input contracts consumed to build a planning snapshot. Contract ids are
+# resolved inside the construction domain, so `operators` refers to the
+# construction operator master even though the agricultural pack has its own.
 inputContracts:
   - machines
   - attachments
-  - construction-operators
+  - operators
   - yards
   - sites
   - jobs

@@ -1,0 +1,89 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: service-vehicles
+version: 1.0.0
+status: active
+name: Roadside Service Vehicles
+domain: roadside-infrastructure
+tenant: road-ops
+description:
+  purpose: Mobile service vehicles dispatched from depots to roadside assets.
+  usage: Prime movers for monitoring-derived equipment-service tasks.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: service-vehicles.csv
+schema:
+  - name: serviceVehicles
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.roadside.assets
+            recordName: ServiceVehicle
+            recordDoc: "Roadside service vehicle, mapped to a canonical prime mover."
+          proto:
+            package: org.example.roadside.assets
+            messageName: ServiceVehicle
+            syntax: proto3
+          es:
+            indexName: service-vehicles
+            dynamic: strict
+    properties:
+      - name: vehicle_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the service vehicle.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 1}}}]
+      - name: vehicle_class
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Source vehicle class.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 2}}}]
+      - name: engine_power_kw
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Rated engine power.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 3}}}]
+      - name: tank_litres
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Fuel tank volume.
+        customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 4}}}]
+      - name: burn_l_per_h
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Fuel consumption while servicing or travelling.
+        customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 5}}}]
+      - name: current_lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Current vehicle latitude.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 6}}}]
+      - name: current_lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Current vehicle longitude.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 7}}}]
+      - name: depot_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Home service depot.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 8}}}]
+      - name: transit_speed_kmh
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Road transit speed.
+        customProperties: [{property: fieldGeneration, value: {avro: {default: 50.0}, proto: {fieldNumber: 9}}}]

@@ -40,7 +40,9 @@ class MetadataLossError(RuntimeError):
 
 class ContractEntry:
     def __init__(self, contract_id: str, spec: dict[str, Any]) -> None:
+        self.registry_id = contract_id
         self.contract_id = contract_id
+        self.local_id: str = spec.get("id") or spec.get("contractId") or contract_id
         self.avro_ref: Optional[str] = spec.get("avro")
         self.odcs_ref: Optional[str] = spec.get("odcs")
         self.mapping_ref: Optional[str] = spec.get("mapping")
@@ -48,6 +50,10 @@ class ContractEntry:
         self.source_file: Optional[str] = spec.get("sourceFile")
         self.source_format: str = spec.get("sourceFormat", "csv")
         self.stored_fingerprints: dict[str, str] = dict(spec.get("fingerprints") or {})
+
+    @property
+    def qualified_id(self) -> str:
+        return f"{self.domain}/{self.local_id}" if self.domain else self.local_id
 
 
 class FileRegistry:
@@ -69,26 +75,101 @@ class FileRegistry:
     def list_contracts(self) -> list[str]:
         return list(self.entries)
 
-    def get_entry(self, contract_id: str) -> ContractEntry:
-        if contract_id not in self.entries:
+    def domain_ids(self) -> list[str]:
+        return sorted((self.index.get("domains") or {}).keys())
+
+    def get_domain_spec(self, domain: str) -> dict[str, Any]:
+        domains = self.index.get("domains") or {}
+        if domain not in domains:
+            raise KeyError(
+                f"Unknown domain '{domain}'; known: {sorted(domains)}"
+            )
+        return domains[domain] or {}
+
+    def profile_domain(self, profile_id: str) -> Optional[str]:
+        for domain, spec in (self.index.get("domains") or {}).items():
+            if (spec or {}).get("profile") == profile_id:
+                return domain
+        return None
+
+    def resolve_contract_id(
+        self,
+        contract_id: str,
+        domain: Optional[str] = None,
+    ) -> str:
+        """Resolve a global, qualified, or domain-local contract id.
+
+        Registry keys remain globally unique for compatibility. Domain profiles
+        can refer to local ids such as ``operators``; when resolved in the
+        construction domain that points at the existing ``construction-operators``
+        registry entry.
+        """
+        if "/" in contract_id:
+            domain_part, local_id = contract_id.split("/", 1)
+            matches = [
+                key
+                for key, entry in self.entries.items()
+                if entry.domain == domain_part and entry.local_id == local_id
+            ]
+            if len(matches) == 1:
+                return matches[0]
             raise KeyError(f"Unknown contract id: {contract_id}")
-        return self.entries[contract_id]
+
+        if domain is not None:
+            matches = [
+                key
+                for key, entry in self.entries.items()
+                if entry.domain == domain and entry.local_id == contract_id
+            ]
+            if len(matches) == 1:
+                return matches[0]
+            if len(matches) > 1:
+                raise KeyError(
+                    f"Ambiguous contract id '{contract_id}' in domain '{domain}'"
+                )
+            if contract_id in self.entries:
+                return contract_id
+
+        if contract_id in self.entries:
+            return contract_id
+
+        matches = [
+            key for key, entry in self.entries.items() if entry.local_id == contract_id
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise KeyError(
+                f"Ambiguous contract id '{contract_id}'; qualify it as domain/id"
+            )
+        raise KeyError(f"Unknown contract id: {contract_id}")
+
+    def get_entry(
+        self,
+        contract_id: str,
+        domain: Optional[str] = None,
+    ) -> ContractEntry:
+        resolved = self.resolve_contract_id(contract_id, domain=domain)
+        return self.entries[resolved]
 
     def get_avro(self, contract_id: str) -> AvroContractSchema:
-        entry = self.get_entry(contract_id)
+        contract_id = self.resolve_contract_id(contract_id)
+        entry = self.entries[contract_id]
         if not entry.avro_ref:
             raise KeyError(f"Contract {contract_id} has no Avro schema")
         return load_avro_schema(self.root / entry.avro_ref)
 
     def get_odcs(self, contract_id: str) -> Optional[OdcsContract]:
-        entry = self.get_entry(contract_id)
+        contract_id = self.resolve_contract_id(contract_id)
+        entry = self.entries[contract_id]
         if not entry.odcs_ref:
             return None
         return load_odcs_contract(self.root / entry.odcs_ref)
 
     def get_mapping(self, contract_id: str) -> Optional[CanonicalMapping]:
         """Load the canonical mapping document for a registered contract."""
-        entry = self.get_entry(contract_id)
+        contract_id = self.resolve_contract_id(contract_id)
+        entry = self.entries[contract_id]
         if not entry.mapping_ref:
             return None
         return load_mapping(self.root / entry.mapping_ref)

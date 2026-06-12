@@ -116,7 +116,7 @@ The metadata-loss guard (`FileRegistry.verify_no_metadata_loss`) fails the suite
 if a stored `optimizationMetadataHash` diverges from the recomputed one; re-stamp
 with `fl-op contracts validate --write`.
 
-## Adding a new domain (worked example: construction)
+## Adding a New Domain
 
 `contracts/domains/construction/` maps a different physical schema onto the
 **same** canonical model with no engine changes -- and is fully runnable:
@@ -141,18 +141,21 @@ To add a domain:
    new vocabulary entry to `contracts/canonical/model.yaml` only if a genuinely
    new meaning is needed.
 3. Register the domain in `contracts/registry.yaml` under `domains:` (with its
-   `mappings:` list for a validation-level pack) and add a `profile.yaml`.
+   `mappings:` list, generator callable, and profile id) and add a
+   `profile.yaml`.
 4. Validate: `fl-op contracts validate-domain --domain <domain>` (for the
    construction pack: `make validate-construction`). This asserts the pack maps
    completely onto the canonical model.
 5. To make the pack runnable, register its contracts under `contracts:`
-   (contract ids are a global namespace -- construction registers its
-   operator master as `construction-operators`), register the profile under
-   `profiles:`, provide source data (or a generator), and select the domain
-   at run time with `ACTIVE_DOMAIN=<domain>`. The engine needs no change:
-   solver inputs resolve binding tables by canonical entity and asset role.
+   with a globally unique registry key and, when useful, a domain-local `id`.
+   Profiles can then reference local ids (`operators` in construction resolves
+   to the `construction-operators` compatibility key). Register the profile
+   under `profiles:`, provide source data or a generator, and select the
+   domain at run time with `ACTIVE_DOMAIN=<domain>`. The engine needs no
+   change: solver inputs resolve binding tables by canonical entity and asset
+   role.
 
-`contracts/domains/roadside/` is the validation-level example of a
-monitoring-driven domain: stationary signage/sensor assets along road
-segments, lane-closure curfews as restriction windows, and inspection rounds
-as the observation source feeding derived service visits.
+`contracts/domains/roadside/` is the runnable monitoring-driven example:
+service vehicles, service kits, and technicians are dispatch resources;
+stationary signage/sensor assets live along road segments; inspection rounds
+feed derived `EQUIPMENT_SERVICE` visits that the periodic adapter dispatches.

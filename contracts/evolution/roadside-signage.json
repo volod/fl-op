@@ -1,0 +1,16 @@
+{
+  "contractId": "roadside-signage",
+  "odcsId": "signage",
+  "version": "1.0.0",
+  "fields": {
+    "sign_id": {"logicalType": "string", "physicalType": "string", "required": true},
+    "sign_kind": {"logicalType": "string", "physicalType": "string", "required": true},
+    "road_segment_id": {"logicalType": "string", "physicalType": "string", "required": true},
+    "lat": {"logicalType": "number", "physicalType": "double", "required": true},
+    "lon": {"logicalType": "number", "physicalType": "double", "required": true},
+    "mobility": {"logicalType": "string", "physicalType": "string", "required": true},
+    "last_service_at": {"logicalType": "string", "physicalType": "string", "required": false},
+    "service_interval_days": {"logicalType": "number", "physicalType": "double", "required": false},
+    "installed_at": {"logicalType": "string", "physicalType": "string", "required": false}
+  }
+}

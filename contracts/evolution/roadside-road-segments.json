@@ -1,0 +1,14 @@
+{
+  "contractId": "roadside-road-segments",
+  "odcsId": "road-segments",
+  "version": "1.0.0",
+  "fields": {
+    "segment_id": {"logicalType": "string", "physicalType": "string", "required": true},
+    "road_ref": {"logicalType": "string", "physicalType": "string", "required": false},
+    "midpoint_lat": {"logicalType": "number", "physicalType": "double", "required": true},
+    "midpoint_lon": {"logicalType": "number", "physicalType": "double", "required": true},
+    "surface_type": {"logicalType": "string", "physicalType": "string", "required": false},
+    "closure_windows": {"logicalType": "array", "physicalType": "string", "required": false},
+    "length_km": {"logicalType": "number", "physicalType": "double", "required": false}
+  }
+}

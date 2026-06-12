@@ -117,25 +117,20 @@ The ontology is domain-agnostic; a domain is just a mapping pack:
 |---|---|---|
 | Agricultural custom services | `contracts/domains/agricultural/` (full: data generator + solver wiring) | vehicles/implements/operators -> asset roles; depots/fields -> location; orders -> task; weather -> forecast; sensors -> stationary asset; sensor readings -> observation; routes -> travel-link; prices -> cost-rate |
 | Construction earthworks | `contracts/domains/construction/` (full: data generator + solver wiring; run with `ACTIVE_DOMAIN=construction`) | machines/attachments/operators -> asset roles; yards/sites -> location; jobs -> task |
-| Roadside infrastructure | `contracts/domains/roadside/` (validation-level example pack) | signage/sensors -> stationary asset (`mobility: stationary`); road segments -> location with closure-curfew restriction windows; maintenance depots -> location; inspection rounds -> observation (condition ratings normalized to canonical metric codes) |
-| Utilities, marine, logistics | not yet authored | same entities; the roadside pack is the template for monitoring-driven domains |
+| Roadside infrastructure | `contracts/domains/roadside/` (full: data generator + solver wiring; run with `ACTIVE_DOMAIN=roadside`) | service vehicles/kits/technicians -> asset roles; road segments and service depots -> location; optional maintenance jobs -> task; signage/sensors -> stationary asset (`mobility: stationary`); inspection rounds -> observation that derives `EQUIPMENT_SERVICE` visits |
+| Utilities, marine, logistics | not yet authored | same entities; the roadside pack is the runnable template for monitoring-driven domains |
 
 ## Known ontology gaps
 
 Deliberately not yet modeled (tracked in
 [future-improvements.md](../future-improvements.md)):
 
-- Travel links are consumed as direct pair lookups; multi-hop shortest paths
-  over a road graph are not composed, and clustering / greedy repositioning
-  stay haversine-based.
-- One aggregate load dimension per route; per-material compartments, depot
-  reloads (multi-trip), and true pickup-and-delivery pairing are absent.
-- Restriction windows block execution *start*, not occupancy, and restricted
-  zones are per-location operation lists, not geometric polygons.
-- Cost rates feed greedy scoring and KPIs; routing arc costs remain
-  time-based and dispatch margins do not yet subtract resolved costs.
-- Work-rate capabilities exist only for area-like quantities; non-area work
-  units fall back to a nominal effort.
+- Reload stops are still a bounded construction, and geometric restricted
+  areas are not modelled.
+- Domain packs do not yet provide unit-conversion vocabularies or productivity
+  modifiers beyond flat work-rate maps.
+- Cross-domain planning over one shared fleet is not modelled; one domain is
+  active per run.
 
 ## Algorithms
 

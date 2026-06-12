@@ -339,11 +339,16 @@ def validate_suite(
                     f"bindings: {sorted(missing)}"
                 )
 
-    known = set(registry.list_contracts())
     for pid in profile_ids:
         try:
             profile = registry.get_profile(pid)
-            missing = [c for c in profile.inputContracts if c not in known]
+            domain = registry.profile_domain(pid)
+            missing: list[str] = []
+            for contract_ref in profile.inputContracts:
+                try:
+                    registry.resolve_contract_id(contract_ref, domain=domain)
+                except KeyError:
+                    missing.append(contract_ref)
             if missing:
                 report.profile_errors.append(
                     f"profile {pid} references unknown contracts: {missing}"

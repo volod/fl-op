@@ -61,15 +61,24 @@ To load real fleet data instead of synthetic:
 
 Real CSVs take priority; missing fields fill from synthetic distributions.
 
-To generate and plan a construction-earthworks dataset instead (counts map
-onto the domain's entities: vehicles=machines, implements=attachments,
-orders=jobs, depots=yards), select the domain at generation time and activate
-it for planning with the `ACTIVE_DOMAIN` override:
+To generate and plan another registered domain pack, select the domain at
+generation time and activate it for planning with the `ACTIVE_DOMAIN` override.
+Counts map onto each domain's entities: construction uses
+vehicles=machines, implements=attachments, orders=jobs, depots=yards;
+roadside uses vehicles=service vehicles, implements=service kits,
+orders=signage assets, depots=service depots.
 
 ```bash
 .venv/bin/fl-op generate-data --domain construction --seed 42
 ACTIVE_DOMAIN=construction .venv/bin/fl-op plan periodic --data latest
+
+.venv/bin/fl-op generate-data --domain roadside --vehicles 4 --implements 8 --orders 10 --depots 2 --seed 42
+ACTIVE_DOMAIN=roadside .venv/bin/fl-op plan periodic --data latest
 ```
+
+Available generator domains come from `contracts/registry.yaml` domain entries;
+each entry declares the Python generator callable used by the `generate-data`
+command's `--domain` option.
 
 ---
 

@@ -158,9 +158,18 @@ implementing each area. They are forward-looking work, not compatibility work.
     resolves `EVENT_SOURCE_KIND` through a registered source-factory table:
     JSONL and Kafka are built in, and integrations can register additional
     source kinds plus whether they need the durable event-id dedup store.
-16. Domain pack tooling: registrable per-pack data generators, then the
-    roadside pack promoted to runnable with a monitoring-driven end-to-end
-    test, and per-domain contract-id namespacing (Multi-Domain).
+16. Domain pack tooling - DONE: `generate-data --domain` now resolves the
+    generator callable declared by the domain spec in `contracts/registry.yaml`
+    (`fl_op.data.domain_generators.GenerationRequest` is the shared call
+    shape), so packs register generators without CLI branches. Roadside is
+    fully runnable: it registers service vehicles, service kits, technicians,
+    road segments, service depots, optional maintenance jobs, signage, and
+    inspection rounds; its generator emits a dispatchable service fleet and
+    inspection findings that derive `EQUIPMENT_SERVICE` visits, covered by an
+    end-to-end monitoring-to-plan test. Contract refs are now domain-local
+    aliases resolved by `(domain, local_id)`, so construction can refer to
+    `operators` while the registry keeps the compatibility key
+    `construction-operators`.
 17. Research-grade, demand-driven: revision-diff attribution from solver
     dual/conflict information (Rolling Operations); geometric restricted
     areas (Ontology Coverage); evolution migration history with pairwise
@@ -315,17 +324,17 @@ Effect catalog:
 
 ## Multi-Domain
 
-- The roadside pack is validation-level; promoting it to runnable needs a
-  data generator plus a monitoring-driven end-to-end test (inspection
-  findings -> derived EQUIPMENT_SERVICE visits -> dispatch), for which all
-  engine machinery already exists.
 - One domain is active per run (registry `activeDomain` or the
   ACTIVE_DOMAIN override); cross-domain planning over a shared fleet in one
   run is not modelled.
-- `generate-data --domain` dispatches to hardcoded generators; a domain pack
-  cannot yet register its own generator.
-- Contract ids share one global registry namespace, forcing the
-  `construction-operators` rename; per-domain namespacing would remove it.
+- Generator registration is a Python callable path in the local registry.
+  There is no plugin discovery, versioned generator packaging, or generator
+  capability declaration yet; external packs still need their Python module
+  importable in the running environment.
+- Domain-local contract ids are aliases over the existing flat registry keys,
+  not a nested registry-file format. That preserves compatibility but still
+  leaves generated schema filenames and evolution baseline filenames keyed by
+  the global registry id.
 
 ## Performance
 

@@ -41,23 +41,38 @@ schema:
         physicalType: string
         required: true
         description: Stable identifier of the maintenance depot.
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 1}}
       - name: name
         logicalType: string
         physicalType: string
         required: false
         description: Human-readable depot name.
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 2}}
       - name: lat
         logicalType: number
         physicalType: double
         required: true
         description: Depot latitude.
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 3}}
       - name: lon
         logicalType: number
         physicalType: double
         required: true
         description: Depot longitude.
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 4}}
       - name: fuel_litres
         logicalType: number
         physicalType: double
         required: false
         description: Available diesel inventory at the depot.
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 5}}
