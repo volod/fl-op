@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: canonical-location
-version: 0.1.0
+version: 0.2.0
 status: active
 name: Canonical Location
 domain: canonical

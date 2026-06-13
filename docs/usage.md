@@ -76,6 +76,8 @@ depots=service depots.
 ```bash
 .venv/bin/fl-op generate-data --seed 42
 .venv/bin/fl-op plan periodic --data latest
+# Cost is the default objective; use --objective time for minimal-time runs.
+.venv/bin/fl-op plan periodic --data latest --objective time
 
 .venv/bin/fl-op generate-data --domain agricultural --seed 42
 ACTIVE_DOMAIN=agricultural .venv/bin/fl-op plan periodic --data latest
@@ -322,9 +324,13 @@ See [`docs/current-implementation.md`](current-implementation.md).
 # Periodic (batch) plan: canonical assignments + normalized unassigned reasons.
 .venv/bin/fl-op plan periodic --data latest
 
+# Optional minimal-time objective; cost remains the default.
+.venv/bin/fl-op plan periodic --data latest --objective time
+
 # Rolling (stream) dispatch: one immutable revision per execution event, with a
 # freeze window protecting started/imminent tasks and a plan-instability penalty.
 .venv/bin/fl-op plan rolling --data latest --events events.jsonl
+.venv/bin/fl-op plan rolling --data latest --events events.jsonl --objective time
 
 # Explain why every changed assignment moved between rolling revisions. Plain
 # re-solve changes include solver attribution from plan scores when available.
@@ -332,6 +338,7 @@ See [`docs/current-implementation.md`](current-implementation.md).
 
 # Full story end to end (contracts -> snapshot -> batch -> stream).
 .venv/bin/fl-op demo --data latest      # or: make demo
+.venv/bin/fl-op demo --data latest --objective time
 ```
 
 Why this matters: the source word (`tractor`, `sprayer`, `operator`) is

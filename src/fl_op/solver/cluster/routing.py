@@ -59,6 +59,7 @@ def solve_routing_context(
     solve_time_limit_s: Optional[int] = None,
     now_epoch: Optional[int] = None,
     resource_prices: Optional[ResourcePrices] = None,
+    optimization_objective: str = constants.OBJECTIVE_MODE_COST,
 ) -> tuple[list[dict], list[dict], ClusterSolveTelemetry]:
     """Build, solve, and extract one OR-Tools routing model.
 
@@ -70,6 +71,8 @@ def solve_routing_context(
     solving through an adapter); None falls back to wall-clock now.
     ``resource_prices`` are the resolved energy/material prices driving arc
     costs and dispatch margins; None falls back to the engine constants.
+    ``optimization_objective`` is "cost" by default; "time" prices arcs by
+    travel/service seconds and adds a task-start cumulative-time term.
     """
     from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
@@ -92,14 +95,22 @@ def solve_routing_context(
     time_matrices = build_vehicle_time_matrices(
         nodes, context.routing_vehicles, context.travel_lookup
     )
+    service_times = _vehicle_service_times(context, nodes)
     manager = pywrapcp.RoutingIndexManager(
         len(nodes),
         len(context.routing_vehicles),
         0,
     )
     routing = pywrapcp.RoutingModel(manager)
-    _add_arc_costs(routing, manager, time_matrices, context, resource_prices)
-    service_times = _vehicle_service_times(context, nodes)
+    _add_arc_costs(
+        routing,
+        manager,
+        time_matrices,
+        service_times,
+        context,
+        resource_prices,
+        optimization_objective,
+    )
     time_dim = _add_time_dimension(routing, manager, time_matrices, service_times)
     _add_operation_vehicle_constraints(routing, manager, context, nodes)
 
@@ -107,6 +118,9 @@ def solve_routing_context(
         now_epoch = int(datetime.now(tz=timezone.utc).timestamp())
     _add_order_windows_and_disjunctions(
         routing, manager, time_dim, context, now_epoch, service_times, nodes
+    )
+    _add_completion_time_costs(
+        routing, manager, time_dim, nodes, optimization_objective
     )
     _add_load_capacity_dimensions(routing, manager, context, nodes)
     _add_precedence_constraints(
@@ -148,6 +162,7 @@ def solve_routing_context(
         "lns_improved": False,
         "lns_objective_delta": 0,
         "lns_time_limit_s": int(cluster_dict.get("lns_time_limit_s", 0) or 0),
+        "optimization_objective": optimization_objective,
     }
     if solution is None:
         wall_s = time.perf_counter() - solve_started
@@ -216,18 +231,41 @@ def _add_arc_costs(
     routing: Any,
     manager: Any,
     time_matrices: list[list[list[int]]],
+    service_times: list[list[int]],
     context: ClusterContext,
     resource_prices: ResourcePrices,
+    optimization_objective: str,
 ) -> None:
-    """Price arcs by the serving vehicle's travel energy cost.
+    """Price arcs by the selected objective.
 
-    Arc cost = travel hours x the prime mover's consumption rate x the
+    In cost mode, arc cost = travel hours x the prime mover's consumption rate x the
     resolved resource price, converted into the objective currency drop
     penalties use (one EUR of business value = EUR_TO_DROP_PENALTY_SECONDS
     units). Per-vehicle evaluators let efficient machines win long
     repositioning legs over expensive ones on time-equal routes.
+
+    In time mode, arc cost uses travel seconds plus service seconds at the
+    departing node, matching the Time dimension scale.
     """
     for rv_idx, routing_vehicle in enumerate(context.routing_vehicles):
+        if _is_time_objective(optimization_objective):
+
+            def time_cost_callback(
+                from_index: int,
+                to_index: int,
+                rv_idx: int = rv_idx,
+            ) -> int:
+                from_node = manager.IndexToNode(from_index)
+                to_node = manager.IndexToNode(to_index)
+                return int(
+                    time_matrices[rv_idx][from_node][to_node]
+                    + service_times[rv_idx][from_node]
+                )
+
+            cost_cb_idx = routing.RegisterTransitCallback(time_cost_callback)
+            routing.SetArcCostEvaluatorOfVehicle(cost_cb_idx, rv_idx)
+            continue
+
         prime = routing_vehicle["prime"]
         burn_l_per_h = _nonnegative_rate(vehicle_energy_consumption_rate(prime))
         cost_per_travel_second = (
@@ -250,6 +288,10 @@ def _add_arc_costs(
 
         cost_cb_idx = routing.RegisterTransitCallback(fuel_cost_callback)
         routing.SetArcCostEvaluatorOfVehicle(cost_cb_idx, rv_idx)
+
+
+def _is_time_objective(optimization_objective: str) -> bool:
+    return str(optimization_objective or "").lower() == constants.OBJECTIVE_MODE_TIME
 
 
 def _nonnegative_rate(value: Any) -> float:
@@ -421,6 +463,35 @@ def _add_order_windows_and_disjunctions(
         except TypeError:
             # Older OR-Tools Python bindings use max_cardinality=1 by default.
             routing.AddDisjunction(indices, penalty)
+
+
+def _add_completion_time_costs(
+    routing: Any,
+    manager: Any,
+    time_dim: Any,
+    nodes: list[RoutingNode],
+    optimization_objective: str,
+) -> None:
+    """In time mode, favor earlier task starts across the route set.
+
+    The Time dimension transit already includes service duration at the
+    departing node, so arc costs minimize total route time. Soft cumulative
+    costs at task nodes add a completion-time proxy that prefers serving work
+    earlier when two solutions have similar travel/service totals.
+    """
+    if not _is_time_objective(optimization_objective):
+        return
+    weight = int(constants.TIME_OBJECTIVE_COMPLETION_WEIGHT)
+    if weight <= 0:
+        return
+    for node_idx, node in enumerate(nodes):
+        if node.kind != NODE_TASK:
+            continue
+        index = manager.NodeToIndex(node_idx)
+        if hasattr(time_dim, "SetCumulVarSoftUpperBound"):
+            time_dim.SetCumulVarSoftUpperBound(index, 0, weight)
+        else:
+            routing.AddVariableMinimizedByFinalizer(time_dim.CumulVar(index))
 
 
 def _blocked_occupancy_offsets(

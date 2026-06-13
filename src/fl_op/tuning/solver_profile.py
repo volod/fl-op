@@ -37,6 +37,11 @@ _INT_FIELDS = {
     for field in dataclasses.fields(SolverParameters)
     if field.type is int or field.type == "int"
 }
+_STR_FIELDS = {
+    field.name
+    for field in dataclasses.fields(SolverParameters)
+    if field.type is str or field.type == "str"
+}
 
 
 def default_tuned_solver_profile_path() -> pathlib.Path:
@@ -66,7 +71,12 @@ def _coerce_parameters(raw: dict[str, Any]) -> dict[str, Any]:
             logger.warning("Ignoring unknown tuned solver parameter '%s'", key)
             continue
         try:
-            params[key] = int(value) if key in _INT_FIELDS else float(value)
+            if key in _INT_FIELDS:
+                params[key] = int(value)
+            elif key in _STR_FIELDS:
+                params[key] = str(value)
+            else:
+                params[key] = float(value)
         except (TypeError, ValueError):
             logger.warning("Ignoring unusable tuned solver parameter %s=%r", key, value)
     return params

@@ -30,8 +30,21 @@ operators, logistics hubs, delivery points, road/air travel links, weather,
 restricted zones, explicit battery kWh capacity/use, electricity cost-rate
 rows, and compatibility fuel-equivalent fields for older integrations. Drone
 datasets also write `drone-scenarios.json` and `scenario-events.jsonl`; drone
-plans include `score.drone_logistics_kpis`; and checked-in tuning defaults live in
-`contracts/domains/drone_logistics/tuning.yaml`. The roadside pack is
+scenarios cover heavy manufacturer deliveries, urgent restaurant meals,
+ordinary online-store parcels, bad-weather periods, no-fly activation,
+road-only destinations, UAV speed wins, UGV feasibility wins, hub energy
+scarcity, and asset outage events. Drone plans include
+`score.drone_logistics_kpis`: fill rate, on-time rate, delivery margin, mode
+split, UGV/UAV utilization, support-team utilization, unassigned reasons,
+energy or fuel-equivalent usage, rolling churn, weather-blocked UAV tasks,
+and no-fly exclusions. Checked-in drone tuning defaults live in
+`contracts/domains/drone_logistics/tuning.yaml`; they cover UAV weather
+thresholds, UGV road-speed buckets, delivery/drop penalties, customer-class
+deadline penalties, UGV/UAV fleet mix, payload capacity classes, energy cost
+rates, cluster-size limits, LNS budgets, and rolling instability penalties.
+Drone rolling replay scenarios exercise `task.started`, `asset.unavailable`,
+weather degradation, no-fly activation, hub inventory or energy shortage,
+urgent order insertion, and customer cancellation. The roadside pack is
 monitoring-driven: service vehicles, service kits, and technicians dispatch
 `EQUIPMENT_SERVICE` visits derived from inspection findings about stationary
 signage and sensor assets along road segments.
@@ -218,11 +231,16 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    canonical `MaterialReservation` rows on the plan; assignments reference
    their reservation ids. Rolling revisions re-publish the reservations of
    frozen/carried tasks so each revision is self-contained.
-7. Build a greedy margin-based warm start. Repositioning hours use the
-   vehicle-mode network shortest path from the vehicle's home depot to the
-   field where one exists; the straight-line estimate from the vehicle's
-   current position remains the fallback. A UGV uses road-mode links, a UAV
-   uses air-mode links, and legacy links without a mode behave as `any`.
+7. Build a greedy warm start. In the default `cost` objective, the score is
+   gross margin minus repositioning cost. In the opt-in `time` objective, the
+   score is estimated arrival plus service duration, inverted so faster
+   bundles rank first; the shared penalty-per-day urgency term still helps
+   high-penalty work win scarce resources during global pre-allocation.
+   Repositioning hours use the vehicle-mode network shortest path from the
+   vehicle's home depot to the field where one exists; the straight-line
+   estimate from the vehicle's current position remains the fallback. A UGV
+   uses road-mode links, a UAV uses air-mode links, and legacy links without a
+   mode behave as `any`.
 8. Solve each cluster as an OR-Tools routing problem in a spawned process
    pool. Auto pool sizing is memory-aware: the worker count is bounded by
    CPUs and by how many estimated worker footprints (base footprint plus the
@@ -236,11 +254,17 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    `TRAVEL_NETWORK_MAX_COMPOSE_NODES`) and is indexed by `networkMode`
    (`road`, `air`, or `any`), with a reverse-direction and haversine fallback
    for pairs without any network path (`solver/travel_time.py`). Per-vehicle
-   time matrices keep road and air travel isolated. Arcs are priced per
-   vehicle as travel energy cost (consumption rate x the resolved resource
-   price) in the same objective currency as the drop penalties (1 EUR = 600
-   penalty seconds), so an energy-efficient machine wins time-equal legs and
-   dropping an order is weighed against the money cost of serving it. Each
+   time matrices keep road and air travel isolated. The selected objective is
+   `SolverParameters.optimization_objective`, exposed by `plan periodic`,
+   `plan rolling`, and `demo` as `--objective cost|time`; `cost` is the
+   default. Cost mode prices arcs per vehicle as travel energy cost
+   (consumption rate x the resolved resource price) in the same objective
+   currency as the drop penalties (1 EUR = 600 penalty seconds), so an
+   energy-efficient machine wins time-equal legs and dropping an order is
+   weighed against the money cost of serving it. Time mode prices arcs as
+   travel plus service seconds and adds soft cumulative-time costs on task
+   nodes, so served tasks are pulled earlier without changing the hard
+   deadline/window/drop-disjunction mechanics. Each
    task or pickup node is constrained to routing
    vehicles whose prime mover and related equipment can serve the task's
    operation, preventing an aerial bundle from serving a ground variant or the
@@ -298,6 +322,11 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    (`solver/solve_telemetry.py`: status, wall time, OR-Tools search status,
    time-limit flag, objective values, LNS budget/delta, worker RSS); batch
    runs write `solve_telemetry.json` and plan scores carry the summary.
+   Plan scores also record the selected `optimization_objective` plus
+   completion-time KPIs (`total_completion_time_s`,
+   `avg_completion_time_s`, `p95_completion_time_s`,
+   `max_completion_time_s`) and deadline adherence (`on_time_rate_pct`,
+   `n_tasks_with_deadlines`, `n_on_time`, `n_late`).
    Adapter-normalized plans also carry per-task attribution maps in
    `plan.score`: assigned tasks record their cluster status/objectives,
    LNS delta, time-limit state, estimated margin, and same-cluster unserved
@@ -501,14 +530,15 @@ a rolling replan. Each check writes a `freshness.json` artifact under
   and plan contracts) has a committed reviewed snapshot under
   `contracts/evolution/` (`contracts/evolution.py`). New freezes write the
   latest schema at the top level and retain a `history` array, so
-  `evolution-check` validates every adjacent reviewed migration pair plus the
-  current contract. The version-bump policy is unchanged: added optional
+  `evolution-check` validates every adjacent reviewed schema migration pair
+  plus the current contract. The version-bump policy is unchanged: added optional
   fields require at least a minor bump; removals, type changes, requiredness
   changes, and added required fields require a major bump; any change without a
   bump fails. Registered domain snapshots also carry the reviewed
-  `optimizationMetadataHash`, so mapping-semantic drift is gated in the same
-  review flow as structural schema evolution. Flat pre-history baseline files
-  remain readable as a one-entry history.
+  `optimizationMetadataHash`; current-vs-latest metadata drift is gated in the
+  same review flow as structural schema evolution, while already-reviewed
+  historical metadata hashes remain audit records. Flat pre-history baseline
+  files remain readable as a one-entry history.
 - CI (`.github/workflows/ci.yml`, `make ci`) regenerates all physical
   schemas from ODCS before any validation, then runs the suite validation,
   domain validations, the evolution gate, and the tests.

@@ -1,6 +1,11 @@
 {
   "contractId": "drone-ugvs",
   "fields": {
+    "battery_capacity_kwh": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
     "compatible_operations": {
       "logicalType": "array",
       "physicalType": "string",
@@ -17,6 +22,21 @@
       "required": true
     },
     "energy_capacity_l_equiv": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "energy_resource_type": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "energy_unit": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "energy_use_kwh_per_h": {
       "logicalType": "number",
       "physicalType": "double",
       "required": false
@@ -63,7 +83,7 @@
     }
   },
   "fingerprints": {
-    "optimizationMetadataHash": "2f7a95291a901fefa1d0151bc1c01465e4a3b72a3dd08d4faaf2a64d162e6a94"
+    "optimizationMetadataHash": "18d5fcc6e6ef355cd10437322a25b122388a1f0e3e3a83a87932b9c4d2a15792"
   },
   "history": [
     {
@@ -135,8 +155,98 @@
       },
       "odcsId": "ugvs",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "drone-ugvs",
+      "fields": {
+        "battery_capacity_kwh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "compatible_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "current_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "energy_capacity_l_equiv": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "energy_resource_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "energy_unit": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "energy_use_kwh_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "energy_use_l_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "hub_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "payload_capacity_kg": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "rated_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "travel_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "ugv_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "vehicle_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "18d5fcc6e6ef355cd10437322a25b122388a1f0e3e3a83a87932b9c4d2a15792"
+      },
+      "odcsId": "ugvs",
+      "version": "1.1.0"
     }
   ],
   "odcsId": "ugvs",
-  "version": "1.0.0"
+  "version": "1.1.0"
 }

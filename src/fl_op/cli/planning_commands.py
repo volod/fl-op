@@ -4,6 +4,17 @@ import click
 
 from fl_op.cli.options import data_option, resolve_data_dir
 
+_OBJECTIVE_OPTION = click.option(
+    "--objective",
+    type=click.Choice(["cost", "time"]),
+    default="cost",
+    show_default=True,
+    help=(
+        "Optimization objective: cost keeps margin/energy-cost behavior; "
+        "time minimizes travel/service/completion time."
+    ),
+)
+
 
 @click.group("contracts")
 def contracts_group() -> None:
@@ -164,11 +175,12 @@ def plan_group() -> None:
 
 @plan_group.command("periodic")
 @data_option
-def plan_periodic(data: str) -> None:
+@_OBJECTIVE_OPTION
+def plan_periodic(data: str, objective: str) -> None:
     """Periodic (batch) OR-Tools plan from an immutable snapshot."""
     from fl_op.planning.plans import run_plan_periodic
 
-    run_plan_periodic(str(resolve_data_dir(data)))
+    run_plan_periodic(str(resolve_data_dir(data)), objective=objective)
 
 
 @plan_group.command("rolling")
@@ -185,7 +197,13 @@ def plan_periodic(data: str) -> None:
     default=None,
     help="ISO-8601 effective timestamp (default: now).",
 )
-def plan_rolling(data: str, events: str | None, effective_at: str | None) -> None:
+@_OBJECTIVE_OPTION
+def plan_rolling(
+    data: str,
+    events: str | None,
+    effective_at: str | None,
+    objective: str,
+) -> None:
     """Rolling (stream) OR-Tools dispatch producing immutable plan revisions."""
     from fl_op.planning.plans import run_plan_rolling
 
@@ -193,6 +211,7 @@ def plan_rolling(data: str, events: str | None, effective_at: str | None) -> Non
         str(resolve_data_dir(data)),
         events_path=events,
         effective_at=effective_at,
+        objective=objective,
     )
 
 
@@ -242,11 +261,12 @@ def plan_diff_revisions(plan: str) -> None:
 
 @click.command("demo")
 @data_option
-def demo(data: str) -> None:
+@_OBJECTIVE_OPTION
+def demo(data: str, objective: str) -> None:
     """Run the full contract -> snapshot -> batch + stream demonstration."""
     from fl_op.planning.demo import run_demo
 
-    run_demo(str(resolve_data_dir(data)))
+    run_demo(str(resolve_data_dir(data)), objective=objective)
 
 
 def register_planning_commands(cli: click.Group) -> None:

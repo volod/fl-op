@@ -215,3 +215,31 @@ def test_check_unifies_metadata_hash_drift_with_evolution_gate(
 
     assert not report.ok
     assert any("optimization metadata" in err for err in vehicles.errors)
+
+
+def test_check_accepts_reviewed_metadata_hash_history(contracts_copy) -> None:
+    registry = FileRegistry(root=contracts_copy)
+    freeze_baselines(registry)
+    mapping_path = contracts_copy / "domains/agricultural/mappings/vehicles.mapping.yaml"
+    mapping_path.write_text(
+        mapping_path.read_text().replace("canonicalUnit: kW", "canonicalUnit: W", 1)
+    )
+    freeze_baselines(FileRegistry(root=contracts_copy))
+    payload = json.loads((contracts_copy / "evolution" / "vehicles.json").read_text())
+    history = baseline_history(payload)
+    registry_path = contracts_copy / "registry.yaml"
+    registry_doc = yaml.safe_load(registry_path.read_text())
+    registry_doc["contracts"]["vehicles"]["fingerprints"]["optimizationMetadataHash"] = (
+        history[-1]["fingerprints"]["optimizationMetadataHash"]
+    )
+    registry_path.write_text(yaml.safe_dump(registry_doc, sort_keys=False))
+
+    report = check_evolution(FileRegistry(root=contracts_copy))
+    vehicles = next(c for c in report.contracts if c.contract_id == "vehicles")
+
+    assert report.ok
+    assert vehicles.errors == []
+    assert (
+        history[-2]["fingerprints"]["optimizationMetadataHash"]
+        != history[-1]["fingerprints"]["optimizationMetadataHash"]
+    )

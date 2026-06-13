@@ -302,11 +302,25 @@ RELATED_MATERIAL_FILL_RATIO: float = 0.8
 # Greedy scoring weights
 # ---------------------------------------------------------------------------
 
+# Explicit solver objective modes. Cost remains the default; time is an
+# opt-in mode for deadline-sensitive dispatches.
+OBJECTIVE_MODE_COST: str = "cost"
+OBJECTIVE_MODE_TIME: str = "time"
+SUPPORTED_OBJECTIVE_MODES: frozenset[str] = frozenset(
+    {OBJECTIVE_MODE_COST, OBJECTIVE_MODE_TIME}
+)
+
 # Weight on gross margin estimate in the greedy score.
 SCORE_WEIGHT_MARGIN: float = float(os.environ.get("SCORE_WEIGHT_MARGIN", "1.0"))
 
 # Weight on repositioning cost penalty (subtracted from margin).
 SCORE_WEIGHT_REPOSITION: float = float(os.environ.get("SCORE_WEIGHT_REPOSITION", "1.0"))
+
+# Weight applied to task cumulative time in the opt-in time objective. One
+# unit equals one scheduled second, keeping drop penalties in the same scale.
+TIME_OBJECTIVE_COMPLETION_WEIGHT: int = int(
+    os.environ.get("TIME_OBJECTIVE_COMPLETION_WEIGHT", "1")
+)
 
 # ---------------------------------------------------------------------------
 # Canonical solver-row defaults

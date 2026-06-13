@@ -6,6 +6,7 @@ is covered by test_smoke.py.
 """
 
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -160,6 +161,46 @@ class TestComputeKpis:
             "infeasibility_reasons",
         ):
             assert key in kpis, f"KPI dict missing key: {key}"
+
+    def test_completion_time_and_on_time_kpis(self):
+        origin = datetime(2026, 6, 13, 8, 0, tzinfo=timezone.utc)
+        dispatch = [
+            {
+                "task_id": "o0",
+                "scheduled_start": "2026-06-13T08:10:00+00:00",
+                "scheduled_end": "2026-06-13T08:30:00+00:00",
+            },
+            {
+                "task_id": "o1",
+                "scheduled_start": "2026-06-13T09:00:00+00:00",
+                "scheduled_end": "2026-06-13T09:30:00+00:00",
+            },
+        ]
+        orders = [
+            TaskRow.from_canonical_dict(
+                {"task_id": "o0", "deadline": "2026-06-13T08:45:00+00:00"}
+            ),
+            TaskRow.from_canonical_dict(
+                {"task_id": "o1", "deadline": "2026-06-13T09:00:00+00:00"}
+            ),
+        ]
+
+        kpis = _compute_kpis(
+            dispatch,
+            [],
+            orders,
+            {},
+            planning_origin=origin,
+            optimization_objective="time",
+        )
+
+        assert kpis["optimization_objective"] == "time"
+        assert kpis["total_completion_time_s"] == pytest.approx(7200.0)
+        assert kpis["avg_completion_time_s"] == pytest.approx(3600.0)
+        assert kpis["max_completion_time_s"] == pytest.approx(5400.0)
+        assert kpis["n_on_time"] == 1
+        assert kpis["n_late"] == 1
+        assert kpis["on_time_rate_pct"] == pytest.approx(50.0)
 
 
 # ---------------------------------------------------------------------------

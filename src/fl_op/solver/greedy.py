@@ -19,6 +19,7 @@ from fl_op.core.constants import (
     EARTH_RADIUS_KM,
     FALLBACK_REVENUE_EUR_PER_HA,
     FUEL_COST_EUR_PER_L,
+    OBJECTIVE_MODE_TIME,
     SCORE_WEIGHT_MARGIN,
     SCORE_WEIGHT_REPOSITION,
 )
@@ -27,7 +28,12 @@ from fl_op.solver.cost_rates import (
     vehicle_energy_consumption_rate,
     vehicle_energy_resource_type,
 )
-from fl_op.solver.travel_time import TravelLookup, network_seconds, travel_mode_for_vehicle
+from fl_op.solver.travel_time import (
+    TravelLookup,
+    _estimate_operation_seconds,
+    network_seconds,
+    travel_mode_for_vehicle,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +115,7 @@ def vectorized_score(
     score_weight_margin: Optional[float] = None,
     score_weight_reposition: Optional[float] = None,
     travel_lookup: Optional[TravelLookup] = None,
+    optimization_objective: str = "cost",
 ) -> dict[str, list[tuple[float, int, int]]]:
     """Return {task_id: [(score, v_idx, i_idx), ...]} sorted descending by score.
 
@@ -122,6 +129,10 @@ def vectorized_score(
     from the vehicle's home depot (its road access point) to the field where
     one exists; the straight-line estimate from the vehicle's current
     position remains the fallback.
+
+    ``optimization_objective="time"`` switches warm-start scoring to estimated
+    arrival-plus-service seconds so pre-allocation favors faster bundles. Cost
+    mode remains the default.
     """
     fuel_price = (
         fuel_price_eur_per_l if fuel_price_eur_per_l is not None else FUEL_COST_EUR_PER_L
@@ -203,10 +214,20 @@ def vectorized_score(
         # Gross margin: per-order constant for all pairs
         gross_margins = np.full(len(pairs), _estimate_gross_margin(order))
 
-        scores = (
-            weight_margin * gross_margins
-            - weight_reposition * reposition_cost
-        )
+        if str(optimization_objective or "").lower() == OBJECTIVE_MODE_TIME:
+            service_seconds = np.array([
+                _estimate_operation_seconds(order, implements[int(i_idx)])
+                if 0 <= int(i_idx) < len(implements)
+                else 0
+                for i_idx in i_indices
+            ])
+            completion_seconds = hours * 3600.0 + service_seconds
+            scores = -completion_seconds + gross_margins * 1.0e-6
+        else:
+            scores = (
+                weight_margin * gross_margins
+                - weight_reposition * reposition_cost
+            )
 
         scored_pairs = sorted(
             zip(scores.tolist(), v_indices.tolist(), i_indices.tolist()),

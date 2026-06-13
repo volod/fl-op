@@ -36,6 +36,7 @@ def solve_cluster_instrumented(
     now_epoch: Optional[int] = None,
     weather_blocked: Optional[BlockedWindows] = None,
     resource_prices: Optional[ResourcePrices] = None,
+    optimization_objective: str = "cost",
 ) -> tuple[list[dict], list[dict], ClusterSolveTelemetry]:
     """Solve one cluster with machine-readable diagnostics.
 
@@ -58,6 +59,7 @@ def solve_cluster_instrumented(
             now_epoch,
             weather_blocked,
             resource_prices,
+            optimization_objective,
         )
         _stamp_worker_rss(telemetry)
         return dispatch, infeasible, telemetry
@@ -101,6 +103,7 @@ def solve_cluster(
     now_epoch: Optional[int] = None,
     weather_blocked: Optional[BlockedWindows] = None,
     resource_prices: Optional[ResourcePrices] = None,
+    optimization_objective: str = "cost",
 ) -> tuple[list[dict], list[dict]]:
     """Solve one geographic cluster; return (dispatch_packages, infeasible_orders).
 
@@ -124,6 +127,7 @@ def solve_cluster(
         now_epoch,
         weather_blocked,
         resource_prices,
+        optimization_objective,
     )
     return dispatch, infeasible
 

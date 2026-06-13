@@ -43,6 +43,11 @@ accounting, synthesize an execution-event stream, and produce rolling (stream)
 dispatch revisions. Artifacts land under
 `$DATA_DIR` (default: `.data/`).
 
+Cost optimization is the default. For deadline-sensitive comparisons, run
+`fl-op plan periodic --objective time`, `fl-op plan rolling --objective time`,
+or `fl-op demo --objective time` to minimize travel/service/completion time
+while keeping the same hard deadlines and safety restrictions.
+
 ---
 
 ## Commands at a glance

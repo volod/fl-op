@@ -16,7 +16,7 @@ from fl_op.adapters.ortools_rolling import OrToolsRollingAdapter
 from fl_op.canonical.enums import PlanningMode
 from fl_op.canonical.plan import Plan
 from fl_op.contracts.registry import FileRegistry
-from fl_op.core.constants import STREAM_CONVERGENCE_WINDOW_S
+from fl_op.core.constants import OBJECTIVE_MODE_COST, STREAM_CONVERGENCE_WINDOW_S
 from fl_op.snapshot.builder import SnapshotBuilder
 from fl_op.stream.apply import EventApplicator
 from fl_op.stream.prognosis import (
@@ -87,20 +87,30 @@ class StreamDriver:
         self,
         sources: dict[str, list[dict[str, Any]]],
         effective_at: Optional[datetime] = None,
+        objective: str = OBJECTIVE_MODE_COST,
     ) -> Revision:
         """Build the baseline rolling revision before any events are applied."""
-        revision, _ = self._baseline(sources, effective_at or datetime.now(tz=timezone.utc))
+        revision, _ = self._baseline(
+            sources,
+            effective_at or datetime.now(tz=timezone.utc),
+            objective,
+        )
         return revision
 
     def _baseline(
         self,
         sources: dict[str, list[dict[str, Any]]],
         effective_at: datetime,
+        objective: str = OBJECTIVE_MODE_COST,
     ) -> tuple[Revision, dict[str, str]]:
         snapshot = self.builder.build_from_sources(
             sources, PlanningMode.ROLLING, effective_at, lineage_ref="stream://initial"
         )
-        plan = self.adapter.plan(snapshot, self._profile_for_builder(), {"now": effective_at})
+        plan = self.adapter.plan(
+            snapshot,
+            self._profile_for_builder(),
+            {"now": effective_at, "objective": objective},
+        )
         revision = Revision(event=None, plan=plan, snapshot_id=snapshot.snapshot_id)
         return revision, _service_reasons(snapshot)
 
@@ -110,6 +120,7 @@ class StreamDriver:
         events: list[ExecutionEvent],
         effective_at: Optional[datetime] = None,
         convergence_window_s: float = STREAM_CONVERGENCE_WINDOW_S,
+        objective: str = OBJECTIVE_MODE_COST,
     ) -> StreamResult:
         """Produce a baseline revision plus one revision per converged batch.
 
@@ -123,7 +134,9 @@ class StreamDriver:
         working = copy.deepcopy(sources)
 
         result = StreamResult()
-        baseline, previous_service_reasons = self._baseline(working, effective_at)
+        baseline, previous_service_reasons = self._baseline(
+            working, effective_at, objective
+        )
         result.revisions.append(baseline)
         previous_plan = baseline.plan
 
@@ -157,6 +170,7 @@ class StreamDriver:
                     "now": now,
                     "previous_plan": previous_plan,
                     "previous_service_reasons": previous_service_reasons,
+                    "objective": objective,
                 },
             )
             result.revisions.append(

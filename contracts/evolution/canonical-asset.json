@@ -21,6 +21,26 @@
       "physicalType": "",
       "required": false
     },
+    "energyCapacity": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "energyConsumptionRate": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "energyResourceType": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "energyUnit": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
     "fuelConsumptionRate": {
       "logicalType": "number",
       "physicalType": "",
@@ -259,8 +279,160 @@
       },
       "odcsId": "canonical-asset",
       "version": "0.3.0"
+    },
+    {
+      "contractId": "canonical-asset",
+      "fields": {
+        "assetId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "assetType": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "certifiedOperations": {
+          "logicalType": "array",
+          "physicalType": "",
+          "required": false
+        },
+        "compatibleOperations": {
+          "logicalType": "array",
+          "physicalType": "",
+          "required": false
+        },
+        "energyCapacity": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "energyConsumptionRate": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "energyResourceType": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "energyUnit": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "fuelConsumptionRate": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "fuelTankVolume": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "homeDepotRef": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "lastServiceAt": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "loadCapacities": {
+          "logicalType": "object",
+          "physicalType": "",
+          "required": false
+        },
+        "loadCapacity": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "locationLat": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "locationLon": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "materialCapacity": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "maxOperatingSpeed": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "minOperatingSpeed": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "mobility": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "ratedPower": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "requiredPower": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "serviceIntervalDays": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "shiftEnd": {
+          "logicalType": "integer",
+          "physicalType": "",
+          "required": false
+        },
+        "shiftStart": {
+          "logicalType": "integer",
+          "physicalType": "",
+          "required": false
+        },
+        "travelSpeed": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "workRates": {
+          "logicalType": "object",
+          "physicalType": "",
+          "required": false
+        },
+        "workingWidth": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        }
+      },
+      "odcsId": "canonical-asset",
+      "version": "0.4.0"
     }
   ],
   "odcsId": "canonical-asset",
-  "version": "0.3.0"
+  "version": "0.4.0"
 }

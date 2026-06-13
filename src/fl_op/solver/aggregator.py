@@ -3,6 +3,7 @@
 import json
 import logging
 import pathlib
+from datetime import datetime
 from typing import Any, Optional
 
 from fl_op.core.constants import (
@@ -38,6 +39,8 @@ def _compute_kpis(
     implements: Optional[list[Any]] = None,
     fields: Optional[list[Any]] = None,
     travel_lookup: Optional[TravelLookup] = None,
+    planning_origin: Optional[datetime] = None,
+    optimization_objective: str = "cost",
 ) -> dict[str, Any]:
     """Aggregate schedule KPIs.
 
@@ -95,8 +98,14 @@ def _compute_kpis(
     for inf in infeasible_orders:
         r = inf.get("reason_code", "UNKNOWN")
         infeasibility_reasons[r] = infeasibility_reasons.get(r, 0) + 1
+    completion = _compute_completion_kpis(
+        dispatch_packages,
+        orders,
+        planning_origin,
+    )
 
     return {
+        "optimization_objective": str(optimization_objective or "cost"),
         "n_dispatched": len(dispatch_packages),
         "n_infeasible": len(infeasible_orders),
         "total_estimated_margin_eur": round(total_margin, 2),
@@ -114,7 +123,105 @@ def _compute_kpis(
         "total_fertilizer_kg": round(total_fertilizer, 2),
         "total_material_cost_eur": round(total_fertilizer * material_price, 2),
         "infeasibility_reasons": infeasibility_reasons,
+        **completion,
     }
+
+
+def _compute_completion_kpis(
+    dispatch_packages: list[dict[str, Any]],
+    orders: list[Any],
+    planning_origin: Optional[datetime] = None,
+) -> dict[str, Any]:
+    """Compute completion-time and deadline adherence metrics from dispatches."""
+    starts = [
+        ts
+        for ts in (
+            _parse_datetime(dispatch.get("scheduled_start"))
+            for dispatch in dispatch_packages
+        )
+        if ts is not None
+    ]
+    origin = planning_origin or (min(starts) if starts else None)
+    completions: list[float] = []
+    task_finish: dict[str, datetime] = {}
+    for dispatch in dispatch_packages:
+        finish = _parse_datetime(dispatch.get("scheduled_end"))
+        if finish is None:
+            continue
+        task_id = str(dispatch.get("task_id", ""))
+        if task_id:
+            task_finish[task_id] = finish
+        if origin is not None:
+            finish_aligned, origin_aligned = _align_datetimes(finish, origin)
+            completions.append(
+                max(0.0, (finish_aligned - origin_aligned).total_seconds())
+            )
+
+    order_map = {str(getattr(order, "task_id", "")): order for order in orders}
+    n_with_deadline = 0
+    n_on_time = 0
+    for task_id, finish in task_finish.items():
+        deadline = _parse_datetime(getattr(order_map.get(task_id), "deadline", None))
+        if deadline is None:
+            continue
+        finish_aligned, deadline = _align_datetimes(finish, deadline)
+        n_with_deadline += 1
+        if finish_aligned <= deadline:
+            n_on_time += 1
+    n_late = n_with_deadline - n_on_time
+    on_time_rate_pct = (
+        round(n_on_time / n_with_deadline * 100.0, 2)
+        if n_with_deadline
+        else 0.0
+    )
+
+    if not completions:
+        return {
+            "total_completion_time_s": 0.0,
+            "avg_completion_time_s": 0.0,
+            "p95_completion_time_s": 0.0,
+            "max_completion_time_s": 0.0,
+            "n_tasks_with_deadlines": n_with_deadline,
+            "n_on_time": n_on_time,
+            "n_late": n_late,
+            "on_time_rate_pct": on_time_rate_pct,
+        }
+
+    values = sorted(completions)
+    p95_idx = min(len(values) - 1, int(round(0.95 * (len(values) - 1))))
+    return {
+        "total_completion_time_s": round(sum(values), 2),
+        "avg_completion_time_s": round(sum(values) / len(values), 2),
+        "p95_completion_time_s": round(values[p95_idx], 2),
+        "max_completion_time_s": round(values[-1], 2),
+        "n_tasks_with_deadlines": n_with_deadline,
+        "n_on_time": n_on_time,
+        "n_late": n_late,
+        "on_time_rate_pct": on_time_rate_pct,
+    }
+
+
+def _parse_datetime(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value)
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _align_datetimes(left: datetime, right: datetime) -> tuple[datetime, datetime]:
+    """Avoid aware/naive subtraction errors for externally supplied test data."""
+    if left.tzinfo is None and right.tzinfo is not None:
+        left = left.replace(tzinfo=right.tzinfo)
+    elif left.tzinfo is not None and right.tzinfo is None:
+        right = right.replace(tzinfo=left.tzinfo)
+    return left, right
 
 
 def _compute_greedy_baseline_margin(

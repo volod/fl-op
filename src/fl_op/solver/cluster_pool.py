@@ -174,6 +174,7 @@ def _worker_fn(
     now_epoch: Optional[int] = None,
     weather_blocked: Optional[BlockedWindows] = None,
     resource_prices: Optional[ResourcePrices] = None,
+    optimization_objective: str = constants.OBJECTIVE_MODE_COST,
 ) -> tuple[list[dict], list[dict], dict[str, Any]]:
     """Top-level worker function - module-level def required for pickling."""
     from fl_op.solver.cluster_solver import solve_cluster_instrumented
@@ -181,7 +182,7 @@ def _worker_fn(
         cluster_dict, orders, vehicles, implements, fields, depots,
         greedy_assignment, vehicle_index, implement_index, held_windows,
         travel_lookup, solve_time_limit_s, now_epoch, weather_blocked,
-        resource_prices,
+        resource_prices, optimization_objective,
     )
 
 
@@ -202,6 +203,7 @@ def pool_solve(
     weather_blocked: Optional[BlockedWindows] = None,
     resource_prices: Optional[ResourcePrices] = None,
     lns_time_limit_s: Optional[int] = None,
+    optimization_objective: str = constants.OBJECTIVE_MODE_COST,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Solve all clusters in parallel.
 
@@ -213,6 +215,8 @@ def pool_solve(
     maps task ids to blocked epoch intervals (non-compliant forecast windows)
     the routing model must keep execution out of. ``resource_prices`` are the
     resolved energy/material prices for arc costs and dispatch margins.
+    ``optimization_objective`` keeps cost optimization as the default and can
+    switch routing costs to travel/service/completion time.
     """
     if not clusters:
         return [], [], []
@@ -261,7 +265,7 @@ def pool_solve(
                 cd, orders, vehicles, implements, fields, depots,
                 greedy_assignment, vehicle_index, implement_index, held_windows,
                 travel_lookup, solve_time_limit_s, now_epoch, weather_blocked,
-                resource_prices,
+                resource_prices, optimization_objective,
             ): cd
             for cd in cluster_dicts
         }

@@ -4,6 +4,7 @@ The adapter owns the SPI surface. Rolling-specific compile and normalization
 logic lives in ``fl_op.adapters.rolling`` helper modules.
 """
 
+import dataclasses
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -99,9 +100,15 @@ class OrToolsRollingAdapter:
 
         config.setdefault("enforcement", EnforcementPolicy.from_profile(profile))
         # Profile allocation defaults plus optional reviewed tuned overlay.
-        config["parameters"] = solver_parameters_for_profile(
+        parameters = solver_parameters_for_profile(
             profile, explicit=config.get("parameters")
         )
+        if config.get("objective"):
+            parameters = dataclasses.replace(
+                parameters,
+                optimization_objective=str(config["objective"]),
+            )
+        config["parameters"] = parameters
         raw = self.compile(snapshot, profile, config)
         plan = self.normalize(self.solve(raw, config), snapshot, profile)
         previous_plan: Optional[Plan] = config.get("previous_plan")

@@ -11,7 +11,7 @@ from fl_op.canonical.enums import PlanningMode
 from fl_op.canonical.snapshot import PlanningSnapshot
 from fl_op.contracts.plan_contract import assert_plan_conforms
 from fl_op.contracts.registry import FileRegistry
-from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
+from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION, OBJECTIVE_MODE_COST
 from fl_op.core.paths import DATA_ROOT
 from fl_op.planning.artifacts import model_json, run_timestamp, write_json
 from fl_op.snapshot.builder import SnapshotBuilder
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 def run_plan_periodic(
     data_dir: str,
     snapshot: Optional[PlanningSnapshot] = None,
+    objective: str = OBJECTIVE_MODE_COST,
 ) -> pathlib.Path:
     """Solve a periodic plan. Builds a snapshot from data_dir unless one is provided."""
     from fl_op.adapters.rolling.corrective import service_task_reasons
@@ -44,6 +45,7 @@ def run_plan_periodic(
         {
             "previous_plan": previous_plan,
             "previous_service_reasons": previous_reasons,
+            "objective": objective,
         },
     )
     assert_plan_conforms(plan)
@@ -117,7 +119,11 @@ def _log_plan_to_mlflow(plan, extra_tags: Optional[dict[str, str]] = None) -> No
             "adapter_compatibility_version": version.adapter_compatibility_version,
         },
         metrics={
-            **{k: v for k, v in plan.score.items() if not isinstance(v, dict)},
+            **{
+                k: v
+                for k, v in plan.score.items()
+                if isinstance(v, (int, float)) and not isinstance(v, bool)
+            },
             "n_clusters_hit_time_limit": solve_summary.get("n_hit_time_limit", 0),
             "total_solve_wall_s": solve_summary.get("total_solve_wall_s", 0.0),
             "n_lns_improved": solve_summary.get("n_lns_improved", 0),
@@ -138,6 +144,7 @@ def run_plan_rolling(
     data_dir: str,
     events_path: Optional[str] = None,
     effective_at: Optional[str] = None,
+    objective: str = OBJECTIVE_MODE_COST,
 ) -> pathlib.Path:
     """Drive rolling dispatch from an event stream, writing one revision per event."""
     from fl_op.stream.broker import open_dedup_store, open_event_source
@@ -157,7 +164,7 @@ def run_plan_rolling(
     dedup_store = open_dedup_store()
 
     driver = StreamDriver(registry, dedup_store=dedup_store)
-    result = driver.run(sources, events, effective_at=eff)
+    result = driver.run(sources, events, effective_at=eff, objective=objective)
 
     out_dir = DATA_ROOT / "plan-rolling" / run_timestamp()
     summary = []

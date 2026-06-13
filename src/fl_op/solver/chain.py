@@ -257,6 +257,7 @@ def run_solver_chain(
         score_weight_margin=parameters.score_weight_margin,
         score_weight_reposition=parameters.score_weight_reposition,
         travel_lookup=travel_lookup,
+        optimization_objective=parameters.optimization_objective,
     )
     clusters = cached_cluster_specs(
         orders_raw, fields_raw, depots_raw, vehicles_raw, implements_raw,
@@ -296,6 +297,7 @@ def run_solver_chain(
         weather_blocked=weather_blocked,
         resource_prices=resource_prices,
         lns_time_limit_s=parameters.lns_time_limit_s,
+        optimization_objective=parameters.optimization_objective,
     )
     all_dispatch, all_infeasible = enforce_dependency_outcomes(
         all_dispatch, [*enforcement_infeasible, *all_infeasible], orders_raw
@@ -315,6 +317,8 @@ def run_solver_chain(
         implements=implements_raw,
         fields=fields_raw,
         travel_lookup=travel_lookup,
+        planning_origin=now,
+        optimization_objective=parameters.optimization_objective,
     )
 
     return SolverChainResult(

@@ -16,8 +16,10 @@ from fl_op.core.constants import (
     CLUSTER_LNS_TIME_LIMIT_S,
     DEFAULT_CHANGE_PENALTY,
     GLOBAL_ASSIGNMENT_COUNT_PRIORITY,
+    OBJECTIVE_MODE_COST,
     SCORE_WEIGHT_MARGIN,
     SCORE_WEIGHT_REPOSITION,
+    SUPPORTED_OBJECTIVE_MODES,
 )
 
 
@@ -42,6 +44,19 @@ class SolverParameters:
     # (1.0 = count-first, 0.0 = pure score maximization); profiles set it
     # via allocationPolicy.countPriority.
     assignment_count_priority: float = GLOBAL_ASSIGNMENT_COUNT_PRIORITY
+    # Solver objective mode. "cost" preserves the existing margin/energy-cost
+    # behavior; "time" minimizes travel/service/completion time as an opt-in.
+    optimization_objective: str = OBJECTIVE_MODE_COST
+
+    def __post_init__(self) -> None:
+        mode = str(self.optimization_objective or OBJECTIVE_MODE_COST).lower()
+        if mode not in SUPPORTED_OBJECTIVE_MODES:
+            raise ValueError(
+                "Unsupported optimization objective "
+                f"{self.optimization_objective!r}; expected one of "
+                f"{sorted(SUPPORTED_OBJECTIVE_MODES)}"
+            )
+        object.__setattr__(self, "optimization_objective", mode)
 
     def as_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

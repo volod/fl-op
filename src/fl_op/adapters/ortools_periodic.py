@@ -7,6 +7,7 @@ reason codes. The solver internals are never modified.
 
 import logging
 import uuid
+import dataclasses
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -127,9 +128,15 @@ class OrToolsPeriodicAdapter:
 
         config.setdefault("enforcement", EnforcementPolicy.from_profile(profile))
         # Profile allocation defaults plus optional reviewed tuned overlay.
-        config["parameters"] = solver_parameters_for_profile(
+        parameters = solver_parameters_for_profile(
             profile, explicit=config.get("parameters")
         )
+        if config.get("objective"):
+            parameters = dataclasses.replace(
+                parameters,
+                optimization_objective=str(config["objective"]),
+            )
+        config["parameters"] = parameters
         # Planning time origin: the snapshot effective time, so deadlines and
         # window filters are reproducible for replayed/synthetic snapshots.
         config.setdefault("now", snapshot.effective_at)
@@ -185,9 +192,18 @@ def _build_plan(
 
     kpis = raw.kpis
     score = {
+        "optimization_objective": kpis.get("optimization_objective", "cost"),
         "total_estimated_margin_eur": kpis.get("total_estimated_margin_eur", 0.0),
         "greedy_baseline_margin_eur": kpis.get("greedy_baseline_margin_eur", 0.0),
         "solver_improvement_eur": kpis.get("solver_improvement_eur", 0.0),
+        "total_completion_time_s": kpis.get("total_completion_time_s", 0.0),
+        "avg_completion_time_s": kpis.get("avg_completion_time_s", 0.0),
+        "p95_completion_time_s": kpis.get("p95_completion_time_s", 0.0),
+        "max_completion_time_s": kpis.get("max_completion_time_s", 0.0),
+        "n_tasks_with_deadlines": kpis.get("n_tasks_with_deadlines", 0),
+        "n_on_time": kpis.get("n_on_time", 0),
+        "on_time_rate_pct": kpis.get("on_time_rate_pct", 0.0),
+        "n_late": kpis.get("n_late", 0),
         "total_fuel_l": kpis.get("total_fuel_l", 0.0),
         "total_fuel_cost_eur": kpis.get("total_fuel_cost_eur", 0.0),
         "total_energy_cost_eur": kpis.get("total_energy_cost_eur", 0.0),

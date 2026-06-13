@@ -7,12 +7,19 @@ from fl_op.solver.greedy import greedy_assign, vectorized_score
 from fl_op.solver.types import PrimeMoverRow, RelatedRow, SiteRow, TaskRow
 
 
-def _v(vid: str, lat: float = 48.5, lon: float = 32.0, power: float = 150.0) -> PrimeMoverRow:
+def _v(
+    vid: str,
+    lat: float = 48.5,
+    lon: float = 32.0,
+    power: float = 150.0,
+    travel_speed: float = 15.0,
+    fuel_consumption_rate: float = 18.0,
+) -> PrimeMoverRow:
     return PrimeMoverRow.from_canonical_dict(
         {"asset_id": vid, "asset_type": "TRACTOR", "rated_power": str(power),
-         "fuel_tank_volume": "400", "fuel_consumption_rate": "18",
+         "fuel_tank_volume": "400", "fuel_consumption_rate": str(fuel_consumption_rate),
          "lat": str(lat), "lon": str(lon),
-         "home_depot_ref": "d0", "travel_speed": "15"})
+         "home_depot_ref": "d0", "travel_speed": str(travel_speed)})
 
 
 def _i(iid: str, power: float = 100.0) -> RelatedRow:
@@ -74,6 +81,31 @@ class TestVectorizedScore:
         # First pair should be v_near (idx 0) with higher score
         best_v_idx = pairs[0][1]
         assert best_v_idx == 0  # v_near has lower repositioning cost
+
+    def test_time_objective_scores_faster_vehicle_higher(self):
+        vehicles = [
+            _v("v_slow", lat=48.5, lon=32.0, travel_speed=10.0),
+            _v("v_fast", lat=48.5, lon=32.0, travel_speed=80.0),
+        ]
+        implements = [_i("i0")]
+        orders = [_o("o0")]
+        fields = [_f("f0", 49.5, 32.0)]
+        v_idx = {v.asset_id: i for i, v in enumerate(vehicles)}
+        i_idx = {im.asset_id: i for i, im in enumerate(implements)}
+        feasible = {"o0": [(0, 0), (1, 0)]}
+
+        scored = vectorized_score(
+            orders,
+            vehicles,
+            implements,
+            fields,
+            feasible,
+            v_idx,
+            i_idx,
+            optimization_objective="time",
+        )
+
+        assert scored["o0"][0][1] == 1
 
 
 class TestGreedyAssign:

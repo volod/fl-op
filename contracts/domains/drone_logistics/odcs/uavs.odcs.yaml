@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: uavs
-version: 1.0.0
+version: 1.1.0
 status: active
 name: UAV Fleet
 domain: drone-logistics
