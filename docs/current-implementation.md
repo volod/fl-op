@@ -20,9 +20,31 @@ the system survives the gap between its entity model and the physical world see
 3. **Engine** (`src/fl_op/{snapshot,solver,adapters}`) - consumes canonical
    entities only; no dependency on any domain model layer.
 
-Three domain packs exist today and are runnable end to end with registered
-contracts, data generators, and profiles: agricultural custom services,
-construction earthworks, and roadside infrastructure. The roadside pack is
+Four domain packs exist today and are runnable end to end with registered
+contracts, data generators, and profiles: drone logistics, agricultural custom
+services, construction earthworks, and roadside infrastructure. Drone logistics
+is the default domain. It models autonomous last-mile delivery for
+manufacturers, restaurants, and online stores with mixed uncrewed ground
+vehicles (`UGV`) and uncrewed aerial vehicles (`UAV`), payload modules,
+operators, logistics hubs, delivery points, road/air travel links, weather,
+restricted zones, explicit battery kWh capacity/use, electricity cost-rate
+rows, and compatibility fuel-equivalent fields for older integrations. Drone
+datasets also write `drone-scenarios.json` and `scenario-events.jsonl`; drone
+scenarios cover heavy manufacturer deliveries, urgent restaurant meals,
+ordinary online-store parcels, bad-weather periods, no-fly activation,
+road-only destinations, UAV speed wins, UGV feasibility wins, hub energy
+scarcity, and asset outage events. Drone plans include
+`score.drone_logistics_kpis`: fill rate, on-time rate, delivery margin, mode
+split, UGV/UAV utilization, support-team utilization, unassigned reasons,
+energy or fuel-equivalent usage, rolling churn, weather-blocked UAV tasks,
+and no-fly exclusions. Checked-in drone tuning defaults live in
+`contracts/domains/drone_logistics/tuning.yaml`; they cover UAV weather
+thresholds, UGV road-speed buckets, delivery/drop penalties, customer-class
+deadline penalties, UGV/UAV fleet mix, payload capacity classes, energy cost
+rates, cluster-size limits, LNS budgets, and rolling instability penalties.
+Drone rolling replay scenarios exercise `task.started`, `asset.unavailable`,
+weather degradation, no-fly activation, hub inventory or energy shortage,
+urgent order insertion, and customer cancellation. The roadside pack is
 monitoring-driven: service vehicles, service kits, and technicians dispatch
 `EQUIPMENT_SERVICE` visits derived from inspection findings about stationary
 signage and sensor assets along road segments.
@@ -30,13 +52,15 @@ The construction pack is earthworks-native: volume-shaped jobs (excavation,
 trenching, hauling) carry m3 quantities and volume-moving attachments declare
 m3-per-hour work rates, so durations come from the rate, not an area proxy.
 By default one domain is active per run: registry.yaml `activeDomain`,
-overridable with `ACTIVE_DOMAIN=construction` or `ACTIVE_DOMAIN=roadside`.
+currently `drone_logistics`, overridable with `ACTIVE_DOMAIN=agricultural`,
+`ACTIVE_DOMAIN=construction`, or `ACTIVE_DOMAIN=roadside`.
 Shared-fleet runs can select several packs with
 `ACTIVE_DOMAINS=agricultural,construction` or by passing adapter config
 `domains=[...]`; the snapshot and solver projection then use the union of the
 selected domains' canonical bindings. The `generate-data` command's `--domain`
-option resolves the generator callable declared by that domain's registry
-entry, and profile input contract refs resolve inside the active domain
+option defaults to the registry active domain and resolves the generator
+callable declared by that domain's registry entry. Profile input contract refs
+resolve inside the active domain
 (`operators` can mean construction operators in the construction profile).
 Solver inputs resolve their binding tables by canonical entity and asset role,
 never by contract id, so switching domains or unioning selected domains needs
@@ -47,8 +71,9 @@ still supplies one optimization profile.
 
 `fl-op generate-data` writes one timestamped dataset under
 `$DATA_DIR/generate-data/<timestamp>/` (Avro by default; CSV/Parquet via
-`--format`). `metadata.json` records the chosen format so downstream commands use
-the right codec.
+`--format`). `metadata.json` records the chosen format and generated domain so
+downstream commands use the right codec and, when no domain override is present,
+build snapshots with the matching mapping/profile.
 
 Physical schemas (Avro/Protobuf/Elasticsearch/Parquet) are generated from the
 physical ODCS contracts into `contracts/generated/` (gitignored). Generated
@@ -144,9 +169,9 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    intersections, or restriction windows covering every admissible start
    (`RESTRICTED_ZONE`, `solver/restrictions.py`) -- and, transitively,
    dependents of any excluded predecessor
-   (`PREDECESSOR_UNSERVED`). Fuel and material prices are resolved from the
-   snapshot's cost-rate entities (`solver/cost_rates.py`), falling back to
-   the engine cost constants for unpriced resources.
+   (`PREDECESSOR_UNSERVED`). Fuel, electricity, and material prices are
+   resolved from the snapshot's cost-rate entities (`solver/cost_rates.py`),
+   falling back to the engine cost constants for unpriced resources.
    Geometric restrictions are a pre-solve exclusion: a task's site polygon
    (or centroid when the site has no polygon) is tested against other
    locations whose polygon declares the task's operation as prohibited.
@@ -157,16 +182,26 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
 3. Filter candidates per task by operation type. The deterministic
    operation-filtered candidate table is cached under
    `$DATA_DIR/cache/preprocessing/candidate-filter`, keyed by the canonical
-   task/fleet rows and the compatibility-matrix digest.
+   task/fleet rows and the compatibility-matrix digest. Prime movers may also
+   declare `compatible-operations`; when present, the pair is feasible only if
+   both the prime mover and related equipment support the task operation. This
+   is what keeps `UGV_DELIVERY` on UGVs and `UAV_DELIVERY` on UAVs, while
+   older domains whose prime movers do not declare operation compatibility keep
+   their previous behavior.
 4. Cluster tasks by nearest depot; split large groups. Cluster specs are
    cached under `$DATA_DIR/cache/preprocessing/cluster-specs`, keyed by the
-   canonical task/site/depot rows, target cluster size, and travel lookup.
+   canonical task/site/depot rows, target cluster size, travel lookup, and
+   prime-mover operation-compatibility sets.
    Depot affinity uses
-   network travel times where the travel-link graph connects the pair
+   operation-mode network travel times where the travel-link graph connects the pair
    (haversine otherwise), so a field whose road access favors a farther
-   depot clusters with that depot. Clustering is
-   chain-aware: tasks linked by `depends-on` precedence stay in one cluster
-   so their ordering can be enforced in-model.
+   depot clusters with that depot. Clustering is chain-aware: tasks linked by
+   `depends-on` precedence stay in one cluster so their ordering can be
+   enforced in-model. Tasks with the same `alternative_group_ref` also stay
+   together; if prime movers declare operation compatibility, single-operation
+   units are split by operation and multi-operation alternative units are kept
+   standalone so the routing model can choose one mode for that delivery
+   without mixing incompatible vehicle classes.
 5. Pre-allocate prime movers, related equipment, and operators with a small
    CP-SAT global assignment model (`solver/allocation/global_model.py`): all
    clusters are decided at once, maximizing allocated bundles first and
@@ -196,10 +231,16 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    canonical `MaterialReservation` rows on the plan; assignments reference
    their reservation ids. Rolling revisions re-publish the reservations of
    frozen/carried tasks so each revision is self-contained.
-7. Build a greedy margin-based warm start. Repositioning hours use the
-   network shortest path from the vehicle's home depot to the field where
-   one exists; the straight-line estimate from the vehicle's current
-   position remains the fallback.
+7. Build a greedy warm start. In the default `cost` objective, the score is
+   gross margin minus repositioning cost. In the opt-in `time` objective, the
+   score is estimated arrival plus service duration, inverted so faster
+   bundles rank first; the shared penalty-per-day urgency term still helps
+   high-penalty work win scarce resources during global pre-allocation.
+   Repositioning hours use the vehicle-mode network shortest path from the
+   vehicle's home depot to the field where one exists; the straight-line
+   estimate from the vehicle's current position remains the fallback. A UGV
+   uses road-mode links, a UAV uses air-mode links, and legacy links without a
+   mode behave as `any`.
 8. Solve each cluster as an OR-Tools routing problem in a spawned process
    pool. Auto pool sizing is memory-aware: the worker count is bounded by
    CPUs and by how many estimated worker footprints (base footprint plus the
@@ -210,13 +251,24 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    auto-sizing estimates. Arc travel times come from the travel
    network: the lookup is the all-pairs shortest-path closure over the
    directed travel-link graph (Dijkstra per source, skipped past
-   `TRAVEL_NETWORK_MAX_COMPOSE_NODES`), with a reverse-direction and
-   haversine fallback for pairs without any network path
-   (`solver/travel_time.py`). Arcs are priced per vehicle as travel fuel
-   cost (burn rate x the resolved fuel price) in the same objective currency
-   as the drop penalties (1 EUR = 600 penalty seconds), so a fuel-efficient
-   machine wins time-equal legs and dropping an order is weighed against the
-   money cost of serving it. Task
+   `TRAVEL_NETWORK_MAX_COMPOSE_NODES`) and is indexed by `networkMode`
+   (`road`, `air`, or `any`), with a reverse-direction and haversine fallback
+   for pairs without any network path (`solver/travel_time.py`). Per-vehicle
+   time matrices keep road and air travel isolated. The selected objective is
+   `SolverParameters.optimization_objective`, exposed by `plan periodic`,
+   `plan rolling`, and `demo` as `--objective cost|time`; `cost` is the
+   default. Cost mode prices arcs per vehicle as travel energy cost
+   (consumption rate x the resolved resource price) in the same objective
+   currency as the drop penalties (1 EUR = 600 penalty seconds), so an
+   energy-efficient machine wins time-equal legs and dropping an order is
+   weighed against the money cost of serving it. Time mode prices arcs as
+   travel plus service seconds and adds soft cumulative-time costs on task
+   nodes, so served tasks are pulled earlier without changing the hard
+   deadline/window/drop-disjunction mechanics. Each
+   task or pickup node is constrained to routing
+   vehicles whose prime mover and related equipment can serve the task's
+   operation, preventing an aerial bundle from serving a ground variant or the
+   reverse. Task
    starts are constrained into their admissible intervals: workable windows
    minus one shared blocked-interval set (location restriction windows plus
    the task's non-compliant weather windows). Blocked intervals carry
@@ -243,7 +295,12 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    (`DEPOT_RELOAD_ENABLED=0` restores single-trip semantics). A task
    declaring `pickup-location` becomes a paired pickup-and-delivery: same
    vehicle, pickup before the task, served or dropped together, with the
-   load on board only between the pair. With `CLUSTER_LNS_ENABLED=1`,
+   load on board only between the pair. Tasks with the same
+   `alternative_group_ref` form a grouped disjunction with max cardinality one:
+   at most one UGV/UAV delivery variant is served, and if one variant is served
+   sibling failures are suppressed in the published unassigned list. If all
+   variants fail, the unassigned record is keyed by the real delivery group.
+   With `CLUSTER_LNS_ENABLED=1`,
    clusters whose total lateness penalty reaches
    `CLUSTER_LNS_MIN_PENALTY_EUR_PER_DAY` get a second improvement solve from
    the first solution (guided local search plus path/inactive LNS operators)
@@ -253,17 +310,23 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    (`$DATA_DIR/cache/solver-feedback/lns-budget.json`) within configured
    min/max multipliers. The first solution is kept unless strictly improved.
 9. Aggregate dispatch packages, canonical reason codes, KPIs (priced with the
-   resolved cost rates), and reports. Each dispatch package's fuel estimate
-   covers the operation plus the inbound travel leg, and its
-   `estimated_margin_eur` is the order revenue net of fuel and material at
-   the resolved prices (`ResourcePrices`), so per-dispatch margins and KPI
-   aggregates are priced from the same cost-rate data. A task whose predecessor
+   resolved cost rates), and reports. Each dispatch package's energy estimate
+   covers the operation plus the inbound travel leg, carries explicit resource
+   type and unit fields, and its `estimated_margin_eur` is the order revenue
+   net of energy and material at the resolved prices (`ResourcePrices`), so
+   per-dispatch margins and KPI aggregates are priced from the same cost-rate
+   data. A task whose predecessor
    went unserved in the solve is withdrawn post-solve
    (`PREDECESSOR_UNSERVED`), so no plan dispatches work whose precondition was
    dropped. Every cluster solve yields a machine-readable telemetry record
    (`solver/solve_telemetry.py`: status, wall time, OR-Tools search status,
    time-limit flag, objective values, LNS budget/delta, worker RSS); batch
    runs write `solve_telemetry.json` and plan scores carry the summary.
+   Plan scores also record the selected `optimization_objective` plus
+   completion-time KPIs (`total_completion_time_s`,
+   `avg_completion_time_s`, `p95_completion_time_s`,
+   `max_completion_time_s`) and deadline adherence (`on_time_rate_pct`,
+   `n_tasks_with_deadlines`, `n_on_time`, `n_late`).
    Adapter-normalized plans also carry per-task attribution maps in
    `plan.score`: assigned tasks record their cluster status/objectives,
    LNS delta, time-limit state, estimated margin, and same-cluster unserved
@@ -299,8 +362,8 @@ domain-specific column names. Supported triggers:
 - `order.created` / `order.cancelled`;
 - `asset.unavailable`: removes any asset by id -- vehicles, implements,
   operators, and stationary equipment share one path;
-- `inventory.adjusted`: partial merge into a location row (depot fuel and
-  material balances) without touching its other fields;
+- `inventory.adjusted`: partial merge into a location row (depot fuel, energy,
+  and material balances) without touching its other fields;
 - `forecast.updated`: with a payload, upserts the forecast window (weather
   invalidation by data); without one, a pure replan trigger;
 - `observation.recorded`: streamed sensor readings upserted by reading id, so
@@ -431,22 +494,29 @@ a rolling replan. Each check writes a `freshness.json` artifact under
 
 - `fl-op tune` (`tuning/optuna_tuner.py`) runs a seeded Optuna TPE study over
   the tunable solver parameters (`solver/parameters.py:SolverParameters`:
-  cluster target size, greedy score weights, per-cluster time limit) against
-  recorded KPI baselines built at the trial-scale time budget. It can average
-  the objective across additional datasets (`--extra-data`) and, by default,
-  records a multi-objective study: maximize business objective (margin minus
+  cluster target size, greedy score weights, per-cluster time limit, LNS
+  budget, and rolling change penalty) against recorded KPI baselines built at
+  the trial-scale time budget. Additional datasets (`--extra-data`) are scored
+  with workload weights derived from task counts, and, by default, the study
+  records a multi-objective frontier: maximize business objective (margin minus
   unassigned penalty exposure), minimize plan-instability penalty, and
   minimize wall time. Parallel workers (`--jobs` or TUNE_N_JOBS) use Optuna
   RDB storage; without an explicit URI, `n_jobs > 1` creates
   `study.db` in the tuning run directory. Artifacts: `baseline.json`,
   `trials.json`, `best_params.json` under `$DATA_DIR/tune/<ts>/`, including
-  per-dataset case scores and the Pareto frontier.
+  per-dataset case scores, workload-weight contributions, and the Pareto
+  frontier.
 - `fl-op tune-promote --best-params <run>/best_params.json`
   (`tuning/solver_profile.py`) writes the reviewed tuned solver profile
-  overlay `$DATA_DIR/tune/solver-parameters-tuned.json`. Periodic and rolling
-  adapters layer that artifact onto the active profile's allocation policy
-  when no explicit `SolverParameters` were passed, so deleting the artifact
-  reverts to the checked-in profile defaults.
+  overlay. Without scope flags it writes the legacy shared artifact
+  `$DATA_DIR/tune/solver-parameters-tuned.json`. With `--domain`, `--profile`,
+  and `--adapter-version`, it writes a scoped artifact under
+  `$DATA_DIR/tune/<domain>/<profile>/<adapter-version>/solver-parameters-tuned.json`
+  and records optional `--expires-at` metadata. Periodic and rolling adapters
+  layer matching scoped artifacts onto the active profile's allocation policy
+  when no explicit `SolverParameters` were passed. Drone logistics reads only
+  its checked-in tuning file and matching scoped overlays, so the shared legacy
+  overlay does not silently alter drone behavior.
 - Opt-in MLflow logging (`tuning/mlflow_logger.py`, MLFLOW_LOGGING_ENABLED):
   tuning trials, the baseline, periodic plans, and the final revision of
   each rolling run are logged with KPIs, version dimensions, and the
@@ -460,14 +530,15 @@ a rolling replan. Each check writes a `freshness.json` artifact under
   and plan contracts) has a committed reviewed snapshot under
   `contracts/evolution/` (`contracts/evolution.py`). New freezes write the
   latest schema at the top level and retain a `history` array, so
-  `evolution-check` validates every adjacent reviewed migration pair plus the
-  current contract. The version-bump policy is unchanged: added optional
+  `evolution-check` validates every adjacent reviewed schema migration pair
+  plus the current contract. The version-bump policy is unchanged: added optional
   fields require at least a minor bump; removals, type changes, requiredness
   changes, and added required fields require a major bump; any change without a
   bump fails. Registered domain snapshots also carry the reviewed
-  `optimizationMetadataHash`, so mapping-semantic drift is gated in the same
-  review flow as structural schema evolution. Flat pre-history baseline files
-  remain readable as a one-entry history.
+  `optimizationMetadataHash`; current-vs-latest metadata drift is gated in the
+  same review flow as structural schema evolution, while already-reviewed
+  historical metadata hashes remain audit records. Flat pre-history baseline
+  files remain readable as a one-entry history.
 - CI (`.github/workflows/ci.yml`, `make ci`) regenerates all physical
   schemas from ODCS before any validation, then runs the suite validation,
   domain validations, the evolution gate, and the tests.

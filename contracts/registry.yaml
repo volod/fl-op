@@ -1,8 +1,13 @@
 extensionVersion: 0.1.0
 canonicalModel: canonical/model.yaml
 canonicalModelRef: urn:xopt:model:canonical:0.1.0
-activeDomain: agricultural
+activeDomain: drone_logistics
 domains:
+  drone_logistics:
+    root: domains/drone_logistics
+    profile: drone-logistics
+    semanticModelRef: urn:xopt:model:drone-logistics:0.1.0
+    generator: fl_op.data.drone_logistics_entities:generate_drone_logistics_domain
   agricultural:
     root: domains/agricultural
     profile: agricultural-custom-services
@@ -28,6 +33,9 @@ domains:
     - domains/roadside/mappings/maintenance-jobs.mapping.yaml
     - domains/roadside/mappings/inspection-rounds.mapping.yaml
 profiles:
+  drone-logistics:
+    path: domains/drone_logistics/profile.yaml
+    version: 0.1.0
   agricultural-custom-services:
     path: domains/agricultural/profile.yaml
     version: 0.1.0
@@ -38,6 +46,105 @@ profiles:
     path: domains/roadside/profile.yaml
     version: 0.1.0
 contracts:
+  drone-ugvs:
+    id: ugvs
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/ugvs.odcs.yaml
+    mapping: domains/drone_logistics/mappings/ugvs.mapping.yaml
+    sourceFile: ugvs.csv
+    sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: 18d5fcc6e6ef355cd10437322a25b122388a1f0e3e3a83a87932b9c4d2a15792
+  drone-uavs:
+    id: uavs
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/uavs.odcs.yaml
+    mapping: domains/drone_logistics/mappings/uavs.mapping.yaml
+    sourceFile: uavs.csv
+    sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: 96c3e475f76db51e9414d98bd50f2e5ec3d5f4485a3fa3c75c63ec39229a8660
+  drone-payload-modules:
+    id: payload-modules
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/payload-modules.odcs.yaml
+    mapping: domains/drone_logistics/mappings/payload-modules.mapping.yaml
+    sourceFile: payload-modules.csv
+    sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: ec2f7b51e94d78f00517f313ee151b89e2d5d880ae1b4c160212c94a213d0e2e
+  drone-operators:
+    id: drone-operators
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/drone-operators.odcs.yaml
+    mapping: domains/drone_logistics/mappings/drone-operators.mapping.yaml
+    sourceFile: drone-operators.csv
+    sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: 878cd9746213493d323c6c02118baf7fbad532a91426dd4f758a10401019c364
+  drone-logistics-hubs:
+    id: logistics-hubs
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/logistics-hubs.odcs.yaml
+    mapping: domains/drone_logistics/mappings/logistics-hubs.mapping.yaml
+    sourceFile: logistics-hubs.csv
+    sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: 40a129bbbf321594d4e6f8b22fb0dc4c609d7bcffc0fae3e590e324eb4fb9295
+  drone-delivery-locations:
+    id: delivery-locations
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/delivery-locations.odcs.yaml
+    mapping: domains/drone_logistics/mappings/delivery-locations.mapping.yaml
+    sourceFile: delivery-locations.csv
+    sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: cfe92e9b6db9e91fe1a22c075811a2679bd0c5ad2f34534c3c2dad43c727cab5
+  drone-restricted-zones:
+    id: restricted-zones
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/restricted-zones.odcs.yaml
+    mapping: domains/drone_logistics/mappings/restricted-zones.mapping.yaml
+    sourceFile: restricted-zones.csv
+    sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: ab7e524600412f8a9f08b48209ea1d04cae63650f0e92fda8ac5dcb2a9675ec2
+  drone-delivery-orders:
+    id: delivery-orders
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/delivery-orders.odcs.yaml
+    mapping: domains/drone_logistics/mappings/delivery-orders.mapping.yaml
+    sourceFile: delivery-orders.csv
+    sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: 410536a193c57d654b0ef73a72139592c36e3c777478d5421bf2d3e692dc9a0f
+  drone-travel-links:
+    id: travel-links
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/travel-links.odcs.yaml
+    mapping: domains/drone_logistics/mappings/travel-links.mapping.yaml
+    sourceFile: travel-links.csv
+    sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: 28d8cd8d9a16304d4eb4b06a18a663a7505a2044fa1e2b217605809144c13d2c
+  drone-weather:
+    id: weather
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/weather.odcs.yaml
+    mapping: domains/drone_logistics/mappings/weather.mapping.yaml
+    sourceFile: weather.json
+    sourceFormat: json
+    fingerprints:
+      optimizationMetadataHash: fae15251a5d6fe52401f8d79605d80a5c6971a1a5b3529568bb75122dfcc9825
+  drone-prices:
+    id: prices
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/prices.odcs.yaml
+    mapping: domains/drone_logistics/mappings/prices.mapping.yaml
+    sourceFile: prices.csv
+    sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: 8cc3bad338085bb537cc1cf9e28e4d65d4b725daa5aea67f231f9d6cb591047d
   vehicles:
     domain: agricultural
     odcs: domains/agricultural/odcs/vehicles.odcs.yaml
@@ -226,6 +333,8 @@ contracts:
     mapping: domains/roadside/mappings/service-vehicles.mapping.yaml
     sourceFile: service-vehicles.csv
     sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: 17bb7052e43caa858d4aeee63847b1796ee49cdad36ad4168fbf7c630a2a0103
   roadside-service-kits:
     id: service-kits
     domain: roadside
@@ -233,6 +342,8 @@ contracts:
     mapping: domains/roadside/mappings/service-kits.mapping.yaml
     sourceFile: service-kits.csv
     sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: 9114985ec914d56f86136b867b7f8cee429418d814cba87073a071c42519e71d
   roadside-technicians:
     id: technicians
     domain: roadside
@@ -240,6 +351,8 @@ contracts:
     mapping: domains/roadside/mappings/technicians.mapping.yaml
     sourceFile: technicians.csv
     sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: 29fb93be2437d0a6e1b977a749ebf4047e3078a957e117f06f2054a7304f2496
   roadside-road-segments:
     id: road-segments
     domain: roadside
@@ -247,6 +360,8 @@ contracts:
     mapping: domains/roadside/mappings/road-segments.mapping.yaml
     sourceFile: road-segments.csv
     sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: 9ef74a0dca9d64b569d25d8f18a7a2d12e383ec11c3aaacd52941b2b2235e8a0
   roadside-service-depots:
     id: service-depots
     domain: roadside
@@ -254,6 +369,8 @@ contracts:
     mapping: domains/roadside/mappings/service-depots.mapping.yaml
     sourceFile: service-depots.csv
     sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: b2df9ddc7d7a9b7259f56216186fe69efd4cdca2f5f2b54ebd68cc64ede85046
   roadside-maintenance-jobs:
     id: maintenance-jobs
     domain: roadside
@@ -261,6 +378,8 @@ contracts:
     mapping: domains/roadside/mappings/maintenance-jobs.mapping.yaml
     sourceFile: maintenance-jobs.csv
     sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: 605705037cf4a9efe63f1ef9dc0c9ed1059c08782a1307d803fff86019063a19
   roadside-signage:
     id: signage
     domain: roadside
@@ -268,6 +387,8 @@ contracts:
     mapping: domains/roadside/mappings/signage.mapping.yaml
     sourceFile: signage.csv
     sourceFormat: csv
+    fingerprints:
+      optimizationMetadataHash: 3948257a2f5893876caf818d619bb831f0a58cc7d81e0ff6568f66e14f0471da
   roadside-inspection-rounds:
     id: inspection-rounds
     domain: roadside
@@ -275,3 +396,5 @@ contracts:
     mapping: domains/roadside/mappings/inspection-rounds.mapping.yaml
     sourceFile: inspection-rounds.jsonl
     sourceFormat: jsonl
+    fingerprints:
+      optimizationMetadataHash: 6e835bc93432fa5942caf12a586e4241b12f4b5fd49dddc75218500f82ba1a14

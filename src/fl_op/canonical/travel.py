@@ -20,4 +20,5 @@ class TravelLink(BaseModel):
     to_location_ref: str
     travel_time_s: float
     distance_km: Optional[float] = None
+    network_mode: str = "any"
     source_ref: str = ""

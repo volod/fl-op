@@ -32,6 +32,7 @@ def solve_cluster_inner(
     now_epoch: Optional[int] = None,
     weather_blocked: Optional[BlockedWindows] = None,
     resource_prices: Optional[ResourcePrices] = None,
+    optimization_objective: str = "cost",
 ) -> tuple[list[dict], list[dict], ClusterSolveTelemetry]:
     """Prepare and solve one cluster.
 
@@ -69,7 +70,10 @@ def solve_cluster_inner(
         solve_time_limit_s,
         now_epoch,
         resource_prices,
+        optimization_objective,
     )
+    infeasible_orders = [*context.pre_infeasible, *infeasible_orders]
+    telemetry["n_unserved"] = len(infeasible_orders)
     logger.debug(
         "Cluster %s: %d dispatched, %d infeasible",
         context.cluster_id,

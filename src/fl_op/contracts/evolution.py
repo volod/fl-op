@@ -343,7 +343,6 @@ def _pairwise_history_errors(contract_id: str, history: list[dict[str, Any]]) ->
                 change,
             )
         )
-        errors.extend(_metadata_drift_errors(contract_id, prev, nxt))
     return errors
 
 

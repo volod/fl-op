@@ -82,6 +82,7 @@ def build_task(table: BindingTable, acc: dict[str, Any]) -> Task:
     return Task(
         task_id=str(acc["taskId"]),
         order_id=str(acc.get("orderId", "")),
+        alternative_group_ref=str(acc.get("alternativeGroupRef", "")),
         operation_type=str(acc["operationType"]),
         location_ref=str(acc["locationRef"]),
         area_ha=float(acc["areaHa"]) if "areaHa" in acc else None,
@@ -197,6 +198,7 @@ def build_travel_link(table: BindingTable, acc: dict[str, Any]) -> TravelLink:
         to_location_ref=str(acc["toLocationRef"]),
         travel_time_s=float(acc["travelTimeS"]),
         distance_km=float(acc["distanceKm"]) if "distanceKm" in acc else None,
+        network_mode=str(acc.get("networkMode", "any") or "any"),
         source_ref=f"{table.contract_id}:{acc['linkId']}",
     )
 

@@ -1,0 +1,17 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+metadata:
+  domain: drone_logistics
+  sourceContract: travel-links
+  canonicalEntity: travel-link
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: multimodalNetwork
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+fieldMappings:
+  - {sourceField: link_id, binding: travelLink.linkId, semanticTerm: urn:xopt:identity:travel-link-id, planningUse: [identity]}
+  - {sourceField: from_id, binding: travelLink.fromLocationRef, semanticTerm: urn:xopt:relationship:from-location, planningUse: [routing], missingValuePolicy: reject-for-planning}
+  - {sourceField: to_id, binding: travelLink.toLocationRef, semanticTerm: urn:xopt:relationship:to-location, planningUse: [routing], missingValuePolicy: reject-for-planning}
+  - {sourceField: travel_time_s, binding: travelLink.travelTimeS, semanticTerm: urn:xopt:travel:travel-time, canonicalUnit: s, quantityKind: duration, planningUse: [routing], missingValuePolicy: reject-for-planning}
+  - {sourceField: distance_km, binding: travelLink.distanceKm, semanticTerm: urn:xopt:travel:distance, canonicalUnit: km, quantityKind: length, planningUse: [cost]}
+  - {sourceField: network_mode, binding: travelLink.networkMode, semanticTerm: urn:xopt:travel:network-mode, planningUse: [routing]}

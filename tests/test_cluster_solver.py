@@ -191,6 +191,25 @@ class TestSolverIntegration:
         all_ids = {d["task_id"] for d in dispatch} | {i["task_id"] for i in infeasible}
         assert "o0" in all_ids
 
+    def test_time_objective_solves_cluster(self):
+        cd = _cluster(task_ids=["o0"], allocated={"v0": ["i0"]})
+        dispatch, infeasible, telemetry = solve_cluster_instrumented(
+            cd,
+            [_order("o0")],
+            [_vehicle("v0")],
+            [_implement("i0")],
+            [_field("f0")],
+            [_depot()],
+            {},
+            {"v0": 0},
+            {"i0": 0},
+            optimization_objective="time",
+        )
+        assert {d["task_id"] for d in dispatch} | {
+            i["task_id"] for i in infeasible
+        } == {"o0"}
+        assert telemetry["optimization_objective"] == "time"
+
     def test_dispatch_items_have_required_fields(self):
         cd = _cluster(task_ids=["o0"], allocated={"v0": ["i0"]})
         dispatch, _ = solve_cluster(

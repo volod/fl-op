@@ -1,16 +1,164 @@
 {
   "contractId": "roadside-service-vehicles",
-  "odcsId": "service-vehicles",
-  "version": "1.0.0",
   "fields": {
-    "vehicle_id": {"logicalType": "string", "physicalType": "string", "required": true},
-    "vehicle_class": {"logicalType": "string", "physicalType": "string", "required": true},
-    "engine_power_kw": {"logicalType": "number", "physicalType": "double", "required": true},
-    "tank_litres": {"logicalType": "number", "physicalType": "double", "required": false},
-    "burn_l_per_h": {"logicalType": "number", "physicalType": "double", "required": false},
-    "current_lat": {"logicalType": "number", "physicalType": "double", "required": true},
-    "current_lon": {"logicalType": "number", "physicalType": "double", "required": true},
-    "depot_id": {"logicalType": "string", "physicalType": "string", "required": true},
-    "transit_speed_kmh": {"logicalType": "number", "physicalType": "double", "required": false}
-  }
+    "burn_l_per_h": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "current_lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "current_lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "depot_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "engine_power_kw": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "tank_litres": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "transit_speed_kmh": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "vehicle_class": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "vehicle_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "17bb7052e43caa858d4aeee63847b1796ee49cdad36ad4168fbf7c630a2a0103"
+  },
+  "history": [
+    {
+      "contractId": "roadside-service-vehicles",
+      "fields": {
+        "burn_l_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "current_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "engine_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "tank_litres": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "transit_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "vehicle_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "vehicle_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "odcsId": "service-vehicles",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "roadside-service-vehicles",
+      "fields": {
+        "burn_l_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "current_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "engine_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "tank_litres": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "transit_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "vehicle_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "vehicle_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "17bb7052e43caa858d4aeee63847b1796ee49cdad36ad4168fbf7c630a2a0103"
+      },
+      "odcsId": "service-vehicles",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "service-vehicles",
+  "version": "1.0.0"
 }

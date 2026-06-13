@@ -1,0 +1,102 @@
+{
+  "contractId": "drone-weather",
+  "fields": {
+    "forecast_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "rain_mm_per_h": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "soil_moisture_pct": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "valid_from": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "valid_to": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "wind_ms": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "fae15251a5d6fe52401f8d79605d80a5c6971a1a5b3529568bb75122dfcc9825"
+  },
+  "history": [
+    {
+      "contractId": "drone-weather",
+      "fields": {
+        "forecast_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "rain_mm_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "soil_moisture_pct": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "valid_from": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "valid_to": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "wind_ms": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "fae15251a5d6fe52401f8d79605d80a5c6971a1a5b3529568bb75122dfcc9825"
+      },
+      "odcsId": "weather",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "weather",
+  "version": "1.0.0"
+}

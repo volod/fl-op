@@ -1,5 +1,7 @@
 """T06-T10: Pre-filter + clustering tests (canonical solver rows)."""
 
+import numpy as np
+
 from fl_op.solver.feasibility import build_compat_matrix
 from fl_op.solver.preprocessing import (
     build_cluster_specs,
@@ -89,6 +91,35 @@ class TestPowerFilter:
         result = filter_feasible_vehicle_implement_pairs(orders, vraw, iraw, compat, v_idx, i_idx)
         assert result["o0"] == []
 
+    def test_prime_mover_operation_compatibility_filters_modes(self):
+        ugv = PrimeMoverRow.from_canonical_dict({
+            "asset_id": "ugv",
+            "asset_type": "UGV",
+            "rated_power": "150",
+            "compatible_operations": ["UGV_DELIVERY"],
+        })
+        uav = PrimeMoverRow.from_canonical_dict({
+            "asset_id": "uav",
+            "asset_type": "UAV",
+            "rated_power": "150",
+            "compatible_operations": ["UAV_DELIVERY"],
+        })
+        module = RelatedRow.from_canonical_dict({
+            "asset_id": "module",
+            "compatible_operations": ["UAV_DELIVERY"],
+            "required_power": "10",
+        })
+        compat, _ = build_compat_matrix([ugv, uav], [module])
+        result = filter_feasible_vehicle_implement_pairs(
+            [_order("o-uav", "UAV_DELIVERY")],
+            [ugv, uav],
+            [module],
+            compat,
+            {"ugv": 0, "uav": 1},
+            {"module": 0},
+        )
+        assert result["o-uav"] == [(1, 0)]
+
     def test_operation_type_mismatch_excluded(self):
         vraw = [_vehicle("v0", 200)]
         iraw = [_implement("i0", 100, op="TILLAGE")]
@@ -117,3 +148,29 @@ class TestDepotAffinityCluster:
         orders = [_order(f"o{i}", fid=f"f{i}") for i in range(5)]
         assignment = cluster_orders_by_depot(orders, fields, depots)
         assert sum(len(v) for v in assignment.values()) == 5
+
+    def test_alternative_delivery_variants_stay_in_one_cluster(self):
+        depots = [_depot("d0", 48.5, 32.0)]
+        fields = [_field("f0", 48.5, 32.0)]
+        orders = [
+            TaskRow.from_canonical_dict({
+                "task_id": "delivery_1-UGV",
+                "alternative_group_ref": "delivery_1",
+                "operation_type": "UGV_DELIVERY",
+                "location_ref": "f0",
+                "penalty_per_day": "100",
+            }),
+            TaskRow.from_canonical_dict({
+                "task_id": "delivery_1-UAV",
+                "alternative_group_ref": "delivery_1",
+                "operation_type": "UAV_DELIVERY",
+                "location_ref": "f0",
+                "penalty_per_day": "100",
+            }),
+        ]
+        clusters = build_cluster_specs(
+            orders, fields, depots, [], [], np.zeros((0, 0)),
+            {}, {}, target_size=1
+        )
+        assert len(clusters) == 1
+        assert set(clusters[0]["task_ids"]) == {"delivery_1-UGV", "delivery_1-UAV"}

@@ -27,6 +27,13 @@ def _domain_help() -> str:
     )
 
 
+def _default_domain() -> str:
+    try:
+        return FileRegistry().active_domain or "agricultural"
+    except Exception:  # noqa: BLE001 - CLI defaults should not break import
+        return "agricultural"
+
+
 @click.command("generate-data")
 @click.option(
     "--vehicles",
@@ -75,8 +82,8 @@ def _domain_help() -> str:
 )
 @click.option(
     "--domain",
-    default="agricultural",
-    show_default=True,
+    default=None,
+    show_default="registry active domain",
     help=_domain_help(),
 )
 def generate_data(
@@ -87,14 +94,15 @@ def generate_data(
     seed: int | None,
     data_path: str | None,
     fmt: str,
-    domain: str,
+    domain: str | None,
 ) -> None:
     """Generate a synthetic (or augmented real) dataset for a domain pack."""
     from fl_op.data.domain_generators import GenerationRequest, run_domain_generator
 
+    selected_domain = domain or _default_domain()
     try:
         run_domain_generator(
-            domain,
+            selected_domain,
             GenerationRequest(
                 vehicles=vehicles,
                 implements=implements,

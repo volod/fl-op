@@ -1,0 +1,29 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: drone-operators
+version: 1.0.0
+status: active
+name: Drone Operators
+domain: drone-logistics
+tenant: logistics-ops
+description:
+  purpose: Remote operators and engineering support staff.
+  usage: Operator qualification for UGV and UAV delivery clusters.
+servers: [{server: batch, type: local, format: csv, path: drone-operators.csv}]
+schema:
+  - name: droneOperators
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro: {namespace: org.example.drone.operators, recordName: DroneOperator, recordDoc: "Drone operator mapped to canonical operator."}
+          proto: {package: org.example.drone.operators, messageName: DroneOperator, syntax: proto3}
+          es: {indexName: drone-operators, dynamic: strict}
+    properties:
+      - {name: operator_id, logicalType: string, physicalType: string, required: true, description: Stable operator id., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 1}}}]}
+      - {name: full_name, logicalType: string, physicalType: string, required: false, description: Operator name., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 2}}}]}
+      - {name: shift_start_s, logicalType: integer, physicalType: int, required: true, description: Shift start seconds from midnight., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 3}}}]}
+      - {name: shift_end_s, logicalType: integer, physicalType: int, required: true, description: Shift end seconds from midnight., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 4}}}]}
+      - {name: certified_operations, logicalType: array, physicalType: string, required: true, description: Certified operation types., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 5}}}]}
+      - {name: hub_id, logicalType: string, physicalType: string, required: true, description: Home logistics hub., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 6}}}]}

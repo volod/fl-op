@@ -5,8 +5,8 @@ names (asset_id, rated_power, task_id, ...), never by domain-specific physical
 column names. This module is the single source of truth for the engine's working
 vocabulary: it reconstructs canonical rows from the snapshot's canonical objects
 (build_solver_inputs) and can translate raw physical rows into the same canonical
-shape (to_canonical_rows), so an agricultural or a construction snapshot both
-project to one domain-neutral row vocabulary.
+shape (to_canonical_rows), so any selected domain pack projects to one
+domain-neutral row vocabulary.
 
 Only entities that survived quality policy exist as canonical objects, so the
 solver sees the validated, normalized projection of the snapshot, never raw data.
@@ -58,7 +58,7 @@ ROLE_RELATED = "implement"
 ROLE_OPERATOR = "operator"
 ROLE_DEPOT = "depot"
 
-# Contract id -> canonical row section (agricultural and construction packs).
+# Contract id -> canonical row section for registered domain packs.
 _CONTRACT_SECTION: dict[str, str] = {
     "vehicles": SECTION_PRIME_MOVERS,
     "implements": SECTION_RELATED,
@@ -74,6 +74,17 @@ _CONTRACT_SECTION: dict[str, str] = {
     "sites": SECTION_SITES,
     "yards": SECTION_DEPOTS,
     "jobs": SECTION_TASKS,
+    "drone-ugvs": SECTION_PRIME_MOVERS,
+    "drone-uavs": SECTION_PRIME_MOVERS,
+    "drone-payload-modules": SECTION_RELATED,
+    "drone-operators": SECTION_OPERATORS,
+    "drone-logistics-hubs": SECTION_DEPOTS,
+    "drone-delivery-locations": SECTION_SITES,
+    "drone-restricted-zones": SECTION_SITES,
+    "drone-delivery-orders": SECTION_TASKS,
+    "drone-travel-links": SECTION_TRAVEL_LINKS,
+    "drone-weather": SECTION_FORECASTS,
+    "drone-prices": SECTION_COST_RATES,
 }
 
 # Contract id -> frozen solver-row dataclass it projects into.
@@ -92,6 +103,17 @@ _CONTRACT_ROW_CLASS: dict[str, type[_SolverRow]] = {
     "sites": SiteRow,
     "yards": DepotRow,
     "jobs": TaskRow,
+    "drone-ugvs": PrimeMoverRow,
+    "drone-uavs": PrimeMoverRow,
+    "drone-payload-modules": RelatedRow,
+    "drone-operators": OperatorRow,
+    "drone-logistics-hubs": DepotRow,
+    "drone-delivery-locations": SiteRow,
+    "drone-restricted-zones": SiteRow,
+    "drone-delivery-orders": TaskRow,
+    "drone-travel-links": TravelLinkRow,
+    "drone-weather": ForecastRow,
+    "drone-prices": CostRateRow,
 }
 
 # Binding path -> canonical solver-row key. The single source of truth for the
@@ -107,6 +129,10 @@ _CANONICAL_KEY: dict[str, str] = {
     "asset.capabilities.requiredPower": "required_power",
     "asset.capabilities.fuelTankVolume": "fuel_tank_volume",
     "asset.capabilities.fuelConsumptionRate": "fuel_consumption_rate",
+    "asset.capabilities.energyResourceType": "energy_resource_type",
+    "asset.capabilities.energyUnit": "energy_unit",
+    "asset.capabilities.energyCapacity": "energy_capacity",
+    "asset.capabilities.energyConsumptionRate": "energy_consumption_rate",
     "asset.capabilities.travelSpeed": "travel_speed",
     "asset.capabilities.workingWidth": "working_width",
     "asset.capabilities.minOperatingSpeed": "min_speed",
@@ -130,8 +156,10 @@ _CANONICAL_KEY: dict[str, str] = {
     "location.restrictionWindows": "restriction_windows",
     "location.inventory.fuel": "inventory_fuel",
     "location.inventory.fertilizer": "inventory_material",
+    "location.inventory.energy": "inventory_energy",
     "task.taskId": "task_id",
     "task.orderId": "order_ref",
+    "task.alternativeGroupRef": "alternative_group_ref",
     "task.locationRef": "location_ref",
     "task.operationType": "operation_type",
     "task.areaHa": "area",
@@ -161,6 +189,7 @@ _CANONICAL_KEY: dict[str, str] = {
     "travelLink.toLocationRef": "to_location_ref",
     "travelLink.travelTimeS": "travel_time_s",
     "travelLink.distanceKm": "distance_km",
+    "travelLink.networkMode": "network_mode",
     "costRate.costRateId": "rate_id",
     "costRate.rateType": "rate_type",
     "costRate.unitPrice": "unit_price",
@@ -257,6 +286,7 @@ def _travel_link_value(link: "TravelLink", binding: FieldBinding) -> Any:
         ("toLocationRef",): link.to_location_ref,
         ("travelTimeS",): link.travel_time_s,
         ("distanceKm",): link.distance_km,
+        ("networkMode",): link.network_mode,
     }
     return mapping.get(tuple(path))
 
@@ -330,6 +360,7 @@ def _task_value(task: "Task", binding: FieldBinding) -> Any:
     mapping = {
         ("taskId",): task.task_id,
         ("orderId",): task.order_id,
+        ("alternativeGroupRef",): task.alternative_group_ref,
         ("locationRef",): task.location_ref,
         ("operationType",): task.operation_type,
         ("areaHa",): task.area_ha,

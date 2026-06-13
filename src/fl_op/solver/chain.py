@@ -54,6 +54,61 @@ def _scored_for_cluster_tasks(
     }
 
 
+def _collapse_alternative_infeasible(
+    dispatch: list[dict[str, Any]],
+    infeasible: list[dict[str, Any]],
+    all_orders: list[Any],
+) -> list[dict[str, Any]]:
+    """Suppress sibling variant failures and report one record per failed group."""
+    group_by_task = {
+        o.task_id: str(getattr(o, "alternative_group_ref", "") or "")
+        for o in all_orders
+    }
+    members_by_group: dict[str, list[str]] = {}
+    for task_id, group in group_by_task.items():
+        if group:
+            members_by_group.setdefault(group, []).append(task_id)
+    if not members_by_group:
+        return infeasible
+
+    served_groups = {
+        group_by_task.get(str(pkg.get("task_id", "")), "")
+        for pkg in dispatch
+    }
+    served_groups.discard("")
+
+    grouped_failures: dict[str, list[dict[str, Any]]] = {}
+    collapsed: list[dict[str, Any]] = []
+    for record in infeasible:
+        task_id = str(record.get("task_id", ""))
+        group = group_by_task.get(task_id, "")
+        if not group and task_id in members_by_group:
+            group = task_id
+        if not group:
+            collapsed.append(record)
+            continue
+        if group in served_groups:
+            continue
+        grouped_failures.setdefault(group, []).append(record)
+
+    for group, records in sorted(grouped_failures.items()):
+        reasons = sorted({str(r.get("reason_code", "UNKNOWN")) for r in records})
+        variants = sorted({str(r.get("task_id", "")) for r in records})
+        first = records[0]
+        collapsed.append(
+            {
+                "task_id": group,
+                "cluster_id": first.get("cluster_id", ""),
+                "reason_code": reasons[0] if len(reasons) == 1 else "UNKNOWN",
+                "detail": (
+                    "No delivery alternative was assigned for "
+                    f"{group}: {', '.join(variants)}"
+                ),
+            }
+    )
+    return collapsed
+
+
 def run_solver_chain(
     rows: dict[str, list[Any]],
     matrix_out_dir: Optional[pathlib.Path] = None,
@@ -67,7 +122,7 @@ def run_solver_chain(
     `rows` must contain the canonical sections: prime_movers, related_equipment,
     tasks, depots, sites, operators (operators may be empty; forecasts feed
     weather enforcement; travel_links feed routing travel times; cost_rates
-    feed fuel/material pricing). Each row is a frozen solver-row dataclass
+    feed energy/material pricing). Each row is a frozen solver-row dataclass
     (PrimeMoverRow, RelatedRow, TaskRow, ...) read by canonical field name,
     never by domain-specific physical column name.
 
@@ -92,7 +147,9 @@ def run_solver_chain(
     """
     from fl_op.core.constants import (
         FERTILIZER_COST_EUR_PER_KG,
+        ELECTRICITY_COST_EUR_PER_KWH,
         FUEL_COST_EUR_PER_L,
+        RATE_TYPE_ELECTRICITY,
         RATE_TYPE_FUEL,
         RATE_TYPE_MATERIAL,
     )
@@ -140,6 +197,7 @@ def run_solver_chain(
     vehicles_raw = rows[SECTION_PRIME_MOVERS]
     implements_raw = rows[SECTION_RELATED]
     orders_raw = rows[SECTION_TASKS]
+    all_orders_initial = list(orders_raw)
     depots_raw = rows[SECTION_DEPOTS]
     fields_raw = rows[SECTION_SITES]
     operators_raw = rows.get(SECTION_OPERATORS, [])
@@ -153,6 +211,17 @@ def run_solver_chain(
     )
     material_price = resolve_unit_price(
         cost_rates_raw, RATE_TYPE_MATERIAL, now, FERTILIZER_COST_EUR_PER_KG
+    )
+    electricity_price = resolve_unit_price(
+        cost_rates_raw,
+        RATE_TYPE_ELECTRICITY,
+        now,
+        ELECTRICITY_COST_EUR_PER_KWH,
+    )
+    resource_prices = ResourcePrices(
+        fuel_eur_per_l=fuel_price,
+        material_eur_per_kg=material_price,
+        electricity_eur_per_kwh=electricity_price,
     )
 
     orders_raw, enforcement_infeasible, weather_blocked = apply_weather_filter(
@@ -184,9 +253,11 @@ def run_solver_chain(
         orders_raw, vehicles_raw, implements_raw, fields_raw,
         feasible_pairs, vehicle_index, implement_index,
         fuel_price_eur_per_l=fuel_price,
+        resource_prices=resource_prices,
         score_weight_margin=parameters.score_weight_margin,
         score_weight_reposition=parameters.score_weight_reposition,
         travel_lookup=travel_lookup,
+        optimization_objective=parameters.optimization_objective,
     )
     clusters = cached_cluster_specs(
         orders_raw, fields_raw, depots_raw, vehicles_raw, implements_raw,
@@ -224,12 +295,15 @@ def run_solver_chain(
         travel_lookup, parameters.cluster_solve_time_limit_s,
         int(now.timestamp()),
         weather_blocked=weather_blocked,
-        resource_prices=ResourcePrices(
-            fuel_eur_per_l=fuel_price, material_eur_per_kg=material_price
-        ),
+        resource_prices=resource_prices,
+        lns_time_limit_s=parameters.lns_time_limit_s,
+        optimization_objective=parameters.optimization_objective,
     )
     all_dispatch, all_infeasible = enforce_dependency_outcomes(
         all_dispatch, [*enforcement_infeasible, *all_infeasible], orders_raw
+    )
+    all_infeasible = _collapse_alternative_infeasible(
+        all_dispatch, all_infeasible, all_orders_initial
     )
     material_reservations = finalize_material_reservations(
         material_reservations, all_dispatch
@@ -238,10 +312,13 @@ def run_solver_chain(
         all_dispatch, all_infeasible, orders_raw, greedy_assignment,
         fuel_price_eur_per_l=fuel_price,
         material_price_eur_per_kg=material_price,
+        resource_prices=resource_prices,
         vehicles=vehicles_raw,
         implements=implements_raw,
         fields=fields_raw,
         travel_lookup=travel_lookup,
+        planning_origin=now,
+        optimization_objective=parameters.optimization_objective,
     )
 
     return SolverChainResult(

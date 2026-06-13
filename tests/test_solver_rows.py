@@ -24,6 +24,7 @@ from fl_op.solver.types import (
     RelatedRow,
     SiteRow,
     TaskRow,
+    TravelLinkRow,
 )
 
 _ALL_ROWS = (PrimeMoverRow, RelatedRow, OperatorRow, SiteRow, DepotRow, TaskRow)
@@ -60,6 +61,20 @@ class TestConstruction:
     def test_present_value_overrides_default(self):
         row = PrimeMoverRow.from_canonical_dict({"asset_id": "v1", "travel_speed": 7.5})
         assert row.travel_speed == 7.5
+
+    def test_task_alternative_group_projects(self):
+        row = TaskRow.from_canonical_dict({
+            "task_id": "delivery_1-UAV",
+            "alternative_group_ref": "delivery_1",
+        })
+        assert row.alternative_group_ref == "delivery_1"
+
+    def test_travel_link_mode_projects(self):
+        row = TravelLinkRow.from_canonical_dict({
+            "link_id": "l1",
+            "network_mode": "air",
+        })
+        assert row.network_mode == "air"
 
 
 class TestDefaultsComeFromConstants:
@@ -116,6 +131,12 @@ class TestFactoryDefaultsAreIndependent:
     def test_compatible_operations_not_shared(self):
         a = RelatedRow.from_canonical_dict({"asset_id": "i1"})
         b = RelatedRow.from_canonical_dict({"asset_id": "i2"})
+        assert a.compatible_operations == [] and b.compatible_operations == []
+        assert a.compatible_operations is not b.compatible_operations
+
+    def test_prime_mover_compatible_operations_not_shared(self):
+        a = PrimeMoverRow.from_canonical_dict({"asset_id": "v1"})
+        b = PrimeMoverRow.from_canonical_dict({"asset_id": "v2"})
         assert a.compatible_operations == [] and b.compatible_operations == []
         assert a.compatible_operations is not b.compatible_operations
 

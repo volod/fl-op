@@ -21,7 +21,13 @@ from sklearn.neighbors import BallTree
 from fl_op.core import constants
 from fl_op.core.constants import CLUSTER_TARGET_SIZE
 from fl_op.core.paths import DATA_ROOT
-from fl_op.solver.travel_time import TravelLookup, travel_seconds
+from fl_op.solver.travel_time import (
+    TravelLookup,
+    iter_travel_lookup_items,
+    operation_set,
+    travel_mode_for_operation,
+    travel_seconds,
+)
 from fl_op.solver.types import ClusterSpec
 
 logger = logging.getLogger(__name__)
@@ -45,24 +51,21 @@ def filter_feasible_vehicle_implement_pairs(
     A pair is feasible when:
       - compat[v_idx, i_idx] is True (power margin within threshold)
       - The implement's compatible_operations includes the order's operation_type
+      - The prime mover's compatible_operations includes the order's operation_type
+        when the prime mover declares operation compatibility
     """
     # Build a lookup: implement_id -> set of OperationType values
     impl_ops: dict[str, set[str]] = {}
     for im in implements:
-        ops_raw = im.compatible_operations
-        if isinstance(ops_raw, str):
-            # CSV stores lists as stringified Python lists; parse conservatively
-            import ast
-
-            try:
-                ops_raw = ast.literal_eval(ops_raw)
-            except Exception:
-                ops_raw = [ops_raw]
-        impl_ops[im.asset_id] = set(ops_raw)
+        impl_ops[im.asset_id] = operation_set(im.compatible_operations)
+    vehicle_ops: dict[str, set[str]] = {
+        v.asset_id: operation_set(getattr(v, "compatible_operations", []))
+        for v in vehicles
+    }
 
     feasible: dict[str, list[tuple[int, int]]] = {}
     for order in orders:
-        op = order.operation_type
+        op = str(order.operation_type or "").upper()
         oid = order.task_id
         pairs: list[tuple[int, int]] = []
         for im in implements:
@@ -72,6 +75,9 @@ def filter_feasible_vehicle_implement_pairs(
             if i_idx is None:
                 continue
             for v in vehicles:
+                v_ops = vehicle_ops.get(v.asset_id, set())
+                if v_ops and op not in v_ops:
+                    continue
                 v_idx = vehicle_index.get(v.asset_id)
                 if v_idx is None:
                     continue
@@ -188,6 +194,7 @@ def cluster_orders_by_depot(
                     float(d.lat), float(d.lon),
                     float(field.lat), float(field.lon),
                     travel_lookup,
+                    travel_mode_for_operation(getattr(order, "operation_type", "")),
                 ),
             ).location_id
             assignment[nearest_depot].append(order.task_id)
@@ -262,7 +269,37 @@ def _dependency_units(orders: list[Any]) -> dict[str, list[str]]:
     units: dict[str, list[str]] = {}
     for order in orders:
         units.setdefault(root_of(order.task_id), []).append(order.task_id)
-    return units
+    return _merge_alternative_units(orders, units)
+
+
+def _merge_alternative_units(
+    orders: list[Any],
+    units: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    """Keep mutually-exclusive task alternatives in one clustering unit."""
+    alt_groups: dict[str, list[str]] = {}
+    for order in orders:
+        group = str(getattr(order, "alternative_group_ref", "") or "")
+        if group:
+            alt_groups.setdefault(group, []).append(order.task_id)
+    if not alt_groups:
+        return units
+
+    unit_of_task = {tid: root for root, tids in units.items() for tid in tids}
+    merged = {root: list(tids) for root, tids in units.items()}
+    for members in alt_groups.values():
+        roots = [unit_of_task.get(tid, tid) for tid in members]
+        target = roots[0]
+        combined: list[str] = []
+        for root in roots:
+            combined.extend(merged.pop(root, []))
+        seen: set[str] = set()
+        merged[target] = [
+            tid for tid in combined if not (tid in seen or seen.add(tid))
+        ]
+        for tid in merged[target]:
+            unit_of_task[tid] = target
+    return merged
 
 
 def _regroup_units_by_root_depot(
@@ -301,8 +338,18 @@ def _regroup_units_by_root_depot(
 def _split_units_into_subclusters(
     unit_list: list[list[str]],
     target_size: int,
+    order_index: dict[str, Any] | None = None,
+    split_by_operation: bool = False,
 ) -> list[list[str]]:
     """Chunk units to approximately target_size without splitting any unit."""
+    if split_by_operation and order_index is not None:
+        return _split_units_into_operation_subclusters(
+            unit_list, target_size, order_index
+        )
+    return _pack_units(unit_list, target_size)
+
+
+def _pack_units(unit_list: list[list[str]], target_size: int) -> list[list[str]]:
     chunks: list[list[str]] = []
     current: list[str] = []
     for unit in unit_list:
@@ -312,6 +359,41 @@ def _split_units_into_subclusters(
         current.extend(unit)
     if current:
         chunks.append(current)
+    return chunks
+
+
+def _split_units_into_operation_subclusters(
+    unit_list: list[list[str]],
+    target_size: int,
+    order_index: dict[str, Any],
+) -> list[list[str]]:
+    """Keep operation-incompatible vehicle classes out of the same cluster.
+
+    A cluster receives one prime mover and one related asset bundle. When prime
+    movers declare disjoint operation compatibility (for example UGV vs UAV),
+    mixed-operation clusters can force the wrong vehicle type for some tasks.
+    Multi-operation units, such as task alternatives for one real delivery, stay
+    standalone so the routing model can choose exactly one variant.
+    """
+    grouped: dict[str, list[list[str]]] = {}
+    standalone: list[list[str]] = []
+    for unit in unit_list:
+        ops = sorted(
+            {
+                str(getattr(order_index.get(task_id), "operation_type", "") or "")
+                for task_id in unit
+            }
+        )
+        if len(ops) > 1:
+            standalone.append(unit)
+            continue
+        key = ops[0] if ops else ""
+        grouped.setdefault(key, []).append(unit)
+
+    chunks: list[list[str]] = []
+    for key in sorted(grouped):
+        chunks.extend(_pack_units(grouped[key], target_size))
+    chunks.extend(standalone)
     return chunks
 
 
@@ -352,8 +434,14 @@ def build_cluster_specs(
 
     units = _dependency_units(orders)
     has_chains = any(len(members) > 1 for members in units.values())
+    split_by_operation = any(
+        operation_set(getattr(vehicle, "compatible_operations", []))
+        for vehicle in vehicles
+    )
     depot_units = (
-        _regroup_units_by_root_depot(depot_assignment, units) if has_chains else None
+        _regroup_units_by_root_depot(depot_assignment, units)
+        if has_chains or split_by_operation
+        else None
     )
 
     clusters: list[ClusterSpec] = []
@@ -361,7 +449,10 @@ def build_cluster_specs(
     for depot_id, oid_list in depot_assignment.items():
         if depot_units is not None:
             subclusters = _split_units_into_subclusters(
-                depot_units.get(depot_id, []), target_size
+                depot_units.get(depot_id, []),
+                target_size,
+                order_index,
+                split_by_operation,
             )
         elif oid_list:
             subclusters = _split_into_subclusters(oid_list, target_size)
@@ -394,6 +485,7 @@ def cluster_specs_cache_key(
     orders: list[Any],
     fields: list[Any],
     depots: list[Any],
+    vehicles: list[Any],
     target_size: int,
     travel_lookup: Optional[TravelLookup],
 ) -> str:
@@ -404,6 +496,10 @@ def cluster_specs_cache_key(
             "orders": _rows_for_hash(orders),
             "fields": _rows_for_hash(fields),
             "depots": _rows_for_hash(depots),
+            "prime_mover_operation_sets": [
+                sorted(operation_set(getattr(vehicle, "compatible_operations", [])))
+                for vehicle in vehicles
+            ],
             "target_size": target_size,
             "travel_lookup": _travel_lookup_for_hash(travel_lookup),
         }
@@ -442,7 +538,7 @@ def cached_cluster_specs(
         )
     cache_dir = _preprocessing_cache_dir("cluster-specs")
     cache_path = cache_dir / (
-        f"{cluster_specs_cache_key(orders, fields, depots, target_size, travel_lookup)}.json"
+        f"{cluster_specs_cache_key(orders, fields, depots, vehicles, target_size, travel_lookup)}.json"
     )
     cached = _read_json_cache(cache_path, "cluster-specs")
     if isinstance(cached, list):
@@ -547,9 +643,4 @@ def _array_digest(array: np.ndarray) -> dict[str, Any]:
 
 
 def _travel_lookup_for_hash(travel_lookup: Optional[TravelLookup]) -> list[list[Any]]:
-    if not travel_lookup:
-        return []
-    return [
-        [from_ref, to_ref, int(seconds)]
-        for (from_ref, to_ref), seconds in sorted(travel_lookup.items())
-    ]
+    return iter_travel_lookup_items(travel_lookup)

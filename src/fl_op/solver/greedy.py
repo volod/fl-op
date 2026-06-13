@@ -19,10 +19,21 @@ from fl_op.core.constants import (
     EARTH_RADIUS_KM,
     FALLBACK_REVENUE_EUR_PER_HA,
     FUEL_COST_EUR_PER_L,
+    OBJECTIVE_MODE_TIME,
     SCORE_WEIGHT_MARGIN,
     SCORE_WEIGHT_REPOSITION,
 )
-from fl_op.solver.travel_time import TravelLookup
+from fl_op.solver.cost_rates import (
+    ResourcePrices,
+    vehicle_energy_consumption_rate,
+    vehicle_energy_resource_type,
+)
+from fl_op.solver.travel_time import (
+    TravelLookup,
+    _estimate_operation_seconds,
+    network_seconds,
+    travel_mode_for_vehicle,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +60,18 @@ def _estimate_gross_margin(order: Any) -> float:
 
 
 def _network_seconds_or_nan(
-    travel_lookup: TravelLookup, from_ref: str, to_ref: str
+    travel_lookup: TravelLookup,
+    from_ref: str,
+    to_ref: str,
+    travel_mode: str = "any",
 ) -> float:
     """Directed network time for a pair (reverse fallback), NaN when no path."""
     if not from_ref or not to_ref or from_ref == to_ref:
         return math.nan
-    seconds = travel_lookup.get((from_ref, to_ref)) or travel_lookup.get(
-        (to_ref, from_ref)
+    seconds = network_seconds(
+        travel_lookup, from_ref, to_ref, travel_mode
+    ) or network_seconds(
+        travel_lookup, to_ref, from_ref, travel_mode
     )
     return float(seconds) if seconds else math.nan
 
@@ -64,10 +80,16 @@ def _estimate_repositioning_cost(
     vehicle: Any,
     field: Any,
     fuel_price_eur_per_l: Optional[float] = None,
+    resource_prices: Optional[ResourcePrices] = None,
 ) -> float:
-    """Diesel cost to drive from vehicle's current position to the field centroid."""
+    """Energy cost to drive from vehicle's current position to the field centroid."""
     fuel_price = (
         fuel_price_eur_per_l if fuel_price_eur_per_l is not None else FUEL_COST_EUR_PER_L
+    )
+    energy_price = (
+        resource_prices.price_for(vehicle_energy_resource_type(vehicle))
+        if resource_prices is not None
+        else fuel_price
     )
     dist_km = _haversine_km(
         float(vehicle.lat),
@@ -77,8 +99,7 @@ def _estimate_repositioning_cost(
     )
     speed_kmh = float(vehicle.travel_speed)
     hours = dist_km / speed_kmh if speed_kmh > 0 else 0
-    fuel_l_per_h = float(vehicle.fuel_consumption_rate)
-    return hours * fuel_l_per_h * fuel_price
+    return hours * vehicle_energy_consumption_rate(vehicle) * energy_price
 
 
 def vectorized_score(
@@ -90,21 +111,28 @@ def vectorized_score(
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
     fuel_price_eur_per_l: Optional[float] = None,
+    resource_prices: Optional[ResourcePrices] = None,
     score_weight_margin: Optional[float] = None,
     score_weight_reposition: Optional[float] = None,
     travel_lookup: Optional[TravelLookup] = None,
+    optimization_objective: str = "cost",
 ) -> dict[str, list[tuple[float, int, int]]]:
     """Return {task_id: [(score, v_idx, i_idx), ...]} sorted descending by score.
 
     Vectorises over all orders and their feasible pairs using numpy broadcast.
-    ``fuel_price_eur_per_l`` is the resolved cost-rate price; the engine
-    constant applies when no rate is supplied. The score weights default to
-    the engine constants and are tunable via SolverParameters.
+    ``resource_prices`` supplies resolved resource costs when vehicles declare
+    non-fuel energy. ``fuel_price_eur_per_l`` remains the legacy fallback. The
+    score weights default to the engine constants and are tunable via
+    SolverParameters.
 
     With a travel network, repositioning hours use the network shortest path
     from the vehicle's home depot (its road access point) to the field where
     one exists; the straight-line estimate from the vehicle's current
     position remains the fallback.
+
+    ``optimization_objective="time"`` switches warm-start scoring to estimated
+    arrival-plus-service seconds so pre-allocation favors faster bundles. Cost
+    mode remains the default.
     """
     fuel_price = (
         fuel_price_eur_per_l if fuel_price_eur_per_l is not None else FUEL_COST_EUR_PER_L
@@ -125,8 +153,17 @@ def vectorized_score(
     v_lats = np.array([float(v.lat) for v in vehicles])
     v_lons = np.array([float(v.lon) for v in vehicles])
     v_speeds = np.array([float(v.travel_speed) for v in vehicles])
-    v_consumptions = np.array([float(v.fuel_consumption_rate) for v in vehicles])
+    v_consumptions = np.array([vehicle_energy_consumption_rate(v) for v in vehicles])
+    v_energy_prices = np.array([
+        (
+            resource_prices.price_for(vehicle_energy_resource_type(v))
+            if resource_prices is not None
+            else fuel_price
+        )
+        for v in vehicles
+    ])
     v_home_refs = [str(v.home_depot_ref or "") for v in vehicles]
+    v_travel_modes = [travel_mode_for_vehicle(v) for v in vehicles]
 
     results: dict[str, list[tuple[float, int, int]]] = {}
 
@@ -161,21 +198,36 @@ def vectorized_score(
         if travel_lookup:
             net_by_vehicle = np.array([
                 _network_seconds_or_nan(
-                    travel_lookup, home_ref, str(order.location_ref or "")
+                    travel_lookup,
+                    home_ref,
+                    str(order.location_ref or ""),
+                    v_travel_modes[idx],
                 )
-                for home_ref in v_home_refs
+                for idx, home_ref in enumerate(v_home_refs)
             ])
             net_hours = net_by_vehicle[v_indices] / 3600.0
             hours = np.where(np.isnan(net_hours), hours, net_hours)
-        reposition_cost = hours * v_consumptions[v_indices] * fuel_price
+        reposition_cost = (
+            hours * v_consumptions[v_indices] * v_energy_prices[v_indices]
+        )
 
         # Gross margin: per-order constant for all pairs
         gross_margins = np.full(len(pairs), _estimate_gross_margin(order))
 
-        scores = (
-            weight_margin * gross_margins
-            - weight_reposition * reposition_cost
-        )
+        if str(optimization_objective or "").lower() == OBJECTIVE_MODE_TIME:
+            service_seconds = np.array([
+                _estimate_operation_seconds(order, implements[int(i_idx)])
+                if 0 <= int(i_idx) < len(implements)
+                else 0
+                for i_idx in i_indices
+            ])
+            completion_seconds = hours * 3600.0 + service_seconds
+            scores = -completion_seconds + gross_margins * 1.0e-6
+        else:
+            scores = (
+                weight_margin * gross_margins
+                - weight_reposition * reposition_cost
+            )
 
         scored_pairs = sorted(
             zip(scores.tolist(), v_indices.tolist(), i_indices.tolist()),

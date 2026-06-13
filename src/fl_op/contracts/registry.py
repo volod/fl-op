@@ -238,7 +238,12 @@ class FileRegistry:
         profiles = self.index.get("profiles") or {}
         if profile_id not in profiles:
             raise KeyError(f"Unknown profile id: {profile_id}")
-        return load_profile(self.root / profiles[profile_id]["path"])
+        profile = load_profile(self.root / profiles[profile_id]["path"])
+        if self.profile_domain(profile_id) == "drone_logistics":
+            from fl_op.data.drone_logistics_tuning import apply_drone_profile_tuning
+
+            return apply_drone_profile_tuning(profile)
+        return profile
 
     # -- fingerprint computation --------------------------------------------------
 

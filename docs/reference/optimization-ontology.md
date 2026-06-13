@@ -3,9 +3,10 @@
 The canonical model (`contracts/canonical/`) is a domain-neutral ontology for
 resource-operations optimization: which resources exist, what work is demanded,
 where it happens, under which obligations and environmental conditions, and
-what is currently being observed in the field. Every domain pack (agricultural,
-construction, ...) projects its physical vocabulary onto this one ontology, and
-the engine reasons only in ontology terms.
+what is currently being observed in the field. Every domain pack (drone
+logistics, agricultural, construction, roadside) projects its physical
+vocabulary onto this one ontology, and the engine reasons only in ontology
+terms.
 
 This page describes the ontology and the optimization use cases it covers. For
 contract mechanics see [canonical-model.md](canonical-model.md); for projecting
@@ -41,12 +42,12 @@ a domain onto the ontology see [domain-mapping.md](domain-mapping.md).
 |---|---|---|
 | `asset` | Anything that participates in executing work: prime movers, related equipment, operators, and stationary equipment. One entity, distinguished by `roles` and `mobility`. Static abilities are `capabilities`, working hours are `availability`, maintenance master data is `state.*`. | `odcs/asset.odcs.yaml` |
 | `location` | A place work happens or resources anchor: work sites, depots, loading stations. Carries geometry (point, polygon, area), ground classification, and material inventory positions. | `odcs/location.odcs.yaml` |
-| `task` | A demanded unit of work: operation type, location, work quantity, deadline, priority, revenue, lateness penalty, lifecycle status. | `odcs/task.odcs.yaml` |
+| `task` | A demanded unit of work: operation type, location, work quantity, deadline, priority, revenue, lateness penalty, lifecycle status, and optional alternative-group membership for mutually exclusive variants of one demand. | `odcs/task.odcs.yaml` |
 | `commitment` | A contractual obligation attached to work: deadline, penalty, hardness, validity window. Domains embedding these in order rows map them on `task` instead. | `odcs/commitment.odcs.yaml` |
 | `forecast` | A predicted environmental condition for a location and time interval (wind, precipitation, soil moisture). | `odcs/forecast.odcs.yaml` |
 | `observation` | A measured value about an entity at a point in time: sensor reading, telemetry sample, inspection result. One shape serves historical batches and realtime streams. | `odcs/observation.odcs.yaml` |
 | `execution-event` | The dynamics envelope: a typed trigger (`task.started`, `task.progress`, `task.completed`, `order.created`, `order.cancelled`, `asset.unavailable`, `inventory.adjusted`, `forecast.updated`, `observation.recorded`, `entity.corrected`) that mutates state and forces a rolling re-solve. | `odcs/execution-event.odcs.yaml` |
-| `travel-link` | One directed travel-network edge between two locations with a measured travel time (distance-matrix entry / road-graph arc). The network may be sparse: pairs without a link fall back to haversine distance and asset travel speed. | `odcs/travel-link.odcs.yaml` |
+| `travel-link` | One directed travel-network edge between two locations with a measured travel time (distance-matrix entry / road-graph arc) and optional network mode. The network may be sparse: pairs without a matching link fall back to haversine distance and asset travel speed. | `odcs/travel-link.odcs.yaml` |
 | `cost-rate` | A priced resource rate (fuel, consumable material) with an optional validity window. Engine cost constants are the fallback for unpriced resources. | `odcs/cost-rate.odcs.yaml` |
 | `plan` | The canonical OUTPUT contract: the plan/revision envelope plus assignment, unassigned-task, and material-reservation records. Produced by adapters and validated on publication (`contracts/plan_contract.py`), never consumed as snapshot input. | `odcs/plan.odcs.yaml` |
 
@@ -69,12 +70,12 @@ one comparable scale.
 | `urn:xopt:availability:*` | Working-time windows | `shift-start`, `shift-end` (s) |
 | `urn:xopt:maintenance:*` | Maintenance master data | `last-service-at`, `service-interval` (d) |
 | `urn:xopt:commitment:*` | Obligations and their economics | `deadline`, `lateness-penalty` (EUR), `hardness` |
-| `urn:xopt:relationship:*` | Cross-entity references | `home-depot`, `location`, `contract`, `entity-ref` |
+| `urn:xopt:relationship:*` | Cross-entity references | `home-depot`, `location`, `contract`, `entity-ref`, `alternative-group` |
 | `urn:xopt:inventory:*` | Material positions at locations | `fuel` (L), `fertilizer` (kg) |
 | `urn:xopt:forecast:*` | Predicted environmental values | `wind-speed` (m/s), `precipitation-rate` (mm/h) |
 | `urn:xopt:observation:*` | Measured values | `metric`, `value`, `state`, `unit` |
 | `urn:xopt:time:*` | Timestamps and intervals | `observed-at`, `forecast-from`, `valid-to` |
-| `urn:xopt:travel:*` | Travel-network edge measures | `travel-time` (s), `distance` (km) |
+| `urn:xopt:travel:*` | Travel-network edge measures | `travel-time` (s), `distance` (km), `network-mode` |
 | `urn:xopt:cost:*` | Priced resource rates | `rate-type`, `unit-price` (EUR), `per-unit` |
 | `urn:xopt:restriction:*` | Location restrictions | `prohibited-operations`, `restricted-windows` |
 | `urn:xopt:plan:*` | Plan output qualifiers | `planning-mode`, `status`, `reason-code` |
@@ -99,8 +100,9 @@ monitoring policy.
 | Material/inventory feasibility | location `inventory.*`, profile `materialDemand` rates | Implemented (cumulative depot charge, penalty-priority; charges published as plan MaterialReservation records) |
 | Operator qualification | `operator-certification` capability vs task operation types | Implemented (cluster operator coverage + per-task backup pairing) |
 | Multi-stage work sequences | task `depends-on` relation | Implemented (chain-aware clustering, in-model precedence, cascade exclusion) |
+| Mutually exclusive task alternatives / mode choice | task `alternative-group`, operation compatibility | Implemented (grouped disjunctions, one served variant per real demand) |
 | Multiple workable time windows | task `workable-windows` | Implemented (pre-filter + in-model start intervals) |
-| Network-based travel times | travel-link entity | Implemented (shortest-path closure over the link graph; reverse/haversine fallback) |
+| Mode-aware network travel times | travel-link entity with `network-mode` | Implemented (per-mode shortest-path closure, per-vehicle matrices, reverse/haversine fallback) |
 | Capacity-constrained delivery (CVRP-style) | asset `load-capacity`/`load-capacities` vs task `load-demand`/`load-material` | Implemented (per-material dimensions, depot reload stops for multi-trip) |
 | Pickup-and-delivery pairing | task `pickup-location` | Implemented (paired nodes: same vehicle, pickup first, dropped together) |
 | Unit-uniform duration estimation | task `work-quantity`/`work-quantity-unit` vs asset `work-rates` | Implemented (rate wins; coverage model is the area fallback) |
@@ -115,15 +117,17 @@ The ontology is domain-agnostic; a domain is just a mapping pack:
 
 | Domain | Pack | What maps onto what |
 |---|---|---|
+| Drone logistics | `contracts/domains/drone_logistics/` (default: data generator + solver wiring) | UGVs/UAVs/payload modules/operators -> asset roles; logistics hubs, delivery locations, and restricted zones -> location; delivery orders -> task variants with `alternativeGroupRef`; weather -> forecast; road/air links -> travel-link with `networkMode`; prices -> cost-rate |
 | Agricultural custom services | `contracts/domains/agricultural/` (full: data generator + solver wiring) | vehicles/implements/operators -> asset roles; depots/fields -> location; orders -> task; weather -> forecast; sensors -> stationary asset; sensor readings -> observation; routes -> travel-link; prices -> cost-rate |
 | Construction earthworks | `contracts/domains/construction/` (full: data generator + solver wiring; run with `ACTIVE_DOMAIN=construction`) | machines/attachments/operators -> asset roles; yards/sites -> location; jobs -> task |
 | Roadside infrastructure | `contracts/domains/roadside/` (full: data generator + solver wiring; run with `ACTIVE_DOMAIN=roadside`) | service vehicles/kits/technicians -> asset roles; road segments and service depots -> location; optional maintenance jobs -> task; signage/sensors -> stationary asset (`mobility: stationary`); inspection rounds -> observation that derives `EQUIPMENT_SERVICE` visits |
-| Utilities, marine, logistics | not yet authored | same entities; the roadside pack is the runnable template for monitoring-driven domains |
+| Utilities and marine | not yet authored | same entities; the roadside pack is the runnable template for monitoring-driven domains |
 
-One run normally selects one domain (`ACTIVE_DOMAIN`), but a staged mixed source
-tree can select several (`ACTIVE_DOMAINS=agricultural,construction`) and project
-their canonical bindings into one shared-fleet solve. The caller still supplies
-one optimization profile; policy merging across domains is not automatic.
+One run normally selects the registry active domain (`drone_logistics` by
+default) or an explicit `ACTIVE_DOMAIN`, but a staged mixed source tree can
+select several (`ACTIVE_DOMAINS=drone_logistics,agricultural`) and project their
+canonical bindings into one shared-fleet solve. The caller still supplies one
+optimization profile; policy merging across domains is not automatic.
 
 ## Known ontology gaps
 
@@ -155,9 +159,11 @@ for the mathematical model):
 2. **Compatibility matrix** (`solver/feasibility.py`): vectorised power-margin
    feasibility between prime movers and related equipment.
 3. **Operation-type filter** (`solver/preprocessing.py`): per-task candidate
-   pairs restricted by `compatible-operations`.
-4. **Geographic clustering** (`solver/preprocessing.py`): haversine BallTree
-   depot-affinity clusters, split to a target size.
+   pairs restricted by prime-mover and equipment `compatible-operations`.
+4. **Operation-aware geographic clustering** (`solver/preprocessing.py`):
+   haversine BallTree depot-affinity clusters, split to a target size while
+   keeping alternative-group variants together and separating operations when
+   the fleet declares mode-specific compatibility.
 5. **Resource pre-allocation** (`solver/cluster_solver.py`): penalty-priority
    assignment of scarce prime movers, equipment, and operators to clusters;
    operator qualification and material limits are enforced on the allocated
@@ -167,10 +173,12 @@ for the mathematical model):
 7. **OR-Tools routing per cluster** (`solver/routing_model.py`,
    `solver/cluster_pool.py`): each cluster solved as a routing problem in a
    spawned process pool, warm-started from the greedy solution. Arc times
-   come from travel-link lookups with haversine fallback; admissible start
-   intervals encode workable windows minus restriction windows; a load
-   dimension bounds route mass by vehicle `load-capacity` when tasks demand
-   loads.
+   come from mode-aware travel-link lookups with haversine fallback and
+   per-vehicle time matrices; admissible start intervals encode workable
+   windows minus restriction windows; per-node vehicle constraints keep
+   mode-specific tasks on compatible vehicles; grouped disjunctions ensure at
+   most one alternative variant is served; a load dimension bounds route mass by
+   vehicle `load-capacity` when tasks demand loads.
 8. **Aggregation** (`solver/aggregator.py`): dispatch packages, canonical
    reason codes, KPIs.
 

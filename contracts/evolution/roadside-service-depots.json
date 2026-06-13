@@ -1,12 +1,104 @@
 {
   "contractId": "roadside-service-depots",
-  "odcsId": "service-depots",
-  "version": "1.0.0",
   "fields": {
-    "depot_id": {"logicalType": "string", "physicalType": "string", "required": true},
-    "name": {"logicalType": "string", "physicalType": "string", "required": false},
-    "lat": {"logicalType": "number", "physicalType": "double", "required": true},
-    "lon": {"logicalType": "number", "physicalType": "double", "required": true},
-    "fuel_litres": {"logicalType": "number", "physicalType": "double", "required": false}
-  }
+    "depot_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "fuel_litres": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "name": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "b2df9ddc7d7a9b7259f56216186fe69efd4cdca2f5f2b54ebd68cc64ede85046"
+  },
+  "history": [
+    {
+      "contractId": "roadside-service-depots",
+      "fields": {
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "fuel_litres": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "odcsId": "service-depots",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "roadside-service-depots",
+      "fields": {
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "fuel_litres": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "b2df9ddc7d7a9b7259f56216186fe69efd4cdca2f5f2b54ebd68cc64ede85046"
+      },
+      "odcsId": "service-depots",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "service-depots",
+  "version": "1.0.0"
 }

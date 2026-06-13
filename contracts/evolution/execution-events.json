@@ -27,6 +27,80 @@
       "required": false
     }
   },
+  "fingerprints": {
+    "avroParsingFingerprint": "ca78597cda1433a55cb6efddd2ee21b820aec9a6645052f87f5a8a20224655b2",
+    "optimizationMetadataHash": "893cf11af71d6aa1eb4841311a35987f068b7f1cf633a9de9ad988f10daab23f"
+  },
+  "history": [
+    {
+      "contractId": "execution-events",
+      "fields": {
+        "entity_ref": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "event_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "event_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "observed_at": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": true
+        },
+        "payload_json": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "odcsId": "execution-events",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "execution-events",
+      "fields": {
+        "entity_ref": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "event_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "event_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "observed_at": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": true
+        },
+        "payload_json": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "ca78597cda1433a55cb6efddd2ee21b820aec9a6645052f87f5a8a20224655b2",
+        "optimizationMetadataHash": "893cf11af71d6aa1eb4841311a35987f068b7f1cf633a9de9ad988f10daab23f"
+      },
+      "odcsId": "execution-events",
+      "version": "1.0.0"
+    }
+  ],
   "odcsId": "execution-events",
   "version": "1.0.0"
 }

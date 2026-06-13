@@ -27,6 +27,80 @@
       "required": true
     }
   },
+  "fingerprints": {
+    "avroParsingFingerprint": "ba320cec1eef2f0bf179ce4d7f50916073c4b56a369b6e90a244a6e648e2b22c",
+    "optimizationMetadataHash": "8d94b28bd3d0a15786e997ab0ca5d3bed91d43f50bdb7be734a492bd2ee5caed"
+  },
+  "history": [
+    {
+      "contractId": "yards",
+      "fields": {
+        "diesel_litres": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "label": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "yard_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "odcsId": "yards",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "yards",
+      "fields": {
+        "diesel_litres": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "label": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "yard_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "ba320cec1eef2f0bf179ce4d7f50916073c4b56a369b6e90a244a6e648e2b22c",
+        "optimizationMetadataHash": "8d94b28bd3d0a15786e997ab0ca5d3bed91d43f50bdb7be734a492bd2ee5caed"
+      },
+      "odcsId": "yards",
+      "version": "1.0.0"
+    }
+  ],
   "odcsId": "yards",
   "version": "1.0.0"
 }

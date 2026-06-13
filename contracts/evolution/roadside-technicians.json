@@ -1,13 +1,119 @@
 {
   "contractId": "roadside-technicians",
-  "odcsId": "technicians",
-  "version": "1.0.0",
   "fields": {
-    "technician_id": {"logicalType": "string", "physicalType": "string", "required": true},
-    "full_name": {"logicalType": "string", "physicalType": "string", "required": false},
-    "shift_start_s": {"logicalType": "integer", "physicalType": "int", "required": true},
-    "shift_end_s": {"logicalType": "integer", "physicalType": "int", "required": true},
-    "certified_operations": {"logicalType": "array", "physicalType": "string", "required": true},
-    "depot_id": {"logicalType": "string", "physicalType": "string", "required": true}
-  }
+    "certified_operations": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": true
+    },
+    "depot_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "full_name": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "shift_end_s": {
+      "logicalType": "integer",
+      "physicalType": "int",
+      "required": true
+    },
+    "shift_start_s": {
+      "logicalType": "integer",
+      "physicalType": "int",
+      "required": true
+    },
+    "technician_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "29fb93be2437d0a6e1b977a749ebf4047e3078a957e117f06f2054a7304f2496"
+  },
+  "history": [
+    {
+      "contractId": "roadside-technicians",
+      "fields": {
+        "certified_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "full_name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "shift_end_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "shift_start_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "technician_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "odcsId": "technicians",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "roadside-technicians",
+      "fields": {
+        "certified_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "full_name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "shift_end_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "shift_start_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "technician_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "29fb93be2437d0a6e1b977a749ebf4047e3078a957e117f06f2054a7304f2496"
+      },
+      "odcsId": "technicians",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "technicians",
+  "version": "1.0.0"
 }

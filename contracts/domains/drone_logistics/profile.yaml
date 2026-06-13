@@ -1,0 +1,90 @@
+apiVersion: x-optimization/v0.1.0
+kind: OptimizationProfile
+
+metadata:
+  id: drone-logistics
+  version: 0.1.0
+  extensionVersion: 0.1.0
+  semanticModelRef: urn:xopt:model:drone-logistics:0.1.0
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+
+inputContracts:
+  - ugvs
+  - uavs
+  - payload-modules
+  - drone-operators
+  - logistics-hubs
+  - delivery-locations
+  - restricted-zones
+  - delivery-orders
+  - travel-links
+  - weather
+  - prices
+
+planningModes:
+  - id: periodic
+    adapter: ortools-periodic
+  - id: rolling
+    adapter: ortools-rolling
+
+bundleGeneration:
+  roles:
+    primaryAsset:
+      - mobile-prime-mover
+    relatedEquipment:
+      - implement
+    operator:
+      - operator
+
+constraints:
+  - id: compatible-equipment
+    severity: hard
+    enforced: true
+  - id: sufficient-power
+    severity: hard
+    enforced: true
+  - id: operator-qualified
+    severity: hard
+    enforced: true
+  - id: asset-available
+    severity: hard
+    enforced: true
+  - id: no-double-booking
+    severity: hard
+    enforced: true
+  - id: respect-contract-time-window
+    severity: hard
+    enforced: true
+  - id: respect-weather-window
+    severity: hard
+    enforced: true
+  - id: protect-frozen-tasks
+    severity: hard
+    enforced: true
+
+weatherPolicy:
+  maxWindMs: 11.0
+  maxRainMmPerH: 2.5
+  maxSoilMoisturePct: 100.0
+  sensitivity:
+    UAV_DELIVERY: [wind, rain]
+
+objectives:
+  mode: lexicographic
+  priorities:
+    - maximize-mandatory-contract-fulfillment
+    - minimize-contractual-penalties
+    - maximize-expected-contribution-margin
+    - minimize-plan-instability
+    - minimize-repositioning-time
+    - minimize-empty-distance
+    - balance-utilization
+
+planningDefaults:
+  periodicHorizonDays: 2
+  rollingHorizonHours: 12
+  freezeWindowMinutes: 20
+  maxAssignmentRoutingIterations: 3
+
+outputContracts:
+  - dispatch-plans

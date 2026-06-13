@@ -182,15 +182,15 @@ def create_app(
     )
 
     @app.get("/health")
-    def health() -> dict[str, str]:
+    async def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/plans/{mode}", dependencies=protected)
-    def list_plans(mode: PlanMode) -> dict[str, Any]:
+    async def list_plans(mode: PlanMode) -> dict[str, Any]:
         return {"mode": mode.value, "runs": _list_runs(store, mode)}
 
     @app.get("/plans/{mode}/{run_id}", dependencies=protected)
-    def get_plan(mode: PlanMode, run_id: str) -> dict[str, Any]:
+    async def get_plan(mode: PlanMode, run_id: str) -> dict[str, Any]:
         run_rel = _resolve_run_rel(store, mode, run_id)
         if mode is PlanMode.PERIODIC:
             return _read_json(store, run_rel / _PLAN_FILENAME)
@@ -204,12 +204,12 @@ def create_app(
         )
 
     @app.get("/plans/rolling/{run_id}/revisions", dependencies=protected)
-    def list_revisions(run_id: str) -> dict[str, Any]:
+    async def list_revisions(run_id: str) -> dict[str, Any]:
         run_rel = _resolve_run_rel(store, PlanMode.ROLLING, run_id)
         return _read_json(store, run_rel / _REVISIONS_SUMMARY_FILENAME)
 
     @app.get("/plans/rolling/{run_id}/revisions/{number}", dependencies=protected)
-    def get_revision(run_id: str, number: int) -> dict[str, Any]:
+    async def get_revision(run_id: str, number: int) -> dict[str, Any]:
         run_rel = _resolve_run_rel(store, PlanMode.ROLLING, run_id)
         revisions = _rolling_revision_ids(store, run_rel)
         if number < 0 or number >= len(revisions):
@@ -222,7 +222,7 @@ def create_app(
         )
 
     @app.post("/feasibility", dependencies=protected)
-    def feasibility(request: FeasibilityRequest) -> dict[str, Any]:
+    async def feasibility(request: FeasibilityRequest) -> dict[str, Any]:
         try:
             data_dir = _resolve_latest_artifact_dir(
                 store, request.data, "generate-data"

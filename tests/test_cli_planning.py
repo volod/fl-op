@@ -15,6 +15,17 @@ def test_contracts_validate_command_exits_zero() -> None:
     assert result.exit_code == 0, result.output
 
 
+def test_plan_and_demo_commands_expose_objective_option() -> None:
+    runner = CliRunner()
+    periodic = runner.invoke(cli, ["plan", "periodic", "--help"])
+    demo = runner.invoke(cli, ["demo", "--help"])
+
+    assert periodic.exit_code == 0, periodic.output
+    assert demo.exit_code == 0, demo.output
+    assert "--objective [cost|time]" in periodic.output
+    assert "--objective [cost|time]" in demo.output
+
+
 def test_run_contracts_validate_returns_true() -> None:
     assert run_contracts_validate(persist=False) is True
 

@@ -8,7 +8,7 @@ from typing import Any
 
 from fl_op.canonical.enums import PlanningMode
 from fl_op.contracts.registry import FileRegistry
-from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
+from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION, OBJECTIVE_MODE_COST
 from fl_op.core.paths import DATA_ROOT
 from fl_op.planning.artifacts import model_json, run_timestamp, write_json
 from fl_op.planning.contracts import run_contracts_validate
@@ -57,9 +57,12 @@ def generate_demo_events(data_dir: str, plan_dir: pathlib.Path) -> pathlib.Path:
     return events_path
 
 
-def run_demo(data_dir: str) -> None:
+def run_demo(data_dir: str, objective: str = OBJECTIVE_MODE_COST) -> None:
     """Run the full pipeline: contracts -> snapshot -> periodic -> events -> rolling."""
-    logger.info("=== fl-op demo: declarative contract -> snapshot -> batch + stream ===")
+    logger.info(
+        "=== fl-op demo: declarative contract -> snapshot -> batch + stream (%s objective) ===",
+        objective,
+    )
     logger.info("[1/5] Validating data contracts (Avro + ODCS + dual fingerprints)")
     if not run_contracts_validate():
         raise SystemExit("Contract validation failed; aborting demo.")
@@ -81,14 +84,17 @@ def run_demo(data_dir: str) -> None:
     )
 
     logger.info("[3/5] Periodic (batch) optimization via OR-Tools adapter")
-    periodic_dir = run_plan_periodic(data_dir, snapshot=snapshot)
+    periodic_dir = run_plan_periodic(data_dir, snapshot=snapshot, objective=objective)
 
     logger.info("[4/5] Synthesizing an execution-event stream")
     events_path = generate_demo_events(data_dir, periodic_dir)
 
     logger.info("[5/5] Rolling (stream) dispatch with freeze window and revisions")
     rolling_dir = run_plan_rolling(
-        data_dir, str(events_path), effective_at=effective_at.isoformat()
+        data_dir,
+        str(events_path),
+        effective_at=effective_at.isoformat(),
+        objective=objective,
     )
 
     logger.info("Artifacts:")

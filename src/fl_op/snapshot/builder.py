@@ -8,6 +8,7 @@ raw source data.
 
 import json
 import logging
+import os
 import pathlib
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -96,13 +97,26 @@ class SnapshotBuilder:
     ) -> None:
         self.registry = registry or FileRegistry()
         self.engine = MappingEngine(self.registry)
-        self.domains = domains if domains is not None else self.registry.active_domains
-        self.mapped_contracts = mapped_contract_ids(self.registry, self.domains)
-        profile_id = (
-            self.registry.active_profile_id
-            if len(self.domains) <= 1
-            else None
+        self._explicit_domains = domains is not None
+        self.domains: list[str] = []
+        self.mapped_contracts: list[str] = []
+        self.profile_id: str | None = None
+        self.monitoring_policy = MonitoringPolicySpec()
+        self._configure_domains(
+            domains if domains is not None else self.registry.active_domains
         )
+
+    def _configure_domains(self, domains: list[str]) -> None:
+        """Select domain mappings and profile-derived policies for this builder."""
+        self.domains = domains
+        self.mapped_contracts = mapped_contract_ids(self.registry, self.domains)
+        profile_id = None
+        if len(self.domains) == 1:
+            profile_id = (
+                self.registry.get_domain_spec(self.domains[0]).get("profile")
+                or self.registry.active_profile_id
+            )
+        self.profile_id = profile_id
         profile_policy = (
             self.registry.get_profile(profile_id).monitoring
             if profile_id
@@ -119,6 +133,39 @@ class SnapshotBuilder:
             profile_policy, load_tuned_overrides()
         )
 
+    def _domains_for_data_dir(self, data_dir: pathlib.Path) -> list[str]:
+        """Infer the generated dataset domain unless caller/env selected one."""
+        if self._explicit_domains or os.environ.get("ACTIVE_DOMAIN") or os.environ.get("ACTIVE_DOMAINS"):
+            return self.domains
+        meta_path = data_dir / "metadata.json"
+        if not meta_path.exists():
+            return self.domains
+        try:
+            meta = json.loads(meta_path.read_text())
+        except json.JSONDecodeError:
+            return self.domains
+        run_meta = meta.get("run_metadata") if isinstance(meta, dict) else None
+        domain = run_meta.get("domain") if isinstance(run_meta, dict) else None
+        if domain and domain in self.registry.domain_ids():
+            return [str(domain)]
+        return self.domains
+
+    def _domains_for_sources(self, sources: dict[str, list[dict[str, Any]]]) -> list[str]:
+        """Infer a single domain from registered source contract ids."""
+        if self._explicit_domains or os.environ.get("ACTIVE_DOMAIN") or os.environ.get("ACTIVE_DOMAINS"):
+            return self.domains
+        source_keys = set(sources)
+        current_score = len(source_keys.intersection(self.mapped_contracts))
+        best_domain = None
+        best_score = current_score
+        for domain in self.registry.domain_ids():
+            ids = mapped_contract_ids(self.registry, [domain])
+            score = len(source_keys.intersection(ids))
+            if score > best_score:
+                best_domain = domain
+                best_score = score
+        return [best_domain] if best_domain else self.domains
+
     def _version_dimensions(self) -> VersionDimensions:
         contract_versions: dict[str, str] = {}
         avro_versions: dict[str, str] = {}
@@ -129,7 +176,7 @@ class SnapshotBuilder:
                     "optimizationMetadataHash", ""
                 )[:12]
             contract_versions[cid] = "1.0.0"
-        profile_id = self.registry.active_profile_id or ""
+        profile_id = self.profile_id or self.registry.active_profile_id or ""
         return VersionDimensions(
             contract_versions=contract_versions,
             avro_schema_versions=avro_versions,
@@ -142,6 +189,7 @@ class SnapshotBuilder:
     def load_sources(self, data_dir: str | pathlib.Path) -> dict[str, list[dict[str, Any]]]:
         """Load every mapped contract's source rows from a data directory."""
         data_path = pathlib.Path(data_dir)
+        self._configure_domains(self._domains_for_data_dir(data_path))
         codec = get_codec(detect_format(data_path))
         sources: dict[str, list[dict[str, Any]]] = {}
         for cid in self.mapped_contracts:
@@ -157,6 +205,7 @@ class SnapshotBuilder:
         visible instead of silent.
         """
         data_path = pathlib.Path(data_dir)
+        self._configure_domains(self._domains_for_data_dir(data_path))
         codec = get_codec(detect_format(data_path))
         missing: list[tuple[str, str]] = []
         for cid in self.mapped_contracts:
@@ -211,6 +260,7 @@ class SnapshotBuilder:
         merge with the observation watermarks derived from the readings, the
         newest time winning per contract.
         """
+        self._configure_domains(self._domains_for_sources(sources))
         effective_at = effective_at or datetime.now(tz=timezone.utc)
         generated_at = datetime.now(tz=timezone.utc)
 

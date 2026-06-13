@@ -32,6 +32,90 @@
       "required": true
     }
   },
+  "fingerprints": {
+    "avroParsingFingerprint": "c063eb2e4b5e1f058c3e893baf5bc7846fba4f589c0bdc0621d4f0232f123e63",
+    "optimizationMetadataHash": "2f61c80d03d93c2b2d75e67f5962fb0130cf21fd4ff920c89d4a242b499be531"
+  },
+  "history": [
+    {
+      "contractId": "operators",
+      "fields": {
+        "certified_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "operator_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "shift_end_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "shift_start_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        }
+      },
+      "odcsId": "operators",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "operators",
+      "fields": {
+        "certified_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "operator_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "shift_end_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "shift_start_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "c063eb2e4b5e1f058c3e893baf5bc7846fba4f589c0bdc0621d4f0232f123e63",
+        "optimizationMetadataHash": "2f61c80d03d93c2b2d75e67f5962fb0130cf21fd4ff920c89d4a242b499be531"
+      },
+      "odcsId": "operators",
+      "version": "1.0.0"
+    }
+  ],
   "odcsId": "operators",
   "version": "1.0.0"
 }

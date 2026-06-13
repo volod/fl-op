@@ -47,6 +47,60 @@
       "required": false
     }
   },
+  "history": [
+    {
+      "contractId": "canonical-observation",
+      "fields": {
+        "entityRef": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "ingestedAt": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "metric": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "observationId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "observedAt": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "qualityFlag": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "stateValue": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "unit": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "value": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        }
+      },
+      "odcsId": "canonical-observation",
+      "version": "0.2.0"
+    }
+  ],
   "odcsId": "canonical-observation",
   "version": "0.2.0"
 }

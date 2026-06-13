@@ -19,7 +19,6 @@ from fl_op.canonical.plan import Assignment, Plan
 from fl_op.core.constants import (
     ADAPTER_ORTOOLS_ROLLING_ID,
     ADAPTER_VERSION,
-    DEFAULT_CHANGE_PENALTY,
 )
 
 if TYPE_CHECKING:
@@ -29,6 +28,7 @@ if TYPE_CHECKING:
 def normalize_rolling_result(
     raw_result: RollingSolveResult,
     snapshot: "PlanningSnapshot",
+    profile: Any = None,
 ) -> Plan:
     """Convert a rolling solve result into an immutable canonical Plan revision."""
     now = datetime.now(tz=timezone.utc)
@@ -46,6 +46,16 @@ def normalize_rolling_result(
         *new_assignments,
     ]
     score = _build_score(raw_result, new_assignments, unassigned, kpis)
+    from fl_op.planning.drone_kpis import (
+        DRONE_KPI_SCORE_KEY,
+        build_drone_logistics_kpis,
+    )
+
+    drone_kpis = build_drone_logistics_kpis(
+        snapshot, assignments, unassigned, score, profile
+    )
+    if drone_kpis:
+        score[DRONE_KPI_SCORE_KEY] = drone_kpis
 
     return Plan(
         plan_id=f"plan-rolling-{snapshot.snapshot_hash[:8]}",
@@ -95,7 +105,7 @@ def _normalize_chain_delta(
                 update={
                     "previous_bundle_id": previous.bundle_id,
                     "previous_start_time": previous.planned_start,
-                    "change_penalty": DEFAULT_CHANGE_PENALTY,
+                    "change_penalty": raw_result.change_penalty,
                 }
             )
         new_assignments.append(assignment)
@@ -125,6 +135,7 @@ def _build_score(
         for action_type in CorrectiveActionType
     }
     return {
+        "optimization_objective": kpis.get("optimization_objective", "cost"),
         "n_frozen": len(raw_result.frozen_assignments),
         "n_carried_forward": len(raw_result.carried_forward),
         "n_replanned": len(new_assignments),
@@ -135,12 +146,27 @@ def _build_score(
         ],
         "n_service_withdrawn": by_action[CorrectiveActionType.SERVICE_WITHDRAWN],
         "n_service_escalated": by_action[CorrectiveActionType.SERVICE_ESCALATED],
-        "plan_instability_penalty": n_changed * DEFAULT_CHANGE_PENALTY,
+        "plan_instability_penalty": n_changed * raw_result.change_penalty,
         "total_estimated_margin_eur": kpis.get("total_estimated_margin_eur", 0.0),
         "greedy_baseline_margin_eur": kpis.get("greedy_baseline_margin_eur", 0.0),
         "solver_improvement_eur": kpis.get("solver_improvement_eur", 0.0),
+        "total_completion_time_s": kpis.get("total_completion_time_s", 0.0),
+        "avg_completion_time_s": kpis.get("avg_completion_time_s", 0.0),
+        "p95_completion_time_s": kpis.get("p95_completion_time_s", 0.0),
+        "max_completion_time_s": kpis.get("max_completion_time_s", 0.0),
+        "n_tasks_with_deadlines": kpis.get("n_tasks_with_deadlines", 0),
+        "n_on_time": kpis.get("n_on_time", 0),
+        "on_time_rate_pct": kpis.get("on_time_rate_pct", 0.0),
+        "n_late": kpis.get("n_late", 0),
         "total_fuel_l": kpis.get("total_fuel_l", 0.0),
         "total_fuel_cost_eur": kpis.get("total_fuel_cost_eur", 0.0),
+        "total_energy_cost_eur": kpis.get("total_energy_cost_eur", 0.0),
+        "total_energy_quantity_by_type": kpis.get(
+            "total_energy_quantity_by_type", {}
+        ),
+        "total_energy_quantity_by_unit": kpis.get(
+            "total_energy_quantity_by_unit", {}
+        ),
         "total_fertilizer_kg": kpis.get("total_fertilizer_kg", 0.0),
         "total_material_cost_eur": kpis.get("total_material_cost_eur", 0.0),
         "n_unassigned": len(unassigned),

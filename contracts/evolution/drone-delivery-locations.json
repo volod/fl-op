@@ -1,0 +1,112 @@
+{
+  "contractId": "drone-delivery-locations",
+  "fields": {
+    "customer_class": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "location_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "name": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "polygon": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": false
+    },
+    "restricted_operations": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": false
+    },
+    "restriction_windows": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": false
+    },
+    "service_area_ha": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "cfe92e9b6db9e91fe1a22c075811a2679bd0c5ad2f34534c3c2dad43c727cab5"
+  },
+  "history": [
+    {
+      "contractId": "drone-delivery-locations",
+      "fields": {
+        "customer_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "location_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "polygon": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "restricted_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "restriction_windows": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "service_area_ha": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "cfe92e9b6db9e91fe1a22c075811a2679bd0c5ad2f34534c3c2dad43c727cab5"
+      },
+      "odcsId": "delivery-locations",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "delivery-locations",
+  "version": "1.0.0"
+}

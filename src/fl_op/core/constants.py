@@ -277,6 +277,7 @@ CLUSTER_LNS_MAX_BUDGET_MULTIPLIER: float = float(
 # Canonical resource codes a cost-rate row may price (cost-rate.rateType).
 RATE_TYPE_FUEL: str = "fuel"
 RATE_TYPE_MATERIAL: str = "fertilizer"
+RATE_TYPE_ELECTRICITY: str = "electricity"
 
 # Canonical unit of depot material inventory and of the material-reservation
 # quantities derived from it (urn:xopt:inventory:fertilizer is kept in kg).
@@ -288,6 +289,12 @@ FUEL_COST_EUR_PER_L: float = float(os.environ.get("FUEL_COST_EUR_PER_L", "1.45")
 # Liquid fertilizer cost per kilogram for inventory arc cost estimation.
 FERTILIZER_COST_EUR_PER_KG: float = float(os.environ.get("FERTILIZER_COST_EUR_PER_KG", "0.55"))
 
+# Electricity cost per kWh used when a vehicle declares electricity as its
+# energy resource and no cost-rate row is supplied.
+ELECTRICITY_COST_EUR_PER_KWH: float = float(
+    os.environ.get("ELECTRICITY_COST_EUR_PER_KWH", "0.18")
+)
+
 # Share of a related-equipment material tank assumed consumed by one task.
 RELATED_MATERIAL_FILL_RATIO: float = 0.8
 
@@ -295,11 +302,25 @@ RELATED_MATERIAL_FILL_RATIO: float = 0.8
 # Greedy scoring weights
 # ---------------------------------------------------------------------------
 
+# Explicit solver objective modes. Cost remains the default; time is an
+# opt-in mode for deadline-sensitive dispatches.
+OBJECTIVE_MODE_COST: str = "cost"
+OBJECTIVE_MODE_TIME: str = "time"
+SUPPORTED_OBJECTIVE_MODES: frozenset[str] = frozenset(
+    {OBJECTIVE_MODE_COST, OBJECTIVE_MODE_TIME}
+)
+
 # Weight on gross margin estimate in the greedy score.
 SCORE_WEIGHT_MARGIN: float = float(os.environ.get("SCORE_WEIGHT_MARGIN", "1.0"))
 
 # Weight on repositioning cost penalty (subtracted from margin).
 SCORE_WEIGHT_REPOSITION: float = float(os.environ.get("SCORE_WEIGHT_REPOSITION", "1.0"))
+
+# Weight applied to task cumulative time in the opt-in time objective. One
+# unit equals one scheduled second, keeping drop penalties in the same scale.
+TIME_OBJECTIVE_COMPLETION_WEIGHT: int = int(
+    os.environ.get("TIME_OBJECTIVE_COMPLETION_WEIGHT", "1")
+)
 
 # ---------------------------------------------------------------------------
 # Canonical solver-row defaults

@@ -1,0 +1,39 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: delivery-orders
+version: 1.0.0
+status: active
+name: Delivery Orders
+domain: drone-logistics
+tenant: logistics-ops
+description:
+  purpose: UGV/UAV delivery variants for real customer orders.
+  usage: Canonical tasks with alternative groups so the optimizer chooses mode.
+servers: [{server: batch, type: local, format: csv, path: delivery-orders.csv}]
+schema:
+  - name: deliveryOrders
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro: {namespace: org.example.drone.orders, recordName: DeliveryOrder, recordDoc: "Delivery task variant mapped to canonical Task."}
+          proto: {package: org.example.drone.orders, messageName: DeliveryOrder, syntax: proto3}
+          es: {indexName: delivery-orders, dynamic: strict}
+    properties:
+      - {name: task_id, logicalType: string, physicalType: string, required: true, description: Stable task variant id., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 1}}}]}
+      - {name: delivery_id, logicalType: string, physicalType: string, required: true, description: Real delivery order id and alternative group., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 2}}}]}
+      - {name: pickup_location_id, logicalType: string, physicalType: string, required: true, description: Pickup location., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 3}}}]}
+      - {name: dropoff_location_id, logicalType: string, physicalType: string, required: true, description: Dropoff location., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 4}}}]}
+      - {name: operation_type, logicalType: string, physicalType: string, required: true, description: UGV_DELIVERY or UAV_DELIVERY., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 5}}}]}
+      - {name: customer_class, logicalType: string, physicalType: string, required: true, description: Customer segment., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 6}}}]}
+      - {name: work_quantity, logicalType: number, physicalType: double, required: false, description: Number of delivered items., customProperties: [{property: fieldGeneration, value: {avro: {default: 1.0}, proto: {fieldNumber: 7}}}]}
+      - {name: work_quantity_unit, logicalType: string, physicalType: string, required: false, description: Work quantity unit., customProperties: [{property: fieldGeneration, value: {avro: {default: "items"}, proto: {fieldNumber: 8}}}]}
+      - {name: service_duration_minutes, logicalType: number, physicalType: double, required: false, description: Fixed delivery handling time., customProperties: [{property: fieldGeneration, value: {avro: {default: 8.0}, proto: {fieldNumber: 9}}}]}
+      - {name: payload_kg, logicalType: number, physicalType: double, required: true, description: Payload mass., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 10}}}]}
+      - {name: payload_material, logicalType: string, physicalType: string, required: false, description: Payload compartment code., customProperties: [{property: fieldGeneration, value: {avro: {default: "parcel"}, proto: {fieldNumber: 11}}}]}
+      - {name: deadline, logicalType: string, physicalType: string, required: false, description: Delivery deadline timestamp., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 12}}}]}
+      - {name: penalty_per_day_eur, logicalType: number, physicalType: double, required: false, description: Lateness penalty., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 13}}}]}
+      - {name: priority, logicalType: integer, physicalType: int, required: false, description: Priority class., customProperties: [{property: fieldGeneration, value: {avro: {default: 5}, proto: {fieldNumber: 14}}}]}
+      - {name: status, logicalType: string, physicalType: string, required: false, description: Lifecycle status., customProperties: [{property: fieldGeneration, value: {avro: {default: "pending"}, proto: {fieldNumber: 15}}}]}
+      - {name: estimated_revenue_eur, logicalType: number, physicalType: double, required: false, description: Expected delivery value., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 16}}}]}

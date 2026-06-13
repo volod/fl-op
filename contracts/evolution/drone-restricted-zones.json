@@ -1,0 +1,92 @@
+{
+  "contractId": "drone-restricted-zones",
+  "fields": {
+    "lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "name": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "polygon": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": true
+    },
+    "restricted_operations": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": true
+    },
+    "restriction_windows": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": false
+    },
+    "zone_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "ab7e524600412f8a9f08b48209ea1d04cae63650f0e92fda8ac5dcb2a9675ec2"
+  },
+  "history": [
+    {
+      "contractId": "drone-restricted-zones",
+      "fields": {
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "polygon": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "restricted_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "restriction_windows": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "zone_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "ab7e524600412f8a9f08b48209ea1d04cae63650f0e92fda8ac5dcb2a9675ec2"
+      },
+      "odcsId": "restricted-zones",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "restricted-zones",
+  "version": "1.0.0"
+}

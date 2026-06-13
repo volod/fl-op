@@ -1,0 +1,31 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: payload-modules
+version: 1.0.0
+status: active
+name: Payload Modules
+domain: drone-logistics
+tenant: logistics-ops
+description:
+  purpose: Detachable payload modules or service kits for deliveries.
+  usage: Related equipment matched with UGV/UAV prime movers.
+servers: [{server: batch, type: local, format: csv, path: payload-modules.csv}]
+schema:
+  - name: payloadModules
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro: {namespace: org.example.drone.assets, recordName: PayloadModule, recordDoc: "Payload module mapped to canonical related equipment."}
+          proto: {package: org.example.drone.assets, messageName: PayloadModule, syntax: proto3}
+          es: {indexName: drone-payload-modules, dynamic: strict}
+    properties:
+      - {name: module_id, logicalType: string, physicalType: string, required: true, description: Stable module id., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 1}}}]}
+      - {name: module_class, logicalType: string, physicalType: string, required: true, description: Payload module class., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 2}}}]}
+      - {name: supported_operations, logicalType: array, physicalType: string, required: true, description: Supported operations., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 3}}}]}
+      - {name: required_power_kw, logicalType: number, physicalType: double, required: true, description: Required vehicle power., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 4}}}]}
+      - {name: min_speed_kmh, logicalType: number, physicalType: double, required: false, description: Minimum operating speed., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 5}}}]}
+      - {name: max_speed_kmh, logicalType: number, physicalType: double, required: false, description: Maximum operating speed., customProperties: [{property: fieldGeneration, value: {avro: {default: 80.0}, proto: {fieldNumber: 6}}}]}
+      - {name: hub_id, logicalType: string, physicalType: string, required: true, description: Home logistics hub., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 7}}}]}
+      - {name: work_rates, logicalType: object, physicalType: string, required: false, description: Unit work rates., customProperties: [{property: fieldGeneration, value: {avro: {default: ""}, proto: {fieldNumber: 8}}}]}

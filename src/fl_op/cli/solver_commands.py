@@ -124,11 +124,27 @@ def tune(
 )
 @click.option("--reviewed-by", default=None, help="Reviewer recorded in the artifact.")
 @click.option("--notes", default=None, help="Review notes recorded in the artifact.")
+@click.option("--domain", "domain_id", default=None, help="Optional domain scope.")
+@click.option("--profile", "profile_id", default=None, help="Optional profile scope.")
+@click.option(
+    "--adapter-version",
+    default=None,
+    help="Optional adapter-version scope.",
+)
+@click.option(
+    "--expires-at",
+    default=None,
+    help="Optional ISO-8601 expiry timestamp for the scoped overlay.",
+)
 def tune_promote(
     best_params: str,
     out: str | None,
     reviewed_by: str | None,
     notes: str | None,
+    domain_id: str | None,
+    profile_id: str | None,
+    adapter_version: str | None,
+    expires_at: str | None,
 ) -> None:
     """Promote best_params.json into the reviewed tuned solver profile."""
     import pathlib
@@ -140,6 +156,10 @@ def tune_promote(
         output_path=pathlib.Path(out) if out else None,
         reviewed_by=reviewed_by,
         notes=notes,
+        domain_id=domain_id,
+        profile_id=profile_id,
+        adapter_version=adapter_version,
+        expires_at=expires_at,
     )
 
 

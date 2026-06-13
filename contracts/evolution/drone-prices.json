@@ -1,0 +1,82 @@
+{
+  "contractId": "drone-prices",
+  "fields": {
+    "per_unit": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "rate_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "rate_type": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "unit_price_eur": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "valid_from": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "valid_to": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "8cc3bad338085bb537cc1cf9e28e4d65d4b725daa5aea67f231f9d6cb591047d"
+  },
+  "history": [
+    {
+      "contractId": "drone-prices",
+      "fields": {
+        "per_unit": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "rate_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "rate_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "unit_price_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "valid_from": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "valid_to": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "8cc3bad338085bb537cc1cf9e28e4d65d4b725daa5aea67f231f9d6cb591047d"
+      },
+      "odcsId": "prices",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "prices",
+  "version": "1.0.0"
+}

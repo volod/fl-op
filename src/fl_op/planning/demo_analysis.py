@@ -70,11 +70,25 @@ def log_implementation_analysis(
         assignments_per_cluster,
     )
 
+    prime_assets = {
+        a.get("asset_id")
+        for a in assets
+        if "mobile-prime-mover" in (a.get("roles") or [])
+    }
+    related_assets = {
+        a.get("asset_id") for a in assets if "implement" in (a.get("roles") or [])
+    }
     vehicle_ids = {
-        aid for a in assignments for aid in a.get("asset_ids", []) if aid.startswith("vehicle")
+        aid
+        for a in assignments
+        for aid in a.get("asset_ids", [])
+        if aid in prime_assets
     }
     implement_ids = {
-        aid for a in assignments for aid in a.get("asset_ids", []) if aid.startswith("implement")
+        aid
+        for a in assignments
+        for aid in a.get("asset_ids", [])
+        if aid in related_assets
     }
     vehicle_util = (
         len(vehicle_ids) / payload_counts.get("vehicles", 1) * 100.0
@@ -93,6 +107,12 @@ def log_implementation_analysis(
         len(implement_ids),
         implement_util,
     )
+    mode_counts = _mode_counts(assignments)
+    if mode_counts:
+        logger.info(
+            "  mode split      : %s",
+            ", ".join(f"{mode}={count}" for mode, count in mode_counts.items()),
+        )
 
     if assignments:
         logger.info(
@@ -128,8 +148,19 @@ def log_implementation_analysis(
 
     logger.info(
         "  margin delta    : final plan %+.2f EUR vs admitted greedy baseline",
-        float(score.get("solver_improvement_eur", 0.0)),
+            float(score.get("solver_improvement_eur", 0.0)),
     )
+
+
+def _mode_counts(assignments: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for assignment in assignments:
+        task_id = str(assignment.get("task_id", ""))
+        if task_id.endswith("-UGV"):
+            counts["UGV"] = counts.get("UGV", 0) + 1
+        elif task_id.endswith("-UAV"):
+            counts["UAV"] = counts.get("UAV", 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def _unassigned_reason_counts(unassigned: list[dict[str, Any]]) -> dict[str, int]:

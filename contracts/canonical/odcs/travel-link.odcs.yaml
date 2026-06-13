@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: canonical-travel-link
-version: 0.1.0
+version: 0.2.0
 status: active
 name: Canonical Travel Link
 domain: canonical
@@ -58,3 +58,10 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: travelLink.distanceKm, semanticTerm: urn:xopt:travel:distance, canonicalUnit: km, quantityKind: length, planningUse: [cost]}
+      - name: networkMode
+        logicalType: string
+        required: false
+        description: "Travel network mode for this edge: road, air, or any."
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: travelLink.networkMode, semanticTerm: urn:xopt:travel:network-mode, planningUse: [routing]}

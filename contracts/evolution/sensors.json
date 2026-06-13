@@ -52,6 +52,130 @@
       "required": false
     }
   },
+  "fingerprints": {
+    "avroParsingFingerprint": "b099ab7b472c06e17f3c62e3a5d7d8ff300d3534a9d4ebd8ffe25f751d283031",
+    "optimizationMetadataHash": "06fb03cd7c4c3d97798edf7c305c3135b80f5f7273b0393956627e22ba0da9f5"
+  },
+  "history": [
+    {
+      "contractId": "sensors",
+      "fields": {
+        "field_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "firmware_version": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "install_date": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "last_service_at": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": false
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "mobility": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "sensor_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "sensor_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "service_interval_days": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        }
+      },
+      "odcsId": "sensors",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "sensors",
+      "fields": {
+        "field_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "firmware_version": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "install_date": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "last_service_at": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": false
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "mobility": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "sensor_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "sensor_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "service_interval_days": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "b099ab7b472c06e17f3c62e3a5d7d8ff300d3534a9d4ebd8ffe25f751d283031",
+        "optimizationMetadataHash": "06fb03cd7c4c3d97798edf7c305c3135b80f5f7273b0393956627e22ba0da9f5"
+      },
+      "odcsId": "sensors",
+      "version": "1.0.0"
+    }
+  ],
   "odcsId": "sensors",
   "version": "1.0.0"
 }

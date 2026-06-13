@@ -1,0 +1,44 @@
+schemaVersion: "1.0"
+domain: drone_logistics
+
+weather:
+  maxWindMs: 11.0
+  maxRainMmPerH: 2.5
+
+fleet:
+  ugvShare: 0.6
+
+ugvRoadSpeedBucketsKmh:
+  denseUrban: 18.0
+  arterial: 26.0
+  industrial: 34.0
+
+payloadCapacityClassesKg:
+  UGV:
+    light: 180.0
+    medium: 420.0
+    heavy: 900.0
+  UAV:
+    micro: 3.0
+    standard: 7.5
+    heavy: 12.0
+
+deadlinePenaltyEurPerDayByCustomerClass:
+  manufacturer: 900.0
+  restaurant: 2600.0
+  online_store: 650.0
+
+deliveryDropPenaltyMultiplierByCustomerClass:
+  manufacturer: 1.2
+  restaurant: 1.5
+  online_store: 1.0
+
+energyCostRates:
+  fuelEquivalentEurPerL: 1.15
+  electricityEurPerKwh: 0.18
+
+solver:
+  clusterTargetSize: 36
+  clusterSolveTimeLimitS: 75
+  lnsTimeLimitS: 1
+  rollingInstabilityPenalty: 1400

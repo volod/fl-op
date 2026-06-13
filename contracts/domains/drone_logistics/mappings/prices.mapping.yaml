@@ -1,0 +1,17 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+metadata:
+  domain: drone_logistics
+  sourceContract: prices
+  canonicalEntity: cost-rate
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: costRates
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+fieldMappings:
+  - {sourceField: rate_id, binding: costRate.costRateId, semanticTerm: urn:xopt:identity:cost-rate-id, planningUse: [identity]}
+  - {sourceField: rate_type, binding: costRate.rateType, semanticTerm: urn:xopt:cost:rate-type, planningUse: [cost]}
+  - {sourceField: unit_price_eur, binding: costRate.unitPrice, semanticTerm: urn:xopt:cost:unit-price, canonicalUnit: EUR, quantityKind: money, planningUse: [cost]}
+  - {sourceField: per_unit, binding: costRate.perUnit, semanticTerm: urn:xopt:cost:per-unit, planningUse: [cost]}
+  - {sourceField: valid_from, binding: costRate.validFrom, semanticTerm: urn:xopt:time:valid-from, quantityKind: timestamp, planningUse: [cost]}
+  - {sourceField: valid_to, binding: costRate.validTo, semanticTerm: urn:xopt:time:valid-to, quantityKind: timestamp, planningUse: [cost]}

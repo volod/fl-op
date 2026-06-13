@@ -11,6 +11,7 @@ input.
 import heapq
 import logging
 import math
+from collections.abc import Mapping
 from typing import Any, Optional
 
 from fl_op.core.constants import EARTH_RADIUS_KM, TRAVEL_NETWORK_MAX_COMPOSE_NODES
@@ -29,24 +30,84 @@ _AREA_UNIT = "ha"
 _AREA_LIKE_UNITS = ("", _AREA_UNIT)
 
 # (from_location_ref, to_location_ref) -> travel time in integer seconds.
-TravelLookup = dict[tuple[str, str], int]
+TravelPairLookup = dict[tuple[str, str], int]
 
 
-def build_travel_lookup(travel_links: list[Any]) -> TravelLookup:
+class ModeAwareTravelLookup(dict[tuple[str, str], int]):
+    """Backward-compatible travel lookup with optional per-mode networks.
+
+    The dict itself exposes the aggregate fastest known path, so legacy callers
+    that use ``lookup[(from, to)]`` or ``lookup.get(...)`` behave as before.
+    Mode-aware callers use ``get_seconds(..., mode)`` to avoid road/air leakage.
+    """
+
+    def __init__(
+        self,
+        aggregate: Optional[Mapping[tuple[str, str], int]] = None,
+        by_mode: Optional[Mapping[str, Mapping[tuple[str, str], int]]] = None,
+    ) -> None:
+        super().__init__(aggregate or {})
+        self.by_mode: dict[str, TravelPairLookup] = {
+            _normalise_mode(mode): dict(lookup)
+            for mode, lookup in (by_mode or {}).items()
+        }
+
+    def get_seconds(
+        self,
+        from_ref: str,
+        to_ref: str,
+        travel_mode: Optional[str] = None,
+    ) -> Optional[int]:
+        mode = _normalise_mode(travel_mode)
+        pair = (from_ref, to_ref)
+        if mode and mode != "any":
+            mode_lookup = self.by_mode.get(mode)
+            if mode_lookup and pair in mode_lookup:
+                return mode_lookup[pair]
+            any_lookup = self.by_mode.get("any")
+            if any_lookup and pair in any_lookup:
+                return any_lookup[pair]
+            return None
+        return self.get(pair)
+
+
+TravelLookup = dict[tuple[str, str], int] | ModeAwareTravelLookup
+
+
+def build_travel_lookup(travel_links: list[Any]) -> ModeAwareTravelLookup:
     """Index travel-link rows by directed location pair (positive times only),
     then close the graph under shortest paths so multi-hop connections count."""
-    lookup: TravelLookup = {}
+    direct_any: TravelPairLookup = {}
+    direct_by_mode: dict[str, TravelPairLookup] = {}
     for link in travel_links:
         seconds = _nonnegative(link.travel_time_s)
         if seconds <= 0:
             continue
-        lookup[(str(link.from_location_ref), str(link.to_location_ref))] = max(
-            1, int(seconds)
-        )
-    return _compose_shortest_paths(lookup)
+        pair = (str(link.from_location_ref), str(link.to_location_ref))
+        value = max(1, int(seconds))
+        mode = _normalise_mode(getattr(link, "network_mode", "any"))
+        target = direct_any if mode == "any" else direct_by_mode.setdefault(mode, {})
+        existing = target.get(pair)
+        target[pair] = value if existing is None else min(existing, value)
+
+    any_lookup = _compose_shortest_paths(direct_any) if direct_any else {}
+    by_mode: dict[str, TravelPairLookup] = {"any": any_lookup}
+    for mode, direct in direct_by_mode.items():
+        merged = dict(direct_any)
+        for pair, seconds in direct.items():
+            existing = merged.get(pair)
+            merged[pair] = seconds if existing is None else min(existing, seconds)
+        by_mode[mode] = _compose_shortest_paths(merged)
+
+    aggregate: TravelPairLookup = {}
+    for lookup in by_mode.values():
+        for pair, seconds in lookup.items():
+            existing = aggregate.get(pair)
+            aggregate[pair] = seconds if existing is None else min(existing, seconds)
+    return ModeAwareTravelLookup(aggregate, by_mode)
 
 
-def _compose_shortest_paths(direct: TravelLookup) -> TravelLookup:
+def _compose_shortest_paths(direct: TravelPairLookup) -> TravelPairLookup:
     """All-pairs shortest-path closure over the directed link graph.
 
     One Dijkstra pass per source node; a direct link longer than a composed
@@ -63,13 +124,13 @@ def _compose_shortest_paths(direct: TravelLookup) -> TravelLookup:
             len(nodes),
             TRAVEL_NETWORK_MAX_COMPOSE_NODES,
         )
-        return direct
+        return dict(direct)
 
     adjacency: dict[str, list[tuple[str, int]]] = {}
     for (from_ref, to_ref), seconds in direct.items():
         adjacency.setdefault(from_ref, []).append((to_ref, seconds))
 
-    composed: TravelLookup = {}
+    composed: TravelPairLookup = {}
     for source in nodes:
         best: dict[str, int] = {source: 0}
         heap: list[tuple[int, str]] = [(0, source)]
@@ -106,6 +167,7 @@ def travel_seconds(
     lat2: float,
     lon2: float,
     travel_lookup: Optional[TravelLookup] = None,
+    travel_mode: Optional[str] = None,
 ) -> int:
     """Travel time between two locations: network link first, haversine fallback.
 
@@ -113,12 +175,77 @@ def travel_seconds(
     are usually symmetric) before the geometric estimate.
     """
     if travel_lookup and from_ref and to_ref and from_ref != to_ref:
-        seconds = travel_lookup.get((from_ref, to_ref)) or travel_lookup.get(
-            (to_ref, from_ref)
-        )
+        seconds = _lookup_seconds(
+            travel_lookup, from_ref, to_ref, travel_mode
+        ) or _lookup_seconds(travel_lookup, to_ref, from_ref, travel_mode)
         if seconds:
             return seconds
     return _haversine_s(lat1, lon1, lat2, lon2)
+
+
+def network_seconds(
+    travel_lookup: Optional[TravelLookup],
+    from_ref: str,
+    to_ref: str,
+    travel_mode: Optional[str] = None,
+) -> Optional[int]:
+    """Directed network time for one pair, without reverse or geometry fallback."""
+    if not travel_lookup or not from_ref or not to_ref or from_ref == to_ref:
+        return None
+    return _lookup_seconds(travel_lookup, from_ref, to_ref, travel_mode)
+
+
+def _lookup_seconds(
+    travel_lookup: TravelLookup,
+    from_ref: str,
+    to_ref: str,
+    travel_mode: Optional[str] = None,
+) -> Optional[int]:
+    if isinstance(travel_lookup, ModeAwareTravelLookup):
+        return travel_lookup.get_seconds(from_ref, to_ref, travel_mode)
+    return travel_lookup.get((from_ref, to_ref))
+
+
+def travel_mode_for_vehicle(vehicle: Any) -> str:
+    """Resolve a vehicle's travel network mode from type or operations."""
+    asset_type = str(getattr(vehicle, "asset_type", "") or "").upper()
+    if "UAV" in asset_type:
+        return "air"
+    if "UGV" in asset_type:
+        return "road"
+    ops = operation_set(getattr(vehicle, "compatible_operations", []))
+    if "UAV_DELIVERY" in ops:
+        return "air"
+    if "UGV_DELIVERY" in ops:
+        return "road"
+    return "any"
+
+
+def travel_mode_for_operation(operation_type: str) -> str:
+    op = str(operation_type or "").upper()
+    if op.startswith("UAV_") or op == "UAV_DELIVERY":
+        return "air"
+    if op.startswith("UGV_") or op == "UGV_DELIVERY":
+        return "road"
+    return "any"
+
+
+def iter_travel_lookup_items(
+    travel_lookup: Optional[TravelLookup],
+) -> list[list[Any]]:
+    """Stable representation for cache keys."""
+    if not travel_lookup:
+        return []
+    if isinstance(travel_lookup, ModeAwareTravelLookup):
+        rows: list[list[Any]] = []
+        for mode, lookup in sorted(travel_lookup.by_mode.items()):
+            for (from_ref, to_ref), seconds in sorted(lookup.items()):
+                rows.append([mode, from_ref, to_ref, int(seconds)])
+        return rows
+    return [
+        ["any", from_ref, to_ref, int(seconds)]
+        for (from_ref, to_ref), seconds in sorted(travel_lookup.items())
+    ]
 
 
 def _estimate_operation_seconds(order: Any, implement: Any) -> int:
@@ -176,3 +303,26 @@ def _nonnegative(value: Any) -> float:
         return max(0.0, float(value or 0.0))
     except (TypeError, ValueError):
         return 0.0
+
+
+def _normalise_mode(mode: Optional[str]) -> str:
+    value = str(mode or "any").strip().lower()
+    return value if value in {"road", "air", "any"} else "any"
+
+
+def _as_strings(raw: Any) -> set[str]:
+    if isinstance(raw, str):
+        import ast
+
+        try:
+            raw = ast.literal_eval(raw)
+        except Exception:
+            raw = [raw]
+    if not isinstance(raw, (list, tuple, set)):
+        raw = [raw]
+    return {str(item).upper() for item in raw if str(item or "")}
+
+
+def operation_set(raw: Any) -> set[str]:
+    """Return normalized operation codes from lists or stringified lists."""
+    return _as_strings(raw)

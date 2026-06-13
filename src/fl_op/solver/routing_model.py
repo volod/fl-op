@@ -6,11 +6,18 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fl_op.core.constants import RELATED_MATERIAL_FILL_RATIO
-from fl_op.solver.cost_rates import ResourcePrices
+from fl_op.core.constants import RATE_TYPE_FUEL
+from fl_op.solver.cost_rates import (
+    ResourcePrices,
+    vehicle_energy_consumption_rate,
+    vehicle_energy_resource_type,
+    vehicle_energy_unit,
+)
 from fl_op.solver.travel_time import (
     TravelLookup,
     _estimate_operation_seconds,
     travel_seconds,
+    travel_mode_for_vehicle,
 )
 
 # Routing node kinds. The depot is always node 0; each order contributes its
@@ -88,6 +95,7 @@ def pickup_node_indices(nodes: list[RoutingNode]) -> dict[int, int]:
 def build_time_matrix(
     nodes: list[RoutingNode],
     travel_lookup: Optional[TravelLookup] = None,
+    travel_mode: Optional[str] = None,
 ) -> list[list[int]]:
     """Pairwise arc times: network shortest path where one exists, haversine
     otherwise."""
@@ -95,11 +103,27 @@ def build_time_matrix(
         [
             travel_seconds(
                 a.location_ref, b.location_ref, a.lat, a.lon, b.lat, b.lon,
-                travel_lookup,
+                travel_lookup, travel_mode,
             )
             for b in nodes
         ]
         for a in nodes
+    ]
+
+
+def build_vehicle_time_matrices(
+    nodes: list[RoutingNode],
+    routing_vehicles: list[dict[str, Any]],
+    travel_lookup: Optional[TravelLookup] = None,
+) -> list[list[list[int]]]:
+    """Pairwise arc times per routing vehicle mode."""
+    return [
+        build_time_matrix(
+            nodes,
+            travel_lookup,
+            travel_mode_for_vehicle(rv["prime"]),
+        )
+        for rv in routing_vehicles
     ]
 
 
@@ -149,7 +173,7 @@ def _extract_dispatch_packages(
     depot_id: str,
     cluster_dict: dict[str, Any],
     now_epoch: int,
-    time_matrix: Optional[list[list[int]]] = None,
+    time_matrix: Optional[list[list[int]] | list[list[list[int]]]] = None,
     resource_prices: Optional[ResourcePrices] = None,
 ) -> tuple[list[dict[str, Any]], set[str]]:
     """Read the OR-Tools solution and build dispatch package dicts.
@@ -175,7 +199,7 @@ def _extract_dispatch_packages(
             node_idx = manager.IndexToNode(index)
             node = nodes[node_idx]
             if time_matrix is not None and node_idx != prev_node:
-                travel_s_in += time_matrix[prev_node][node_idx]
+                travel_s_in += _matrix_seconds(time_matrix, rv_idx, prev_node, node_idx)
             prev_node = node_idx
             if node.kind != NODE_TASK:
                 index = solution.Value(routing.NextVar(index))
@@ -189,10 +213,18 @@ def _extract_dispatch_packages(
             op_seconds = _estimate_operation_seconds(order, rv["related"])
             start_epoch = now_epoch + arrival_s
             end_epoch = start_epoch + op_seconds
-            fuel_l = (
+            energy_resource_type = vehicle_energy_resource_type(rv["prime"])
+            energy_unit = vehicle_energy_unit(rv["prime"])
+            energy_quantity = (
                 (op_seconds + travel_s_in)
                 / 3600.0
-                * float(rv["prime"].fuel_consumption_rate)
+                * vehicle_energy_consumption_rate(rv["prime"])
+            )
+            energy_cost = (
+                energy_quantity * resource_prices.price_for(energy_resource_type)
+            )
+            fuel_l = (
+                energy_quantity if energy_resource_type == RATE_TYPE_FUEL else 0.0
             )
             travel_s_in = 0
             fertilizer_kg = (
@@ -200,7 +232,7 @@ def _extract_dispatch_packages(
             )
             margin_eur = (
                 float(order.revenue)
-                - fuel_l * resource_prices.fuel_eur_per_l
+                - energy_cost
                 - fertilizer_kg * resource_prices.material_eur_per_kg
             )
 
@@ -220,6 +252,10 @@ def _extract_dispatch_packages(
                     "scheduled_end": datetime.fromtimestamp(end_epoch, tz=timezone.utc).isoformat(),
                     "route_waypoints": [{"lat": node.lat, "lon": node.lon}],
                     "estimated_fuel_l": round(fuel_l, 2),
+                    "energy_resource_type": energy_resource_type,
+                    "estimated_energy_quantity": round(energy_quantity, 2),
+                    "estimated_energy_unit": energy_unit,
+                    "estimated_energy_cost_eur": round(energy_cost, 2),
                     "estimated_fertilizer_kg": round(fertilizer_kg, 2),
                     "estimated_margin_eur": round(margin_eur, 2),
                 }
@@ -227,3 +263,17 @@ def _extract_dispatch_packages(
             index = solution.Value(routing.NextVar(index))
 
     return dispatch_packages, served_task_ids
+
+
+def _matrix_seconds(
+    time_matrix: list[list[int]] | list[list[list[int]]],
+    vehicle_idx: int,
+    from_node: int,
+    to_node: int,
+) -> int:
+    if not time_matrix:
+        return 0
+    first = time_matrix[0]
+    if first and isinstance(first[0], list):
+        return int(time_matrix[vehicle_idx][from_node][to_node])  # type: ignore[index]
+    return int(time_matrix[from_node][to_node])  # type: ignore[index]

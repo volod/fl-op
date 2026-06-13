@@ -24,8 +24,9 @@ never overwrites a previous run.
     --seed 42
 ```
 
-Those are the CLI defaults (set via environment variables or `.env`), so the
-same run can be started with:
+Those are the CLI defaults (set via environment variables or `.env`). The
+registry active domain is `drone_logistics`, so the same run can be started
+with:
 
 ```bash
 .venv/bin/fl-op generate-data --seed 42
@@ -37,14 +38,16 @@ For large-scale runs, pass the desired counts explicitly:
 .venv/bin/fl-op generate-data --vehicles 3000 --implements 20000 --orders 2500 --depots 50 --seed 42
 ```
 
-Output written to `.data/generate-data/<timestamp>/`:
+Default drone logistics output written to `.data/generate-data/<timestamp>/`:
 
 ```
-depots.avro        implements.avro   operators.avro
-fields.avro        orders.avro       vehicles.avro
-sensors.avro       routes.avro       prices.avro
-sensor-readings.jsonl
-contracts.json     weather.json      metadata.json
+ugvs.avro                uavs.avro
+payload-modules.avro     drone-operators.avro
+logistics-hubs.avro      delivery-locations.avro
+restricted-zones.avro    delivery-orders.avro
+travel-links.avro        prices.avro
+weather.json             metadata.json
+drone-scenarios.json     scenario-events.jsonl
 ```
 
 The default format is avro. Pass `--format csv` or `--format parquet` to
@@ -63,12 +66,22 @@ Real CSVs take priority; missing fields fill from synthetic distributions.
 
 To generate and plan another registered domain pack, select the domain at
 generation time and activate it for planning with the `ACTIVE_DOMAIN` override.
-Counts map onto each domain's entities: construction uses
-vehicles=machines, implements=attachments, orders=jobs, depots=yards;
-roadside uses vehicles=service vehicles, implements=service kits,
-orders=signage assets, depots=service depots.
+Counts map onto each domain's entities: drone logistics uses
+vehicles=UGV/UAV fleet, implements=payload modules, orders=deliveries,
+depots=logistics hubs; construction uses vehicles=machines,
+implements=attachments, orders=jobs, depots=yards; roadside uses
+vehicles=service vehicles, implements=service kits, orders=signage assets,
+depots=service depots.
 
 ```bash
+.venv/bin/fl-op generate-data --seed 42
+.venv/bin/fl-op plan periodic --data latest
+# Cost is the default objective; use --objective time for minimal-time runs.
+.venv/bin/fl-op plan periodic --data latest --objective time
+
+.venv/bin/fl-op generate-data --domain agricultural --seed 42
+ACTIVE_DOMAIN=agricultural .venv/bin/fl-op plan periodic --data latest
+
 .venv/bin/fl-op generate-data --domain construction --seed 42
 ACTIVE_DOMAIN=construction .venv/bin/fl-op plan periodic --data latest
 
@@ -146,6 +159,10 @@ Dispatch packages are keyed by canonical names (`prime_asset_id`,
   "scheduled_start": "2026-05-21T16:55:12+00:00",
   "scheduled_end":   "2026-05-22T16:55:12+00:00",
   "estimated_fuel_l": 436.56,
+  "energy_resource_type": "fuel",
+  "estimated_energy_quantity": 436.56,
+  "estimated_energy_unit": "L",
+  "estimated_energy_cost_eur": 633.01,
   "estimated_margin_eur": 1358.08,
   "route_waypoints": [{"lat": 46.640382, "lon": 33.091568}]
 }
@@ -162,13 +179,16 @@ Dispatch packages are keyed by canonical names (`prime_asset_id`,
   "greedy_baseline_margin_eur": 386670.36,
   "solver_improvement_eur": -39040.54,
   "total_fuel_l": 6905.79,
+  "total_energy_cost_eur": 10013.40,
+  "total_energy_quantity_by_type": {"fuel": 6905.79},
+  "total_energy_quantity_by_unit": {"L": 6905.79},
   "total_fertilizer_kg": 1240.50,
   "infeasibility_reasons": {"NO_COMPATIBLE_BUNDLE": 3}
 }
 ```
 
 `greedy_baseline_margin_eur` is the admitted-task greedy warm-start margin
-estimated with the same fuel/material prices as the final plan.
+estimated with the same energy/material prices as the final plan.
 `solver_improvement_eur` is the signed final-plan margin delta against that
 baseline; it can be negative when routing feasibility, assignment-count
 priority, or other constraints trade away margin.
@@ -304,9 +324,13 @@ See [`docs/current-implementation.md`](current-implementation.md).
 # Periodic (batch) plan: canonical assignments + normalized unassigned reasons.
 .venv/bin/fl-op plan periodic --data latest
 
+# Optional minimal-time objective; cost remains the default.
+.venv/bin/fl-op plan periodic --data latest --objective time
+
 # Rolling (stream) dispatch: one immutable revision per execution event, with a
 # freeze window protecting started/imminent tasks and a plan-instability penalty.
 .venv/bin/fl-op plan rolling --data latest --events events.jsonl
+.venv/bin/fl-op plan rolling --data latest --events events.jsonl --objective time
 
 # Explain why every changed assignment moved between rolling revisions. Plain
 # re-solve changes include solver attribution from plan scores when available.
@@ -314,6 +338,7 @@ See [`docs/current-implementation.md`](current-implementation.md).
 
 # Full story end to end (contracts -> snapshot -> batch -> stream).
 .venv/bin/fl-op demo --data latest      # or: make demo
+.venv/bin/fl-op demo --data latest --objective time
 ```
 
 Why this matters: the source word (`tractor`, `sprayer`, `operator`) is
@@ -331,25 +356,30 @@ Artifacts land under `.data/snapshot/`, `.data/plan-periodic/`, and
 
 `fl-op tune` runs a seeded Optuna TPE study over the tunable solver
 parameters (cluster target size, greedy score weights, per-cluster time
-limit) against recorded KPI baselines:
+limit, LNS budget, and rolling change penalty) against recorded KPI baselines:
 
 ```bash
 .venv/bin/fl-op tune --data latest --trials 20 --seed 7
 .venv/bin/fl-op tune --data latest --extra-data .data/generate-data/20260601T120000 --jobs 4
 .venv/bin/fl-op tune-promote --best-params .data/tune/20260612T090000/best_params.json --reviewed-by ops
+.venv/bin/fl-op tune-promote --best-params .data/tune/20260612T090000/best_params.json --domain drone_logistics --profile drone-logistics --adapter-version 0.1.0 --reviewed-by ops
 ```
 
 Artifacts land under `.data/tune/<timestamp>/`: `baseline.json`,
 `trials.json`, and `best_params.json` (best parameters plus the improvement
 over the baseline objective). By default the study records a Pareto frontier:
 maximize business objective, minimize instability, and minimize wall time.
-`--extra-data` averages the objective across datasets, and `--jobs > 1` uses
-Optuna RDB storage (`study.db` in the run directory unless `--storage` or
-`TUNE_STORAGE_URI` is set).
+`--extra-data` scores multiple datasets with workload weights derived from task
+counts, and `--jobs > 1` uses Optuna RDB storage (`study.db` in the run
+directory unless `--storage` or `TUNE_STORAGE_URI` is set).
 
 `fl-op tune-promote` writes the reviewed overlay
-`.data/tune/solver-parameters-tuned.json`; periodic and rolling plan runs load
-that overlay on top of the checked-in profile defaults. With
+`.data/tune/solver-parameters-tuned.json` by default. Supplying `--domain`,
+`--profile`, and `--adapter-version` writes a scoped overlay under
+`.data/tune/<domain>/<profile>/<adapter-version>/solver-parameters-tuned.json`;
+`--expires-at` can bound that overlay's validity window. Drone logistics loads
+its checked-in tuning defaults plus matching scoped overlays, while legacy
+shared overlays continue to serve the older profiles. With
 `MLFLOW_LOGGING_ENABLED=1`, every trial, the tuning baseline, and every
 periodic/rolling plan run are logged as MLflow runs (KPIs, version dimensions,
 solve-telemetry summary) to a local SQLite store under `.data/mlruns` -- or to
@@ -448,6 +478,8 @@ $DATA_DIR/                       # default: .data/ -- override via DATA_DIR env 
   revision-diff/<timestamp>/     # revision_diff.json + revision_diff.txt
   tune/<timestamp>/              # baseline.json, trials.json, best_params.json
   tune/solver-parameters-tuned.json       # reviewed tuned solver overlay
+  tune/<domain>/<profile>/<adapter-version>/solver-parameters-tuned.json
+                                 # scoped reviewed tuned solver overlay
   cache/compat-matrix/            # content-keyed compatibility matrices
   cache/preprocessing/            # candidate-filter and cluster-spec caches
   cache/feasibility/              # exact /feasibility response cache

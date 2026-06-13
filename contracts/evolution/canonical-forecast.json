@@ -42,6 +42,55 @@
       "required": false
     }
   },
+  "history": [
+    {
+      "contractId": "canonical-forecast",
+      "fields": {
+        "forecastFrom": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "forecastId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "forecastTo": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "locationLat": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "locationLon": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "precipitationRate": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "soilMoisture": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "windSpeed": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        }
+      },
+      "odcsId": "canonical-forecast",
+      "version": "0.1.0"
+    }
+  ],
   "odcsId": "canonical-forecast",
   "version": "0.1.0"
 }

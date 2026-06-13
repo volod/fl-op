@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: venv setenv quickstart analyse data demo contracts canonical-validate validate-construction validate-roadside avro-gen proto-gen es-gen parquet-gen contracts-gen check-gen evolution-check evolution-freeze test ci serve clean
+.PHONY: venv setenv quickstart analyse data demo contracts canonical-validate validate-drone-logistics validate-construction validate-roadside avro-gen proto-gen es-gen parquet-gen contracts-gen check-gen evolution-check evolution-freeze test ci serve clean
 
 PYTHON := .venv/bin/python
 FL_OP := .venv/bin/fl-op
@@ -56,6 +56,10 @@ analyse: venv
 canonical-validate: venv
 	$(FL_OP) contracts canonical-validate
 
+# Validate the default drone-logistics runnable pack (mixed UGV/UAV delivery).
+validate-drone-logistics: venv
+	$(FL_OP) contracts validate-domain --domain drone_logistics
+
 # Validate that the construction domain pack maps completely onto the canonical
 # model (proof that a second physical domain reuses the one optimization model).
 validate-construction: venv
@@ -106,7 +110,7 @@ serve: venv  ## Run the thin service API (feasibility + plan retrieval)
 # BEFORE any validation runs, so stale committed/generated schemas can never
 # pass unnoticed; the schema-evolution gate then enforces the version-bump
 # policy against the committed baselines.
-ci: contracts-gen check-gen contracts canonical-validate validate-construction validate-roadside evolution-check test
+ci: contracts-gen check-gen contracts canonical-validate validate-drone-logistics validate-construction validate-roadside evolution-check test
 
 # Full declarative demo: contracts -> snapshot -> periodic (batch) -> rolling (stream).
 # Depends on avro-gen because contracts/generated/ is gitignored: the demo's first

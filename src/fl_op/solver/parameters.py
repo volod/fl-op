@@ -12,9 +12,14 @@ from typing import Any
 from fl_op.core.constants import (
     CLUSTER_SOLVE_TIME_LIMIT_S,
     CLUSTER_TARGET_SIZE,
+    CLUSTER_LNS_ENABLED,
+    CLUSTER_LNS_TIME_LIMIT_S,
+    DEFAULT_CHANGE_PENALTY,
     GLOBAL_ASSIGNMENT_COUNT_PRIORITY,
+    OBJECTIVE_MODE_COST,
     SCORE_WEIGHT_MARGIN,
     SCORE_WEIGHT_REPOSITION,
+    SUPPORTED_OBJECTIVE_MODES,
 )
 
 
@@ -29,10 +34,29 @@ class SolverParameters:
     score_weight_reposition: float = SCORE_WEIGHT_REPOSITION
     # Wall-clock budget per cluster routing solve.
     cluster_solve_time_limit_s: int = CLUSTER_SOLVE_TIME_LIMIT_S
+    # Optional second-pass LNS budget per qualifying high-value cluster.
+    lns_time_limit_s: int = (
+        CLUSTER_LNS_TIME_LIMIT_S if CLUSTER_LNS_ENABLED else 0
+    )
+    # Score penalty applied per assignment changed after the freeze window.
+    rolling_change_penalty: int = DEFAULT_CHANGE_PENALTY
     # Count-vs-margin tradeoff of the global assignment objective
     # (1.0 = count-first, 0.0 = pure score maximization); profiles set it
     # via allocationPolicy.countPriority.
     assignment_count_priority: float = GLOBAL_ASSIGNMENT_COUNT_PRIORITY
+    # Solver objective mode. "cost" preserves the existing margin/energy-cost
+    # behavior; "time" minimizes travel/service/completion time as an opt-in.
+    optimization_objective: str = OBJECTIVE_MODE_COST
+
+    def __post_init__(self) -> None:
+        mode = str(self.optimization_objective or OBJECTIVE_MODE_COST).lower()
+        if mode not in SUPPORTED_OBJECTIVE_MODES:
+            raise ValueError(
+                "Unsupported optimization objective "
+                f"{self.optimization_objective!r}; expected one of "
+                f"{sorted(SUPPORTED_OBJECTIVE_MODES)}"
+            )
+        object.__setattr__(self, "optimization_objective", mode)
 
     def as_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)

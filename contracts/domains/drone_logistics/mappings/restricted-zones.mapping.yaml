@@ -1,0 +1,18 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+metadata:
+  domain: drone_logistics
+  sourceContract: restricted-zones
+  canonicalEntity: location
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: restrictedAreas
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+fieldMappings:
+  - {sourceField: zone_id, binding: location.locationId, semanticTerm: urn:xopt:identity:location-id, planningUse: [identity]}
+  - {sourceField: name, binding: location.name, semanticTerm: urn:xopt:attribute:display-name, planningUse: [classification]}
+  - {sourceField: lat, binding: location.lat, semanticTerm: urn:xopt:attribute:latitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
+  - {sourceField: lon, binding: location.lon, semanticTerm: urn:xopt:attribute:longitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
+  - {sourceField: polygon, binding: location.polygon, semanticTerm: urn:xopt:attribute:polygon, quantityKind: geometry, planningUse: [geospatial]}
+  - {sourceField: restricted_operations, binding: location.restrictedOperations, semanticTerm: urn:xopt:restriction:prohibited-operations, quantityKind: categorical-set, planningUse: [restriction]}
+  - {sourceField: restriction_windows, binding: location.restrictionWindows, semanticTerm: urn:xopt:restriction:restricted-windows, quantityKind: interval-set, planningUse: [restriction]}

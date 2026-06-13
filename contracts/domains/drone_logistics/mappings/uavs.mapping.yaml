@@ -1,0 +1,28 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+metadata:
+  domain: drone_logistics
+  sourceContract: uavs
+  canonicalEntity: asset
+  assetRole: mobile-prime-mover
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: assetMaster
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+fieldMappings:
+  - {sourceField: uav_id, binding: asset.assetId, semanticTerm: urn:xopt:identity:asset-id, planningUse: [identity]}
+  - {sourceField: vehicle_class, binding: asset.assetType, semanticTerm: urn:xopt:attribute:asset-type, planningUse: [classification]}
+  - {sourceField: name, binding: asset.name, semanticTerm: urn:xopt:attribute:display-name, planningUse: [classification]}
+  - {sourceField: rated_power_kw, binding: asset.capabilities.ratedPower, semanticTerm: urn:xopt:capability:rated-power, canonicalUnit: kW, quantityKind: power, planningUse: [capacity, compatibility-filter], missingValuePolicy: reject-for-planning}
+  - {sourceField: energy_capacity_l_equiv, binding: asset.capabilities.fuelTankVolume, semanticTerm: urn:xopt:capability:fuel-tank-volume, canonicalUnit: L, quantityKind: volume, planningUse: [capacity]}
+  - {sourceField: energy_use_l_per_h, binding: asset.capabilities.fuelConsumptionRate, semanticTerm: urn:xopt:capability:fuel-consumption-rate, canonicalUnit: L/h, quantityKind: flow-rate, planningUse: [cost]}
+  - {sourceField: energy_resource_type, binding: asset.capabilities.energyResourceType, semanticTerm: urn:xopt:capability:energy-resource-type, quantityKind: categorical, planningUse: [cost]}
+  - {sourceField: energy_unit, binding: asset.capabilities.energyUnit, semanticTerm: urn:xopt:capability:energy-unit, quantityKind: categorical, planningUse: [cost]}
+  - {sourceField: battery_capacity_kwh, binding: asset.capabilities.energyCapacity, semanticTerm: urn:xopt:capability:energy-capacity, canonicalUnit: kWh, quantityKind: energy, planningUse: [capacity]}
+  - {sourceField: energy_use_kwh_per_h, binding: asset.capabilities.energyConsumptionRate, semanticTerm: urn:xopt:capability:energy-consumption-rate, canonicalUnit: kWh/h, quantityKind: energy-flow-rate, planningUse: [cost]}
+  - {sourceField: current_lat, binding: asset.location.lat, semanticTerm: urn:xopt:attribute:latitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial], missingValuePolicy: reject-for-planning}
+  - {sourceField: current_lon, binding: asset.location.lon, semanticTerm: urn:xopt:attribute:longitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial], missingValuePolicy: reject-for-planning}
+  - {sourceField: hub_id, binding: asset.homeDepotRef, semanticTerm: urn:xopt:relationship:home-depot, planningUse: [assignment]}
+  - {sourceField: travel_speed_kmh, binding: asset.capabilities.travelSpeed, semanticTerm: urn:xopt:capability:travel-speed, canonicalUnit: km/h, quantityKind: speed, planningUse: [routing]}
+  - {sourceField: payload_capacity_kg, binding: asset.capabilities.loadCapacity, semanticTerm: urn:xopt:capability:load-capacity, canonicalUnit: kg, quantityKind: mass, planningUse: [capacity]}
+  - {sourceField: compatible_operations, binding: asset.capabilities.compatibleOperations, semanticTerm: urn:xopt:capability:compatible-operations, quantityKind: categorical-set, planningUse: [compatibility-filter]}

@@ -1,14 +1,134 @@
 {
   "contractId": "roadside-road-segments",
-  "odcsId": "road-segments",
-  "version": "1.0.0",
   "fields": {
-    "segment_id": {"logicalType": "string", "physicalType": "string", "required": true},
-    "road_ref": {"logicalType": "string", "physicalType": "string", "required": false},
-    "midpoint_lat": {"logicalType": "number", "physicalType": "double", "required": true},
-    "midpoint_lon": {"logicalType": "number", "physicalType": "double", "required": true},
-    "surface_type": {"logicalType": "string", "physicalType": "string", "required": false},
-    "closure_windows": {"logicalType": "array", "physicalType": "string", "required": false},
-    "length_km": {"logicalType": "number", "physicalType": "double", "required": false}
-  }
+    "closure_windows": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": false
+    },
+    "length_km": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "midpoint_lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "midpoint_lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "road_ref": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "segment_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "surface_type": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "9ef74a0dca9d64b569d25d8f18a7a2d12e383ec11c3aaacd52941b2b2235e8a0"
+  },
+  "history": [
+    {
+      "contractId": "roadside-road-segments",
+      "fields": {
+        "closure_windows": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "length_km": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "midpoint_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "midpoint_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "road_ref": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "segment_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "surface_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "odcsId": "road-segments",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "roadside-road-segments",
+      "fields": {
+        "closure_windows": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "length_km": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "midpoint_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "midpoint_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "road_ref": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "segment_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "surface_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "9ef74a0dca9d64b569d25d8f18a7a2d12e383ec11c3aaacd52941b2b2235e8a0"
+      },
+      "odcsId": "road-segments",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "road-segments",
+  "version": "1.0.0"
 }

@@ -10,7 +10,14 @@ import logging
 from datetime import datetime
 from typing import Any, Optional
 
-from fl_op.core.constants import FERTILIZER_COST_EUR_PER_KG, FUEL_COST_EUR_PER_L
+from fl_op.core.constants import (
+    ELECTRICITY_COST_EUR_PER_KWH,
+    FERTILIZER_COST_EUR_PER_KG,
+    FUEL_COST_EUR_PER_L,
+    RATE_TYPE_ELECTRICITY,
+    RATE_TYPE_FUEL,
+    RATE_TYPE_MATERIAL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +33,44 @@ class ResourcePrices:
 
     fuel_eur_per_l: float = FUEL_COST_EUR_PER_L
     material_eur_per_kg: float = FERTILIZER_COST_EUR_PER_KG
+    electricity_eur_per_kwh: float = ELECTRICITY_COST_EUR_PER_KWH
+
+    def price_for(self, rate_type: str) -> float:
+        """Return the resolved unit price for a resource code."""
+        normalized = str(rate_type or RATE_TYPE_FUEL)
+        if normalized == RATE_TYPE_ELECTRICITY:
+            return self.electricity_eur_per_kwh
+        if normalized == RATE_TYPE_MATERIAL:
+            return self.material_eur_per_kg
+        return self.fuel_eur_per_l
+
+
+def vehicle_energy_resource_type(vehicle: Any) -> str:
+    """Resource code consumed by a prime mover, defaulting to legacy fuel."""
+    return str(getattr(vehicle, "energy_resource_type", "") or RATE_TYPE_FUEL)
+
+
+def vehicle_energy_unit(vehicle: Any) -> str:
+    """Display/unit code for the prime mover's energy quantity."""
+    return str(
+        getattr(vehicle, "energy_unit", "")
+        or ("kWh" if vehicle_energy_resource_type(vehicle) == RATE_TYPE_ELECTRICITY else "L")
+    )
+
+
+def vehicle_energy_consumption_rate(vehicle: Any) -> float:
+    """Energy units consumed per operating hour, with legacy fuel fallback."""
+    explicit = getattr(vehicle, "energy_consumption_rate", 0.0)
+    try:
+        explicit_f = float(explicit or 0.0)
+    except (TypeError, ValueError):
+        explicit_f = 0.0
+    if explicit_f > 0:
+        return explicit_f
+    try:
+        return float(getattr(vehicle, "fuel_consumption_rate", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _parse_ts(raw: Any) -> Optional[datetime]:

@@ -32,6 +32,45 @@
       "required": false
     }
   },
+  "history": [
+    {
+      "contractId": "canonical-cost-rate",
+      "fields": {
+        "costRateId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "perUnit": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "rateType": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "unitPrice": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": true
+        },
+        "validFrom": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "validTo": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        }
+      },
+      "odcsId": "canonical-cost-rate",
+      "version": "0.1.0"
+    }
+  ],
   "odcsId": "canonical-cost-rate",
   "version": "0.1.0"
 }
