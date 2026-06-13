@@ -1,0 +1,32 @@
+{
+  "contractId": "yards",
+  "fields": {
+    "diesel_litres": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "label": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "yard_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    }
+  },
+  "odcsId": "yards",
+  "version": "1.0.0"
+}

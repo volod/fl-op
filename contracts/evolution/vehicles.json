@@ -1,0 +1,67 @@
+{
+  "contractId": "vehicles",
+  "fields": {
+    "current_lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "current_lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "depot_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "fuel_consumption_l_per_h": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "fuel_tank_l": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "load_capacity_kg": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "manufacture_year": {
+      "logicalType": "integer",
+      "physicalType": "int",
+      "required": false
+    },
+    "rated_power_kw": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "telematics_unit_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "travel_speed_kmh": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "vehicle_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "vehicle_type": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    }
+  },
+  "odcsId": "vehicles",
+  "version": "1.0.0"
+}

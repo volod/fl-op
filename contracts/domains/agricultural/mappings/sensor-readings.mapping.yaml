@@ -1,0 +1,73 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+# Projects the agricultural physical 'sensor-readings' schema onto the canonical
+# Observation entity. The same projection serves historical batches and
+# realtime streamed readings (observation.recorded events append rows to this
+# source collection).
+metadata:
+  domain: agricultural
+  sourceContract: sensor-readings
+  canonicalEntity: observation
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.2.0
+  dataProductRole: equipmentTelemetry
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+  # Value-level normalization: raw station metric codes -> canonical metric
+  # codes the engine's monitoring policy interprets.
+  metricCodes:
+    battery_pct: battery-level
+    health_state: health-status
+    soil_moisture_pct: soil-moisture
+    # Machine-reported completed share of a task's work (entity ref = task
+    # id): drives telemetry-derived progress without explicit progress events.
+    work_progress_pct: work-progress
+
+fieldMappings:
+  - sourceField: reading_id
+    binding: observation.observationId
+    semanticTerm: urn:xopt:identity:observation-id
+    planningUse: [identity]
+  - sourceField: sensor_id
+    binding: observation.entityRef
+    semanticTerm: urn:xopt:relationship:entity-ref
+    planningUse: [monitoring]
+    missingValuePolicy: reject-for-planning
+  - sourceField: metric
+    binding: observation.metric
+    semanticTerm: urn:xopt:observation:metric
+    planningUse: [monitoring]
+    missingValuePolicy: reject-for-planning
+  - sourceField: value
+    binding: observation.value
+    semanticTerm: urn:xopt:observation:value
+    quantityKind: measurement
+    planningUse: [monitoring]
+    missingValuePolicy: accept-optional
+  - sourceField: state_value
+    binding: observation.stateValue
+    semanticTerm: urn:xopt:observation:state
+    planningUse: [monitoring]
+    missingValuePolicy: accept-optional
+  - sourceField: unit
+    binding: observation.unit
+    semanticTerm: urn:xopt:observation:unit
+    planningUse: [monitoring]
+    missingValuePolicy: accept-optional
+  - sourceField: observed_at
+    binding: observation.observedAt
+    semanticTerm: urn:xopt:time:observed-at
+    quantityKind: timestamp
+    planningUse: [monitoring]
+    missingValuePolicy: accept-with-warning
+  - sourceField: quality_flag
+    binding: observation.qualityFlag
+    semanticTerm: urn:xopt:observation:quality-flag
+    planningUse: [monitoring]
+    missingValuePolicy: accept-optional
+  - sourceField: ingested_at
+    binding: observation.ingestedAt
+    semanticTerm: urn:xopt:time:ingested-at
+    quantityKind: timestamp
+    planningUse: [monitoring]
+    missingValuePolicy: accept-optional

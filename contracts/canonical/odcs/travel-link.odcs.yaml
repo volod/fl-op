@@ -1,0 +1,60 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: canonical-travel-link
+version: 0.1.0
+status: active
+name: Canonical Travel Link
+domain: canonical
+tenant: optimization
+description:
+  purpose: >-
+    Minimal optimization contract for one directed travel-network edge
+    (distance-matrix entry / road-graph arc) between two locations.
+  usage: >-
+    Routing travel times between known location pairs. Pairs without a link
+    fall back to haversine distance and asset travel speed, so a sparse
+    network is valid input.
+customProperties:
+  - property: canonicalEntity
+    value:
+      entity: travel-link
+      canonicalModelRef: urn:xopt:model:canonical:0.1.0
+schema:
+  - name: travelLink
+    logicalType: object
+    properties:
+      - name: linkId
+        logicalType: string
+        required: true
+        description: Stable canonical identifier of the travel link.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: travelLink.linkId, semanticTerm: urn:xopt:identity:travel-link-id, planningUse: [identity]}
+      - name: fromLocationRef
+        logicalType: string
+        required: true
+        description: Origin location of the directed edge.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: travelLink.fromLocationRef, semanticTerm: urn:xopt:relationship:from-location, planningUse: [routing]}
+      - name: toLocationRef
+        logicalType: string
+        required: true
+        description: Destination location of the directed edge.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: travelLink.toLocationRef, semanticTerm: urn:xopt:relationship:to-location, planningUse: [routing]}
+      - name: travelTimeS
+        logicalType: number
+        required: true
+        description: Measured or modelled travel time along the edge.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: travelLink.travelTimeS, semanticTerm: urn:xopt:travel:travel-time, canonicalUnit: s, quantityKind: duration, planningUse: [routing]}
+      - name: distanceKm
+        logicalType: number
+        required: false
+        description: Road distance along the edge (analytical; routing uses time).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: travelLink.distanceKm, semanticTerm: urn:xopt:travel:distance, canonicalUnit: km, quantityKind: length, planningUse: [cost]}

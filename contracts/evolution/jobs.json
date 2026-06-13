@@ -1,0 +1,67 @@
+{
+  "contractId": "jobs",
+  "fields": {
+    "contract_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "deadline": {
+      "logicalType": "timestamp",
+      "physicalType": "string",
+      "required": true
+    },
+    "job_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "penalty_per_day_eur": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "plot_ha": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "priority": {
+      "logicalType": "integer",
+      "physicalType": "int",
+      "required": false
+    },
+    "quantity_unit": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "quantity_value": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "revenue_eur": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "site_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "status": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "work_type": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    }
+  },
+  "odcsId": "jobs",
+  "version": "1.1.0"
+}

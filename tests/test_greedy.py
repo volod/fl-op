@@ -4,32 +4,37 @@ import pytest
 
 from fl_op.solver.feasibility import build_compat_matrix
 from fl_op.solver.greedy import greedy_assign, vectorized_score
+from fl_op.solver.types import PrimeMoverRow, RelatedRow, SiteRow, TaskRow
 
 
-def _v(vid: str, lat: float = 48.5, lon: float = 32.0, power: float = 150.0) -> dict:
-    return {"asset_id": vid, "asset_type": "TRACTOR", "rated_power": str(power),
-            "fuel_tank_volume": "400", "fuel_consumption_rate": "18",
-            "lat": str(lat), "lon": str(lon),
-            "home_depot_ref": "d0", "travel_speed": "15"}
+def _v(vid: str, lat: float = 48.5, lon: float = 32.0, power: float = 150.0) -> PrimeMoverRow:
+    return PrimeMoverRow.from_canonical_dict(
+        {"asset_id": vid, "asset_type": "TRACTOR", "rated_power": str(power),
+         "fuel_tank_volume": "400", "fuel_consumption_rate": "18",
+         "lat": str(lat), "lon": str(lon),
+         "home_depot_ref": "d0", "travel_speed": "15"})
 
 
-def _i(iid: str, power: float = 100.0) -> dict:
-    return {"asset_id": iid, "asset_type": "SPRAYER",
-            "compatible_operations": "['SPRAYING']", "required_power": str(power),
-            "working_width": "24", "min_speed": "5", "max_speed": "12",
-            "material_capacity": "0", "home_depot_ref": "d0"}
+def _i(iid: str, power: float = 100.0) -> RelatedRow:
+    return RelatedRow.from_canonical_dict(
+        {"asset_id": iid, "asset_type": "SPRAYER",
+         "compatible_operations": "['SPRAYING']", "required_power": str(power),
+         "working_width": "24", "min_speed": "5", "max_speed": "12",
+         "material_capacity": "0", "home_depot_ref": "d0"})
 
 
-def _o(oid: str, fid: str = "f0") -> dict:
-    return {"task_id": oid, "operation_type": "SPRAYING", "location_ref": fid,
-            "area": "100", "deadline": "2026-06-01T00:00:00+00:00",
-            "penalty_per_day": "200", "status": "pending",
-            "revenue": "5000", "order_ref": "c0"}
+def _o(oid: str, fid: str = "f0") -> TaskRow:
+    return TaskRow.from_canonical_dict(
+        {"task_id": oid, "operation_type": "SPRAYING", "location_ref": fid,
+         "area": "100", "deadline": "2026-06-01T00:00:00+00:00",
+         "penalty_per_day": "200", "status": "pending",
+         "revenue": "5000", "order_ref": "c0"})
 
 
-def _f(fid: str, lat: float, lon: float) -> dict:
-    return {"location_id": fid, "lat": str(lat), "lon": str(lon),
-            "area": "100", "name": fid}
+def _f(fid: str, lat: float, lon: float) -> SiteRow:
+    return SiteRow.from_canonical_dict(
+        {"location_id": fid, "lat": str(lat), "lon": str(lon),
+         "area": "100", "name": fid})
 
 
 class TestVectorizedScore:
@@ -39,8 +44,8 @@ class TestVectorizedScore:
         orders = [_o("o0"), _o("o1")]
         fields = [_f("f0", 48.5, 32.0), _f("f1", 48.6, 32.1)]
         build_compat_matrix(vehicles, implements)
-        v_idx = {v["asset_id"]: i for i, v in enumerate(vehicles)}
-        i_idx = {im["asset_id"]: i for i, im in enumerate(implements)}
+        v_idx = {v.asset_id: i for i, v in enumerate(vehicles)}
+        i_idx = {im.asset_id: i for i, im in enumerate(implements)}
         feasible = {"o0": [(0, 0), (1, 1)], "o1": [(0, 0), (1, 1)]}
         scored = vectorized_score(orders, vehicles, implements, fields, feasible, v_idx, i_idx)
         assert set(scored.keys()) == {"o0", "o1"}
@@ -61,8 +66,8 @@ class TestVectorizedScore:
         orders = [_o("o0")]
         fields = [_f("f0", field_lat, field_lon)]
         build_compat_matrix(vehicles, implements)
-        v_idx = {v["asset_id"]: i for i, v in enumerate(vehicles)}
-        i_idx = {im["asset_id"]: i for i, im in enumerate(implements)}
+        v_idx = {v.asset_id: i for i, v in enumerate(vehicles)}
+        i_idx = {im.asset_id: i for i, im in enumerate(implements)}
         feasible = {"o0": [(0, 0), (1, 1)]}
         scored = vectorized_score(orders, vehicles, implements, fields, feasible, v_idx, i_idx)
         pairs = scored["o0"]

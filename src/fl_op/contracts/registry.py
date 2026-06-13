@@ -10,6 +10,7 @@ Fingerprint semantics:
 """
 
 import logging
+import os
 import pathlib
 from typing import Any, Optional
 
@@ -28,6 +29,10 @@ from fl_op.core.paths import CONTRACTS_ROOT
 
 logger = logging.getLogger(__name__)
 
+# Marker shared with the validation CLI so a reviewed metadata change can be
+# acknowledged (--write) while any other validation error still fails the run.
+METADATA_DRIFT_MARKER = "optimizationMetadataHash changed"
+
 
 class MetadataLossError(RuntimeError):
     """Raised when stored and computed optimization metadata hashes diverge."""
@@ -35,7 +40,9 @@ class MetadataLossError(RuntimeError):
 
 class ContractEntry:
     def __init__(self, contract_id: str, spec: dict[str, Any]) -> None:
+        self.registry_id = contract_id
         self.contract_id = contract_id
+        self.local_id: str = spec.get("id") or spec.get("contractId") or contract_id
         self.avro_ref: Optional[str] = spec.get("avro")
         self.odcs_ref: Optional[str] = spec.get("odcs")
         self.mapping_ref: Optional[str] = spec.get("mapping")
@@ -43,6 +50,10 @@ class ContractEntry:
         self.source_file: Optional[str] = spec.get("sourceFile")
         self.source_format: str = spec.get("sourceFormat", "csv")
         self.stored_fingerprints: dict[str, str] = dict(spec.get("fingerprints") or {})
+
+    @property
+    def qualified_id(self) -> str:
+        return f"{self.domain}/{self.local_id}" if self.domain else self.local_id
 
 
 class FileRegistry:
@@ -64,33 +75,160 @@ class FileRegistry:
     def list_contracts(self) -> list[str]:
         return list(self.entries)
 
-    def get_entry(self, contract_id: str) -> ContractEntry:
-        if contract_id not in self.entries:
+    def domain_ids(self) -> list[str]:
+        return sorted((self.index.get("domains") or {}).keys())
+
+    def get_domain_spec(self, domain: str) -> dict[str, Any]:
+        domains = self.index.get("domains") or {}
+        if domain not in domains:
+            raise KeyError(
+                f"Unknown domain '{domain}'; known: {sorted(domains)}"
+            )
+        return domains[domain] or {}
+
+    def profile_domain(self, profile_id: str) -> Optional[str]:
+        for domain, spec in (self.index.get("domains") or {}).items():
+            if (spec or {}).get("profile") == profile_id:
+                return domain
+        return None
+
+    def resolve_contract_id(
+        self,
+        contract_id: str,
+        domain: Optional[str] = None,
+    ) -> str:
+        """Resolve a global, qualified, or domain-local contract id.
+
+        Registry keys remain globally unique for compatibility. Domain profiles
+        can refer to local ids such as ``operators``; when resolved in the
+        construction domain that points at the existing ``construction-operators``
+        registry entry.
+        """
+        if "/" in contract_id:
+            domain_part, local_id = contract_id.split("/", 1)
+            matches = [
+                key
+                for key, entry in self.entries.items()
+                if entry.domain == domain_part and entry.local_id == local_id
+            ]
+            if len(matches) == 1:
+                return matches[0]
             raise KeyError(f"Unknown contract id: {contract_id}")
-        return self.entries[contract_id]
+
+        if domain is not None:
+            matches = [
+                key
+                for key, entry in self.entries.items()
+                if entry.domain == domain and entry.local_id == contract_id
+            ]
+            if len(matches) == 1:
+                return matches[0]
+            if len(matches) > 1:
+                raise KeyError(
+                    f"Ambiguous contract id '{contract_id}' in domain '{domain}'"
+                )
+            if contract_id in self.entries:
+                return contract_id
+
+        if contract_id in self.entries:
+            return contract_id
+
+        matches = [
+            key for key, entry in self.entries.items() if entry.local_id == contract_id
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise KeyError(
+                f"Ambiguous contract id '{contract_id}'; qualify it as domain/id"
+            )
+        raise KeyError(f"Unknown contract id: {contract_id}")
+
+    def get_entry(
+        self,
+        contract_id: str,
+        domain: Optional[str] = None,
+    ) -> ContractEntry:
+        resolved = self.resolve_contract_id(contract_id, domain=domain)
+        return self.entries[resolved]
 
     def get_avro(self, contract_id: str) -> AvroContractSchema:
-        entry = self.get_entry(contract_id)
+        contract_id = self.resolve_contract_id(contract_id)
+        entry = self.entries[contract_id]
         if not entry.avro_ref:
             raise KeyError(f"Contract {contract_id} has no Avro schema")
         return load_avro_schema(self.root / entry.avro_ref)
 
     def get_odcs(self, contract_id: str) -> Optional[OdcsContract]:
-        entry = self.get_entry(contract_id)
+        contract_id = self.resolve_contract_id(contract_id)
+        entry = self.entries[contract_id]
         if not entry.odcs_ref:
             return None
         return load_odcs_contract(self.root / entry.odcs_ref)
 
     def get_mapping(self, contract_id: str) -> Optional[CanonicalMapping]:
         """Load the canonical mapping document for a registered contract."""
-        entry = self.get_entry(contract_id)
+        contract_id = self.resolve_contract_id(contract_id)
+        entry = self.entries[contract_id]
         if not entry.mapping_ref:
             return None
         return load_mapping(self.root / entry.mapping_ref)
 
     @property
     def active_domain(self) -> Optional[str]:
+        """Active domain pack: ACTIVE_DOMAIN env override, else the registry index.
+
+        The override lets one deployment switch domains per run
+        (ACTIVE_DOMAIN=construction fl-op plan periodic ...) without editing
+        registry.yaml.
+        """
+        override = os.environ.get("ACTIVE_DOMAIN")
+        if override:
+            known = set(self.index.get("domains") or {})
+            if override not in known:
+                raise KeyError(
+                    f"ACTIVE_DOMAIN '{override}' is not a registered domain; "
+                    f"known: {sorted(known)}"
+                )
+            return override
         return self.index.get("activeDomain")
+
+    @property
+    def active_domains(self) -> list[str]:
+        """Active domain set for shared-fleet planning.
+
+        ``ACTIVE_DOMAINS=agricultural,construction`` maps and projects multiple
+        registered packs into one canonical snapshot. If unset, the legacy
+        single ``ACTIVE_DOMAIN`` / registry ``activeDomain`` behavior is used.
+        """
+        override = os.environ.get("ACTIVE_DOMAINS")
+        if override:
+            known = set(self.index.get("domains") or {})
+            requested = [
+                item.strip()
+                for item in override.split(",")
+                if item.strip()
+            ]
+            if requested in (["*"], ["all"]):
+                return sorted(known)
+            unknown = sorted(set(requested) - known)
+            if unknown:
+                raise KeyError(
+                    f"ACTIVE_DOMAINS contains unregistered domains {unknown}; "
+                    f"known: {sorted(known)}"
+                )
+            return requested
+        domain = self.active_domain
+        return [domain] if domain else []
+
+    @property
+    def active_profile_id(self) -> Optional[str]:
+        """Profile id declared by the active domain, if any."""
+        domain = self.active_domain
+        if not domain:
+            return None
+        spec = (self.index.get("domains") or {}).get(domain) or {}
+        return spec.get("profile")
 
     @property
     def canonical_model_ref(self) -> Optional[str]:
@@ -137,7 +275,7 @@ class FileRegistry:
         current = computed.get("optimizationMetadataHash")
         if prior and current and prior != current:
             raise MetadataLossError(
-                f"Contract {contract_id}: optimizationMetadataHash changed from "
+                f"Contract {contract_id}: {METADATA_DRIFT_MARKER} from "
                 f"{prior} to {current}; rerun validation with --write after reviewing the change"
             )
         return computed

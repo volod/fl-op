@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: attachments
-version: 1.0.0
+version: 1.1.0
 status: active
 name: Construction Attachments Asset Master
 domain: construction-earthworks
@@ -39,38 +39,82 @@ schema:
         physicalType: string
         required: true
         description: Stable identifier of the attachment.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
       - name: attachment_class
         logicalType: string
         physicalType: string
         required: true
         description: Source attachment class (bucket, breaker, auger).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
       - name: supported_operations
         logicalType: array
         physicalType: string
         required: true
         description: Operation types this attachment can perform (stringified list).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
       - name: draw_power_kw
         logicalType: number
         physicalType: double
         required: true
         description: Continuous power draw demanded from the machine.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
       - name: cut_width_m
         logicalType: number
         physicalType: double
         required: true
         description: Effective working width used for productivity estimation.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
       - name: min_speed_kmh
         logicalType: number
         physicalType: double
         required: true
         description: Minimum operating speed.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}
       - name: max_speed_kmh
         logicalType: number
         physicalType: double
         required: true
         description: Maximum operating speed.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 7}
       - name: yard_id
         logicalType: string
         physicalType: string
         required: true
         description: Home yard reference.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 8}
+      - name: work_rates
+        logicalType: object
+        physicalType: string
+        required: false
+        description: >-
+          JSON map of work-quantity unit to quantity processed per hour
+          (e.g. {"m3": 90.0}). Units absent from the map fall back to the
+          width-times-speed coverage model (area) or the nominal effort.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 9}

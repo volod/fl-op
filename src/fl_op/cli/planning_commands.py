@@ -19,7 +19,7 @@ def contracts_group() -> None:
 )
 def contracts_validate(write: bool) -> None:
     """Validate all contracts: structural fingerprint, ODCS metadata hash, generation readiness."""
-    from fl_op.planning.runner import run_contracts_validate
+    from fl_op.planning.contracts import run_contracts_validate
 
     ok = run_contracts_validate(persist=write)
     if not ok:
@@ -29,7 +29,7 @@ def contracts_validate(write: bool) -> None:
 @contracts_group.command("canonical-validate")
 def contracts_canonical_validate() -> None:
     """Validate only the canonical optimization-model contracts and vocabulary."""
-    from fl_op.planning.runner import run_canonical_validate
+    from fl_op.planning.contracts import run_canonical_validate
 
     ok = run_canonical_validate()
     if not ok:
@@ -40,7 +40,7 @@ def contracts_canonical_validate() -> None:
 @click.option("--domain", required=True, help="Domain pack id (e.g. construction).")
 def contracts_validate_domain(domain: str) -> None:
     """Validate that a domain pack's mappings cover the canonical model completely."""
-    from fl_op.planning.runner import run_domain_validate
+    from fl_op.planning.contracts import run_domain_validate
 
     ok = run_domain_validate(domain)
     if not ok:
@@ -108,6 +108,26 @@ def contracts_check_generation(fmt: str, contract: str | None) -> None:
         raise SystemExit(1)
 
 
+@contracts_group.command("evolution-check")
+def contracts_evolution_check() -> None:
+    """Check ODCS contracts against committed schema baselines (bump policy)."""
+    from fl_op.planning.contracts import run_evolution_check
+
+    ok = run_evolution_check()
+    if not ok:
+        raise SystemExit(1)
+
+
+@contracts_group.command("evolution-freeze")
+def contracts_evolution_freeze() -> None:
+    """Record reviewed schema baselines for all ODCS contracts."""
+    from fl_op.planning.contracts import run_evolution_freeze
+
+    ok = run_evolution_freeze()
+    if not ok:
+        raise SystemExit(1)
+
+
 @click.group("snapshot")
 def snapshot_group() -> None:
     """Immutable planning-snapshot operations."""
@@ -128,7 +148,7 @@ def snapshot_group() -> None:
 )
 def snapshot_build(data: str, mode: str, effective_at: str | None) -> None:
     """Map source data into canonical objects and build a reproducible snapshot."""
-    from fl_op.planning.runner import run_snapshot_build
+    from fl_op.planning.snapshots import run_snapshot_build
 
     run_snapshot_build(
         str(resolve_data_dir(data)),
@@ -146,7 +166,7 @@ def plan_group() -> None:
 @data_option
 def plan_periodic(data: str) -> None:
     """Periodic (batch) OR-Tools plan from an immutable snapshot."""
-    from fl_op.planning.runner import run_plan_periodic
+    from fl_op.planning.plans import run_plan_periodic
 
     run_plan_periodic(str(resolve_data_dir(data)))
 
@@ -167,7 +187,7 @@ def plan_periodic(data: str) -> None:
 )
 def plan_rolling(data: str, events: str | None, effective_at: str | None) -> None:
     """Rolling (stream) OR-Tools dispatch producing immutable plan revisions."""
-    from fl_op.planning.runner import run_plan_rolling
+    from fl_op.planning.plans import run_plan_rolling
 
     run_plan_rolling(
         str(resolve_data_dir(data)),
@@ -176,11 +196,55 @@ def plan_rolling(data: str, events: str | None, effective_at: str | None) -> Non
     )
 
 
+@plan_group.command("freshness")
+@data_option
+@click.option(
+    "--plan",
+    default="latest",
+    show_default=True,
+    help="Published plan run dir (plan-periodic or plan-rolling), or 'latest'.",
+)
+@click.option(
+    "--replan",
+    is_flag=True,
+    default=False,
+    help="Trigger a rolling replan automatically when the plan is stale.",
+)
+@click.option(
+    "--events",
+    required=False,
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    help="Events file for the triggered replan.",
+)
+def plan_freshness(data: str, plan: str, replan: bool, events: str | None) -> None:
+    """Compare a plan's visibility horizon against the data visible now."""
+    from fl_op.planning.plans import run_plan_freshness
+
+    run_plan_freshness(
+        str(resolve_data_dir(data)), plan_dir=plan, replan=replan, events_path=events
+    )
+
+
+@plan_group.command("diff-revisions")
+@click.option(
+    "--plan",
+    default="latest",
+    show_default=True,
+    help="Rolling-plan run directory under .data/plan-rolling, or 'latest'.",
+)
+def plan_diff_revisions(plan: str) -> None:
+    """Explain why every changed assignment moved between rolling revisions."""
+    from fl_op.planning.revision_diff import run_revision_diff
+
+    run_revision_diff(plan)
+
+
 @click.command("demo")
 @data_option
 def demo(data: str) -> None:
     """Run the full contract -> snapshot -> batch + stream demonstration."""
-    from fl_op.planning.runner import run_demo
+    from fl_op.planning.demo import run_demo
 
     run_demo(str(resolve_data_dir(data)))
 

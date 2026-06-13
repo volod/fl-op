@@ -39,28 +39,52 @@ schema:
         physicalType: string
         required: true
         description: Stable identifier of the operator.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
       - name: full_name
         logicalType: string
         physicalType: string
         required: false
         description: Operator display name.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
       - name: shift_start_s
         logicalType: integer
         physicalType: int
         required: true
         description: Shift start, seconds since midnight.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
       - name: shift_end_s
         logicalType: integer
         physicalType: int
         required: true
         description: Shift end, seconds since midnight.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
       - name: licensed_operations
         logicalType: array
         physicalType: string
         required: true
         description: Operation types the operator is licensed for (stringified list).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
       - name: yard_id
         logicalType: string
         physicalType: string
         required: true
         description: Home yard reference.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}

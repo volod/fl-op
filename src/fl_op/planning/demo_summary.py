@@ -40,20 +40,43 @@ def print_demo_summary(periodic_dir: pathlib.Path, rolling_dir: pathlib.Path) ->
 
 def _log_snapshot(snapshot: dict[str, Any]) -> None:
     qs = snapshot.get("quality_summary", {})
+    excluded_readings = _excluded_observation_reading_count(snapshot)
     logger.info("Snapshot   : %s", snapshot.get("snapshot_id", "?"))
     logger.info("  hash            : %s", snapshot.get("snapshot_hash", "")[:16])
     logger.info(
-        "  canonical       : %d assets, %d locations, %d tasks, %d bundles",
+        "  canonical       : %d assets, %d locations, %d tasks, %d feasible bundle pairs",
         len(snapshot.get("assets", [])),
         len(snapshot.get("locations", [])),
         len(snapshot.get("tasks", [])),
-        len(snapshot.get("bundles", [])),
+        (snapshot.get("bundle_summary") or {}).get("n_feasible_pairs", 0),
     )
-    logger.info(
-        "  quality         : %d findings, %d entities excluded",
-        qs.get("n_findings", 0),
-        qs.get("n_entities_excluded", 0),
-    )
+    if excluded_readings:
+        logger.info(
+            "  quality         : %d findings, %d entities excluded, "
+            "%d readings excluded",
+            qs.get("n_findings", 0),
+            qs.get("n_entities_excluded", 0),
+            excluded_readings,
+        )
+    else:
+        logger.info(
+            "  quality         : %d findings, %d entities excluded",
+            qs.get("n_findings", 0),
+            qs.get("n_entities_excluded", 0),
+        )
+
+
+def _excluded_observation_reading_count(snapshot: dict[str, Any]) -> int:
+    """Count observation readings excluded by assessment findings."""
+    count = 0
+    for finding in snapshot.get("quality_findings", []):
+        rule_id = str(finding.get("rule_id", ""))
+        action = str(finding.get("action_applied", ""))
+        if rule_id == "dq://observation/source-flagged":
+            count += 1
+        elif rule_id.startswith("dq://observation/") and "excluded" in action:
+            count += 1
+    return count
 
 
 def _log_periodic_plan(
@@ -73,7 +96,7 @@ def _log_periodic_plan(
     )
     logger.info("  unassigned      : %d", len(unassigned))
     logger.info(
-        "  margin (est.)   : %.2f EUR  (greedy baseline %.2f, solver %+.2f)",
+        "  margin (est.)   : %.2f EUR  (admitted greedy %.2f, delta %+.2f)",
         score.get("total_estimated_margin_eur", 0.0),
         score.get("greedy_baseline_margin_eur", 0.0),
         score.get("solver_improvement_eur", 0.0),

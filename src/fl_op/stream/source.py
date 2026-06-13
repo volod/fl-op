@@ -13,13 +13,32 @@ from typing import Any, Iterator
 
 logger = logging.getLogger(__name__)
 
-# Replanning-trigger event types supported by the rolling demo.
+# Canonical replanning-trigger event vocabulary. Operator unavailability needs
+# no dedicated type: operators are assets, so `asset.unavailable` with an
+# operator id removes them through the same binding-driven path.
+EVENT_TASK_STARTED = "task.started"
+EVENT_TASK_PROGRESS = "task.progress"
+EVENT_TASK_COMPLETED = "task.completed"
+EVENT_ORDER_CREATED = "order.created"
+EVENT_ORDER_CANCELLED = "order.cancelled"
+EVENT_ASSET_UNAVAILABLE = "asset.unavailable"
+EVENT_FORECAST_UPDATED = "forecast.updated"
+EVENT_OBSERVATION_RECORDED = "observation.recorded"
+EVENT_ENTITY_CORRECTED = "entity.corrected"
+EVENT_INVENTORY_ADJUSTED = "inventory.adjusted"
+
+# Replanning-trigger event types the stream layer supports.
 SUPPORTED_EVENT_TYPES = {
-    "task.started",
-    "order.created",
-    "order.cancelled",
-    "asset.unavailable",
-    "forecast.updated",
+    EVENT_TASK_STARTED,
+    EVENT_TASK_PROGRESS,
+    EVENT_TASK_COMPLETED,
+    EVENT_ORDER_CREATED,
+    EVENT_ORDER_CANCELLED,
+    EVENT_ASSET_UNAVAILABLE,
+    EVENT_FORECAST_UPDATED,
+    EVENT_OBSERVATION_RECORDED,
+    EVENT_ENTITY_CORRECTED,
+    EVENT_INVENTORY_ADJUSTED,
 }
 
 

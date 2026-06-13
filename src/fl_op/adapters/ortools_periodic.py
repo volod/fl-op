@@ -11,8 +11,11 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from fl_op.adapters.base import (
+    build_solver_attribution,
     dispatch_to_assignment,
     infeasible_to_unassigned,
+    link_reservation_refs,
+    reservation_to_canonical,
     validate_profile_against_features,
 )
 from fl_op.adapters.spi import AdapterHealth, AdapterManifest, ValidationReport
@@ -39,6 +42,9 @@ _SUPPORTED_CONSTRAINTS = {
     "no-double-booking",
     "respect-contract-time-window",
     "protect-frozen-tasks",
+    "operator-qualified",
+    "required-material-available",
+    "respect-weather-window",
 }
 _SUPPORTED_FEATURES = {
     "periodic-planning",
@@ -78,10 +84,15 @@ class OrToolsPeriodicAdapter:
         # Project the canonical snapshot into the solver's working rows.
         from fl_op.solver.inputs import build_solver_inputs
 
-        return build_solver_inputs(snapshot)
+        return build_solver_inputs(snapshot, domains=config.get("domains"))
 
     def solve(self, solver_input: dict[str, Any], config: dict[str, Any]) -> SolverChainResult:
-        return run_solver_chain(solver_input)
+        return run_solver_chain(
+            solver_input,
+            enforcement=config.get("enforcement"),
+            now=config.get("now"),
+            parameters=config.get("parameters"),
+        )
 
     def normalize(
         self,
@@ -110,9 +121,34 @@ class OrToolsPeriodicAdapter:
         report = self.validate_profile(profile)
         if not report.ok:
             raise ValueError(f"profile incompatible with adapter: {report.messages}")
+        from fl_op.solver.enforcement import EnforcementPolicy
+        from fl_op.tuning.solver_profile import solver_parameters_for_profile
+
+        config.setdefault("enforcement", EnforcementPolicy.from_profile(profile))
+        # Profile allocation defaults plus optional reviewed tuned overlay.
+        config["parameters"] = solver_parameters_for_profile(
+            profile, explicit=config.get("parameters")
+        )
+        # Planning time origin: the snapshot effective time, so deadlines and
+        # window filters are reproducible for replayed/synthetic snapshots.
+        config.setdefault("now", snapshot.effective_at)
         compiled = self.compile(snapshot, profile, config)
         raw = self.solve(compiled, config)
-        return self.normalize(raw, snapshot, profile)
+        plan = self.normalize(raw, snapshot, profile)
+        # Withdrawal/escalation reconciliation against the previous periodic
+        # plan: the same corrective record-keeping rolling revisions get.
+        previous_plan = config.get("previous_plan")
+        if previous_plan is not None:
+            from fl_op.adapters.rolling.corrective import reconcile_previous_plan
+
+            actions = reconcile_previous_plan(
+                previous_plan,
+                snapshot,
+                config.get("previous_service_reasons") or {},
+            )
+            if actions:
+                plan = plan.model_copy(update={"corrective_actions": actions})
+        return plan
 
 
 def _ortools_version() -> str:
@@ -138,6 +174,12 @@ def _build_plan(
 
     assignments = [dispatch_to_assignment(dp) for dp in raw.dispatch]
     unassigned = [infeasible_to_unassigned(inf) for inf in raw.infeasible]
+    reservations = [
+        reservation_to_canonical(r) for r in raw.material_reservations
+    ]
+    assignments = link_reservation_refs(assignments, reservations)
+
+    from fl_op.solver.solve_telemetry import summarize_cluster_telemetry
 
     kpis = raw.kpis
     score = {
@@ -145,12 +187,24 @@ def _build_plan(
         "greedy_baseline_margin_eur": kpis.get("greedy_baseline_margin_eur", 0.0),
         "solver_improvement_eur": kpis.get("solver_improvement_eur", 0.0),
         "total_fuel_l": kpis.get("total_fuel_l", 0.0),
+        "total_fuel_cost_eur": kpis.get("total_fuel_cost_eur", 0.0),
         "total_fertilizer_kg": kpis.get("total_fertilizer_kg", 0.0),
+        "total_material_cost_eur": kpis.get("total_material_cost_eur", 0.0),
         "n_dispatched": kpis.get("n_dispatched", len(assignments)),
         "n_unassigned": kpis.get("n_infeasible", len(unassigned)),
         "n_clusters": raw.n_clusters,
         "n_greedy_warm_start_assignments": len(raw.greedy_assignment),
+        # Machine-readable solve-quality summary (per-cluster records travel
+        # in the solve_telemetry.json artifact of batch runs).
+        "solve_telemetry": summarize_cluster_telemetry(raw.cluster_telemetry),
     }
+    assignment_attr, unassigned_attr = build_solver_attribution(
+        raw.dispatch, raw.infeasible, raw.cluster_telemetry
+    )
+    if assignment_attr:
+        score["assignment_attribution"] = assignment_attr
+    if unassigned_attr:
+        score["unassigned_attribution"] = unassigned_attr
     risk = RiskSummary(
         n_contract_deadlines_at_risk=len(unassigned),
         total_penalty_exposure_eur=sum(
@@ -178,8 +232,10 @@ def _build_plan(
         status=PlanStatus.DRAFT,
         assignments=assignments,
         unassigned_tasks=unassigned,
+        material_reservations=reservations,
         score=score,
         quality_summary=snapshot.quality_summary,
         risk_summary=risk,
+        source_watermarks=snapshot.source_watermarks,
         lineage_ref=snapshot.lineage_ref,
     )

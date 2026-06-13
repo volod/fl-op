@@ -7,20 +7,35 @@ domains:
     root: domains/agricultural
     profile: agricultural-custom-services
     semanticModelRef: urn:xopt:model:agricultural-custom-services:0.1.0
+    generator: fl_op.data.generator:generate_agricultural_domain
   construction:
     root: domains/construction
     profile: construction-earthworks
     semanticModelRef: urn:xopt:model:construction-earthworks:0.1.0
+    generator: fl_op.data.generator:generate_construction_domain
+  roadside:
+    root: domains/roadside
+    profile: roadside-infrastructure
+    semanticModelRef: urn:xopt:model:roadside-infrastructure:0.1.0
+    generator: fl_op.data.roadside_entities:generate_roadside_domain
     mappings:
-    - domains/construction/mappings/machines.mapping.yaml
-    - domains/construction/mappings/attachments.mapping.yaml
-    - domains/construction/mappings/operators.mapping.yaml
-    - domains/construction/mappings/yards.mapping.yaml
-    - domains/construction/mappings/sites.mapping.yaml
-    - domains/construction/mappings/jobs.mapping.yaml
+    - domains/roadside/mappings/signage.mapping.yaml
+    - domains/roadside/mappings/service-vehicles.mapping.yaml
+    - domains/roadside/mappings/service-kits.mapping.yaml
+    - domains/roadside/mappings/technicians.mapping.yaml
+    - domains/roadside/mappings/road-segments.mapping.yaml
+    - domains/roadside/mappings/service-depots.mapping.yaml
+    - domains/roadside/mappings/maintenance-jobs.mapping.yaml
+    - domains/roadside/mappings/inspection-rounds.mapping.yaml
 profiles:
   agricultural-custom-services:
     path: domains/agricultural/profile.yaml
+    version: 0.1.0
+  construction-earthworks:
+    path: domains/construction/profile.yaml
+    version: 0.1.0
+  roadside-infrastructure:
+    path: domains/roadside/profile.yaml
     version: 0.1.0
 contracts:
   vehicles:
@@ -31,8 +46,8 @@ contracts:
     sourceFile: vehicles.csv
     sourceFormat: csv
     fingerprints:
-      avroParsingFingerprint: 1c9914065f29f1de4dc8b216ef4f9449dd5a8724feaa4722e75158ff07164a27
-      optimizationMetadataHash: 6708d0ec430bdea3d0dec92e8acb2e7d481a2e75dcfa423c46999d99e0310186
+      avroParsingFingerprint: ec4b25e4e0f6d84dd5f451b642ac840e359da3cbac97fe33977a16d98dd437b3
+      optimizationMetadataHash: e1f9d70190377967edb2730b92b186e907bf7de586dcbb6cb5b2d6b5929a51ad
   implements:
     domain: agricultural
     odcs: domains/agricultural/odcs/implements.odcs.yaml
@@ -71,8 +86,8 @@ contracts:
     sourceFile: fields.csv
     sourceFormat: csv
     fingerprints:
-      avroParsingFingerprint: 2a4685bf3217a9da146dd25dd5aae3775bd4fe805883416bbd1fff6896dcf746
-      optimizationMetadataHash: fafa869cd1f5afd0230e1b38b7112355e83cebbf71aa5eeedb479cbfbd613dd9
+      avroParsingFingerprint: 7070d3eedce5ac9138cb6b4c3cc8e9ed181afad784eaf00d170ea5938f0efa74
+      optimizationMetadataHash: 25757fc9b9ddf831cc598c0183bb76503ae5f3fe1442908414c67c729250fe9d
   orders:
     domain: agricultural
     odcs: domains/agricultural/odcs/orders.odcs.yaml
@@ -81,8 +96,28 @@ contracts:
     sourceFile: orders.csv
     sourceFormat: csv
     fingerprints:
-      avroParsingFingerprint: 2fd8be6ff927640833bf932dd15f8370fd4ea2c8dc8968af290f4253fff44ced
-      optimizationMetadataHash: 5f49b9c548ffcc6a90a91ec2f7f4c8886a347d60c2cf74a323e43faf2bf31d9a
+      avroParsingFingerprint: fe2423525a31523a96287a7227218ea3ba2169be2eb8f5d34eb9e74df89b31ef
+      optimizationMetadataHash: 5e68a7eb83b3c3dcd187de27b1898a320f162faf9605c6854d26dcbcfb920e78
+  routes:
+    domain: agricultural
+    odcs: domains/agricultural/odcs/routes.odcs.yaml
+    mapping: domains/agricultural/mappings/routes.mapping.yaml
+    avro: generated/avro/routes.avsc
+    sourceFile: routes.csv
+    sourceFormat: csv
+    fingerprints:
+      avroParsingFingerprint: b0522d90dcdbc547fea9c92cb3a19ee202ced5964f7fc1a8676a3c6b600232c8
+      optimizationMetadataHash: 71034d72b7a2c8b4ec00ea37d957350e05422cbc376ad517ae9e30740f02abe9
+  prices:
+    domain: agricultural
+    odcs: domains/agricultural/odcs/prices.odcs.yaml
+    mapping: domains/agricultural/mappings/prices.mapping.yaml
+    avro: generated/avro/prices.avsc
+    sourceFile: prices.csv
+    sourceFormat: csv
+    fingerprints:
+      avroParsingFingerprint: 60283bd5fa34ad6700b2c0e5fed075af33a8c7fe76aa4baf0a7ecf7fb758b8ee
+      optimizationMetadataHash: 68705fd516d52027d9d26ce3691ba6a5a5b202090c8206ec4a19c425662a1fdc
   weather:
     domain: agricultural
     odcs: domains/agricultural/odcs/weather.odcs.yaml
@@ -93,6 +128,26 @@ contracts:
     fingerprints:
       avroParsingFingerprint: 05057d4e059617c578c0e3b2a35010246c56fda747a97405909491563448ac6c
       optimizationMetadataHash: 5fc5c0195295bf0b489403b3813053306abcabbc961dcaf88550667ad563de08
+  sensors:
+    domain: agricultural
+    odcs: domains/agricultural/odcs/sensors.odcs.yaml
+    mapping: domains/agricultural/mappings/sensors.mapping.yaml
+    avro: generated/avro/sensors.avsc
+    sourceFile: sensors.csv
+    sourceFormat: csv
+    fingerprints:
+      avroParsingFingerprint: b099ab7b472c06e17f3c62e3a5d7d8ff300d3534a9d4ebd8ffe25f751d283031
+      optimizationMetadataHash: 06fb03cd7c4c3d97798edf7c305c3135b80f5f7273b0393956627e22ba0da9f5
+  sensor-readings:
+    domain: agricultural
+    odcs: domains/agricultural/odcs/sensor-readings.odcs.yaml
+    mapping: domains/agricultural/mappings/sensor-readings.mapping.yaml
+    avro: generated/avro/sensor-readings.avsc
+    sourceFile: sensor-readings.jsonl
+    sourceFormat: jsonl
+    fingerprints:
+      avroParsingFingerprint: 6aa9fd8ec01baac37df24df0e90618099c147d8eddd5d440bceea0b398e6c4c0
+      optimizationMetadataHash: a4439474d3e38dda4f75c649d1acc5b9d8f3c4cee2406957204ab32ced80c2e7
   execution-events:
     domain: agricultural
     odcs: domains/agricultural/odcs/execution-events.odcs.yaml
@@ -103,3 +158,120 @@ contracts:
     fingerprints:
       avroParsingFingerprint: ca78597cda1433a55cb6efddd2ee21b820aec9a6645052f87f5a8a20224655b2
       optimizationMetadataHash: 893cf11af71d6aa1eb4841311a35987f068b7f1cf633a9de9ad988f10daab23f
+  machines:
+    domain: construction
+    odcs: domains/construction/odcs/machines.odcs.yaml
+    mapping: domains/construction/mappings/machines.mapping.yaml
+    avro: generated/avro/machines.avsc
+    sourceFile: machines.csv
+    sourceFormat: csv
+    fingerprints:
+      avroParsingFingerprint: f4563fa427bb845659293c2f67edbe26d37567a03480f505dd66e4bfcf2cacb6
+      optimizationMetadataHash: 3f40e6ba9b33715692bb3db6c06fe810f5d5fa05f3d0645e7ebdaaf34aebb034
+  attachments:
+    domain: construction
+    odcs: domains/construction/odcs/attachments.odcs.yaml
+    mapping: domains/construction/mappings/attachments.mapping.yaml
+    avro: generated/avro/attachments.avsc
+    sourceFile: attachments.csv
+    sourceFormat: csv
+    fingerprints:
+      avroParsingFingerprint: 3e38f5c560e92a1b212e5acf811b67a66c80ebcefcc50e62c49e5e418c9e3fab
+      optimizationMetadataHash: 8619730cad06d219d88c2db4227e80f3fe1204a2f6e9b4ecdf273b4004b1620e
+  construction-operators:
+    id: operators
+    domain: construction
+    odcs: domains/construction/odcs/operators.odcs.yaml
+    mapping: domains/construction/mappings/operators.mapping.yaml
+    avro: generated/avro/construction-operators.avsc
+    sourceFile: operators.csv
+    sourceFormat: csv
+    fingerprints:
+      avroParsingFingerprint: ffb96b57b6151846d0af0d30bfa961b4bcb45c555d8de01c7c3d59028fbed988
+      optimizationMetadataHash: 20c7f57e2068237507a650e370b947c2ef34392735383754557540e054dabe54
+  yards:
+    domain: construction
+    odcs: domains/construction/odcs/yards.odcs.yaml
+    mapping: domains/construction/mappings/yards.mapping.yaml
+    avro: generated/avro/yards.avsc
+    sourceFile: yards.csv
+    sourceFormat: csv
+    fingerprints:
+      avroParsingFingerprint: ba320cec1eef2f0bf179ce4d7f50916073c4b56a369b6e90a244a6e648e2b22c
+      optimizationMetadataHash: 8d94b28bd3d0a15786e997ab0ca5d3bed91d43f50bdb7be734a492bd2ee5caed
+  sites:
+    domain: construction
+    odcs: domains/construction/odcs/sites.odcs.yaml
+    mapping: domains/construction/mappings/sites.mapping.yaml
+    avro: generated/avro/sites.avsc
+    sourceFile: sites.csv
+    sourceFormat: csv
+    fingerprints:
+      avroParsingFingerprint: 288b6e3057805552024cdf40ad45b2712ebd4c862f526c1949d282b1b625b88f
+      optimizationMetadataHash: 4deb817344fd530e24f85a74e5bdcc51edf450c8ef428035b1df15a11a4214b6
+  jobs:
+    domain: construction
+    odcs: domains/construction/odcs/jobs.odcs.yaml
+    mapping: domains/construction/mappings/jobs.mapping.yaml
+    avro: generated/avro/jobs.avsc
+    sourceFile: jobs.csv
+    sourceFormat: csv
+    fingerprints:
+      avroParsingFingerprint: 5d891357098f54f0e0b50dd073962cf680221761b2fbb7d31aae7bff4abd00db
+      optimizationMetadataHash: c32ca688064f21c681cba3ae1ab4870f7fb3c83c4970a4c989e188a50915a842
+  roadside-service-vehicles:
+    id: service-vehicles
+    domain: roadside
+    odcs: domains/roadside/odcs/service-vehicles.odcs.yaml
+    mapping: domains/roadside/mappings/service-vehicles.mapping.yaml
+    sourceFile: service-vehicles.csv
+    sourceFormat: csv
+  roadside-service-kits:
+    id: service-kits
+    domain: roadside
+    odcs: domains/roadside/odcs/service-kits.odcs.yaml
+    mapping: domains/roadside/mappings/service-kits.mapping.yaml
+    sourceFile: service-kits.csv
+    sourceFormat: csv
+  roadside-technicians:
+    id: technicians
+    domain: roadside
+    odcs: domains/roadside/odcs/technicians.odcs.yaml
+    mapping: domains/roadside/mappings/technicians.mapping.yaml
+    sourceFile: technicians.csv
+    sourceFormat: csv
+  roadside-road-segments:
+    id: road-segments
+    domain: roadside
+    odcs: domains/roadside/odcs/road-segments.odcs.yaml
+    mapping: domains/roadside/mappings/road-segments.mapping.yaml
+    sourceFile: road-segments.csv
+    sourceFormat: csv
+  roadside-service-depots:
+    id: service-depots
+    domain: roadside
+    odcs: domains/roadside/odcs/service-depots.odcs.yaml
+    mapping: domains/roadside/mappings/service-depots.mapping.yaml
+    sourceFile: service-depots.csv
+    sourceFormat: csv
+  roadside-maintenance-jobs:
+    id: maintenance-jobs
+    domain: roadside
+    odcs: domains/roadside/odcs/maintenance-jobs.odcs.yaml
+    mapping: domains/roadside/mappings/maintenance-jobs.mapping.yaml
+    sourceFile: maintenance-jobs.csv
+    sourceFormat: csv
+  roadside-signage:
+    id: signage
+    domain: roadside
+    odcs: domains/roadside/odcs/signage.odcs.yaml
+    mapping: domains/roadside/mappings/signage.mapping.yaml
+    sourceFile: signage.csv
+    sourceFormat: csv
+  roadside-inspection-rounds:
+    id: inspection-rounds
+    domain: roadside
+    odcs: domains/roadside/odcs/inspection-rounds.odcs.yaml
+    mapping: domains/roadside/mappings/inspection-rounds.mapping.yaml
+    sourceFile: inspection-rounds.jsonl
+    sourceFormat: jsonl

@@ -1,0 +1,16 @@
+{
+  "contractId": "roadside-service-kits",
+  "odcsId": "service-kits",
+  "version": "1.0.0",
+  "fields": {
+    "kit_id": {"logicalType": "string", "physicalType": "string", "required": true},
+    "kit_class": {"logicalType": "string", "physicalType": "string", "required": true},
+    "supported_operations": {"logicalType": "array", "physicalType": "string", "required": true},
+    "draw_power_kw": {"logicalType": "number", "physicalType": "double", "required": true},
+    "working_width_m": {"logicalType": "number", "physicalType": "double", "required": true},
+    "min_speed_kmh": {"logicalType": "number", "physicalType": "double", "required": true},
+    "max_speed_kmh": {"logicalType": "number", "physicalType": "double", "required": true},
+    "depot_id": {"logicalType": "string", "physicalType": "string", "required": true},
+    "work_rates": {"logicalType": "object", "physicalType": "string", "required": false}
+  }
+}

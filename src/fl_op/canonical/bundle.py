@@ -27,6 +27,35 @@ def compute_bundle_id(
     return f"bundle-{digest}"
 
 
+class BundleFeasibilitySummary(BaseModel):
+    """Compact, exact summary of the snapshot's feasible bundle space.
+
+    Replaces the formerly capped materialized bundle list: counts are computed
+    vectorised over the full prime-mover x related-equipment cross product, so
+    they are exact at any fleet size while the snapshot stays small. Full
+    bundles are enumerated lazily on demand (`snapshot.bundles.iter_bundles`).
+    The solver performs its own compatibility filtering, so this summary is an
+    explanation artifact, never an assignment input.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    n_prime_movers: int = 0
+    n_related_equipment: int = 0
+    # Exact count of power-feasible (prime mover, related equipment) pairs.
+    n_feasible_pairs: int = 0
+    # Feasible pair count per operation type the pair can perform.
+    pairs_by_operation: dict[str, int] = Field(default_factory=dict)
+    # Resources no feasible pair can use (explanation: dead capacity).
+    n_unmatched_prime_movers: int = 0
+    n_unmatched_related_equipment: int = 0
+    # Demand side: tasks in the order book per demanded operation type.
+    tasks_by_operation: dict[str, int] = Field(default_factory=dict)
+    # Demanded operations whose feasible-pair supply is below the task count
+    # (explanation: operations short on bundles for this actual order book).
+    scarce_operations: list[str] = Field(default_factory=list)
+
+
 class OperationalBundle(BaseModel):
     """A schedulable combination of resources (prime mover + implement + operator)."""
 

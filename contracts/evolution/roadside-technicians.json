@@ -1,0 +1,13 @@
+{
+  "contractId": "roadside-technicians",
+  "odcsId": "technicians",
+  "version": "1.0.0",
+  "fields": {
+    "technician_id": {"logicalType": "string", "physicalType": "string", "required": true},
+    "full_name": {"logicalType": "string", "physicalType": "string", "required": false},
+    "shift_start_s": {"logicalType": "integer", "physicalType": "int", "required": true},
+    "shift_end_s": {"logicalType": "integer", "physicalType": "int", "required": true},
+    "certified_operations": {"logicalType": "array", "physicalType": "string", "required": true},
+    "depot_id": {"logicalType": "string", "physicalType": "string", "required": true}
+  }
+}

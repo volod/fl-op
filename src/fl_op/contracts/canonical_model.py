@@ -8,9 +8,8 @@ consumes. It is declared by:
 
 Each canonical field carries a ``canonicalBinding`` custom property
 (``binding`` + ``semanticTerm`` + optional unit/quantityKind/planningUse). This
-loader flattens those into a queryable ``CanonicalModel`` used by validation and,
-later, by the domain mapping engine to check that a domain maps completely onto
-the canonical contract.
+loader flattens those into a queryable ``CanonicalModel`` used by validation to
+check that a domain maps completely onto the canonical contract.
 """
 
 import logging
@@ -24,7 +23,6 @@ from fl_op.core.constants import (
     CANONICAL_BINDING_PROPERTY,
     CANONICAL_ENTITY_PROPERTY,
     CANONICAL_MODEL_FILENAME,
-    XOPT_ODCS_PROPERTY,
 )
 from fl_op.core.paths import CANONICAL_ROOT
 

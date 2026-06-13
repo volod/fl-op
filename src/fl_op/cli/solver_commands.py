@@ -1,4 +1,4 @@
-"""Legacy solve/analyse/reschedule/query CLI commands."""
+"""Batch solver CLI commands: solve, analyse, reschedule, query-contract."""
 
 import click
 
@@ -49,6 +49,100 @@ def reschedule(data: str, schedule: str, events: str | None) -> None:
     )
 
 
+@click.command("tune")
+@data_option
+@click.option(
+    "--extra-data",
+    multiple=True,
+    type=click.Path(exists=True, file_okay=False, resolve_path=True),
+    help="Additional dataset directory to include in the averaged objective.",
+)
+@click.option(
+    "--trials",
+    default=None,
+    type=int,
+    help="Optuna trials to run (default: TUNE_N_TRIALS).",
+)
+@click.option(
+    "--seed",
+    default=None,
+    type=int,
+    help="TPE sampler seed for reproducibility (default: TUNE_SEED).",
+)
+@click.option(
+    "--jobs",
+    default=None,
+    type=int,
+    help="Parallel Optuna workers (default: TUNE_N_JOBS).",
+)
+@click.option(
+    "--storage",
+    default=None,
+    help="Optuna RDB storage URI; n_jobs>1 defaults to tune/<run>/study.db.",
+)
+@click.option(
+    "--single-objective",
+    is_flag=True,
+    default=False,
+    help="Optimize only the business objective; default keeps a Pareto frontier.",
+)
+def tune(
+    data: str,
+    extra_data: tuple[str, ...],
+    trials: int | None,
+    seed: int | None,
+    jobs: int | None,
+    storage: str | None,
+    single_objective: bool,
+) -> None:
+    """Tune solver parameters with Optuna against a recorded KPI baseline."""
+    from fl_op.tuning.optuna_tuner import run_tune
+
+    run_tune(
+        data_dir=str(resolve_data_dir(data)),
+        extra_data_dirs=[str(resolve_data_dir(path)) for path in extra_data],
+        n_trials=trials,
+        seed=seed,
+        n_jobs=jobs,
+        storage=storage,
+        multi_objective=not single_objective,
+    )
+
+
+@click.command("tune-promote")
+@click.option(
+    "--best-params",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    help="Path to a tuning run's best_params.json.",
+)
+@click.option(
+    "--out",
+    default=None,
+    type=click.Path(dir_okay=False, resolve_path=True),
+    help="Reviewed artifact path (default: DATA_DIR/tune/solver-parameters-tuned.json).",
+)
+@click.option("--reviewed-by", default=None, help="Reviewer recorded in the artifact.")
+@click.option("--notes", default=None, help="Review notes recorded in the artifact.")
+def tune_promote(
+    best_params: str,
+    out: str | None,
+    reviewed_by: str | None,
+    notes: str | None,
+) -> None:
+    """Promote best_params.json into the reviewed tuned solver profile."""
+    import pathlib
+
+    from fl_op.tuning.solver_profile import promote_best_params
+
+    promote_best_params(
+        pathlib.Path(best_params),
+        output_path=pathlib.Path(out) if out else None,
+        reviewed_by=reviewed_by,
+        notes=notes,
+    )
+
+
 @click.command("query-contract")
 @data_option
 @schedule_option
@@ -70,5 +164,5 @@ def query_contract(data: str, schedule: str, order: str) -> None:
 
 
 def register_solver_commands(cli: click.Group) -> None:
-    for command in (solve, analyse, reschedule, query_contract):
+    for command in (solve, analyse, reschedule, tune, tune_promote, query_contract):
         cli.add_command(command)

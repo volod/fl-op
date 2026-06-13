@@ -9,7 +9,7 @@ metadata:
   canonicalEntity: asset
   assetRole: implement
   canonicalModelRef: urn:xopt:model:canonical:0.1.0
-  mappingVersion: 1.0.0
+  mappingVersion: 1.1.0
   dataProductRole: assetMaster
   permittedPlanningUses: [periodic-planning, rolling-dispatch]
 
@@ -60,3 +60,11 @@ fieldMappings:
     binding: asset.homeDepotRef
     semanticTerm: urn:xopt:relationship:home-depot
     planningUse: [assignment]
+  # Earthworks productivity: volume-moving attachments declare m3-per-hour
+  # rates so volume jobs get rate-driven durations instead of nominal effort.
+  - sourceField: work_rates
+    binding: asset.capabilities.workRates
+    semanticTerm: urn:xopt:capability:work-rates
+    quantityKind: rate-map
+    planningUse: [duration-estimation]
+    missingValuePolicy: accept-optional

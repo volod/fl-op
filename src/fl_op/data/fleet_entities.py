@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from fl_op.core.constants import EARTH_RADIUS_KM
+from fl_op.core.constants import EARTH_RADIUS_KM, EQUIPMENT_SERVICE_OPERATION
 from fl_op.data.agri_enums import ImplementType, OperationType, VehicleType
 from fl_op.data.geo import _REGION_CENTER_LAT, _REGION_CENTER_LON, _REGION_RADIUS_KM, _random_points_in_circle
 
@@ -12,6 +12,10 @@ _VEHICLE_POWER_MEAN_KW = 150.0
 _VEHICLE_POWER_SIGMA_LOG = 0.3
 _FUEL_TANK_MEAN_L = 350.0
 _FUEL_CONSUMPTION_MEAN_L_PER_H = 18.0
+_VEHICLE_LOAD_CAPACITY_MEAN_KG = 6000.0
+_VEHICLE_LOAD_CAPACITY_SIGMA_LOG = 0.4
+_VEHICLE_LOAD_CAPACITY_MIN_KG = 1000.0
+_VEHICLE_LOAD_CAPACITY_MAX_KG = 25000.0
 
 _IMPLEMENT_POWER_MEAN_KW = 100.0
 _IMPLEMENT_POWER_SIGMA_LOG = 0.35
@@ -21,13 +25,17 @@ _VEHICLE_POSITION_JITTER_KM = 5.0
 _IMPLEMENT_TYPES = list(ImplementType)
 _VEHICLE_TYPES = list(VehicleType)
 
-_IMPLEMENT_OPERATION_MAP: dict[ImplementType, list[OperationType]] = {
-    ImplementType.SPRAYER: [OperationType.SPRAYING],
-    ImplementType.PLOW: [OperationType.TILLAGE],
-    ImplementType.DISK_HARROW: [OperationType.TILLAGE, OperationType.SEEDING],
-    ImplementType.SEEDER: [OperationType.SEEDING],
-    ImplementType.COMBINE_HEADER: [OperationType.HARVESTING],
-    ImplementType.FERTILIZER_SPREADER: [OperationType.FERTILIZING],
+# Operation types (physical vocabulary) each implement type can perform. The
+# service kit carries the canonical EQUIPMENT_SERVICE operation so that
+# monitoring-derived service tasks are solvable.
+_IMPLEMENT_OPERATION_MAP: dict[ImplementType, list[str]] = {
+    ImplementType.SPRAYER: [OperationType.SPRAYING.value],
+    ImplementType.PLOW: [OperationType.TILLAGE.value],
+    ImplementType.DISK_HARROW: [OperationType.TILLAGE.value, OperationType.SEEDING.value],
+    ImplementType.SEEDER: [OperationType.SEEDING.value],
+    ImplementType.COMBINE_HEADER: [OperationType.HARVESTING.value],
+    ImplementType.FERTILIZER_SPREADER: [OperationType.FERTILIZING.value],
+    ImplementType.SERVICE_KIT: [EQUIPMENT_SERVICE_OPERATION],
 }
 
 
@@ -72,6 +80,9 @@ def _generate_vehicles(
     tanks = rng.lognormal(np.log(_FUEL_TANK_MEAN_L), 0.25, n).clip(100, 1200)
     consumptions = rng.lognormal(np.log(_FUEL_CONSUMPTION_MEAN_L_PER_H), 0.2, n).clip(5, 60)
     speeds = rng.uniform(10, 25, n)
+    load_capacities = rng.lognormal(
+        np.log(_VEHICLE_LOAD_CAPACITY_MEAN_KG), _VEHICLE_LOAD_CAPACITY_SIGMA_LOG, n
+    ).clip(_VEHICLE_LOAD_CAPACITY_MIN_KG, _VEHICLE_LOAD_CAPACITY_MAX_KG)
 
     vehicles = []
     for i in range(n):
@@ -87,6 +98,7 @@ def _generate_vehicles(
                 "current_lon": round(float(depot_lons[didx] + jitter_lon[i]), 6),
                 "depot_id": depot_ids[didx],
                 "travel_speed_kmh": round(float(speeds[i]), 1),
+                "load_capacity_kg": round(float(load_capacities[i]), 1),
                 # Extra real-data fields retained for analysis, not used by the
                 # optimizer (no canonical mapping). Derived deterministically so
                 # they do not perturb the optimization fields' values.
@@ -119,7 +131,7 @@ def _generate_implements(
     implements = []
     for i in range(n):
         itype = ImplementType(itypes[i])
-        compat_ops = [op.value for op in _IMPLEMENT_OPERATION_MAP[itype]]
+        compat_ops = list(_IMPLEMENT_OPERATION_MAP[itype])
         implements.append(
             {
                 "implement_id": f"implement_{i:06d}",
@@ -155,7 +167,9 @@ def _generate_operators(
     shift_lengths = rng.integers(_SHIFT_LENGTH_MIN_S, _SHIFT_LENGTH_MAX_S, size=n)
     shift_ends = shift_starts + shift_lengths
 
-    all_ops = [op.value for op in OperationType]
+    # Certification pool: field operations plus equipment service, so derived
+    # stationary-equipment service tasks can pass operator qualification.
+    all_ops = [op.value for op in OperationType] + [EQUIPMENT_SERVICE_OPERATION]
     operators = []
     for i in range(n):
         n_cert = rng.integers(1, len(all_ops) + 1)

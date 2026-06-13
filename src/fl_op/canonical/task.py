@@ -38,8 +38,23 @@ class Task(BaseModel):
     operation_type: str
     location_ref: str
     area_ha: Optional[float] = None
+    # Generic work demand; preferred over area_ha for duration estimation when
+    # present. The unit declares what the quantity counts (ha, m3, items, ...).
+    work_quantity: Optional[float] = None
+    work_quantity_unit: str = ""
     service_duration_minutes: Optional[int] = None
+    # Mass the bundle must carry to the task (delivered material), in kg.
+    load_demand_kg: Optional[float] = None
+    # Material code of the load demand; empty means the unspecified aggregate
+    # material (one shared load dimension).
+    load_material: str = ""
+    # Pickup location of a paired pickup-and-delivery task; None means the
+    # load is carried from the depot.
+    pickup_location_ref: Optional[str] = None
     time_windows: list[TimeInterval] = Field(default_factory=list)
+    # Predecessor task that must be served before this one. A reference to a
+    # task absent from the planning input is treated as already satisfied.
+    depends_on_task_ref: Optional[str] = None
     deadline: Optional[datetime] = None
     priority_class: int = 5
     mandatory: bool = False

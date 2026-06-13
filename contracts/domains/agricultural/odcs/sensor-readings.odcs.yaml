@@ -1,0 +1,125 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: sensor-readings
+version: 1.1.0
+status: active
+name: Sensor Readings
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: >-
+    Time-stamped readings reported by in-field sensor stations: numeric metrics
+    (battery level, soil moisture) and categorical states (health status). One
+    schema serves historical batches and realtime streamed readings; the metric
+    column carries the station's raw metric codes, which the mapping document's
+    metricCodes table normalizes to the canonical codes the engine's monitoring
+    policy interprets.
+  usage: Condition monitoring, service-task derivation, replanning triggers.
+  # Canonical projection lives in mappings/sensor-readings.mapping.yaml.
+servers:
+  - server: stream
+    type: local
+    format: jsonl
+    path: sensor-readings.jsonl
+schema:
+  - name: sensor_readings
+    logicalType: object
+    physicalType: jsonl
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.sensors
+            recordName: SensorReading
+            recordDoc: "One sensor reading mapped to a canonical Observation. Source dataset: sensor-readings.jsonl."
+          proto:
+            package: org.example.agri.sensors
+            messageName: SensorReading
+            syntax: proto3
+          es:
+            indexName: sensor-readings
+            dynamic: strict
+    properties:
+      - name: reading_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the reading.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
+      - name: sensor_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Station that produced the reading.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
+      - name: metric
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Raw station metric code (battery_pct, health_state, soil_moisture_pct).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
+      - name: value
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Numeric reading in the unit declared by the unit column.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
+      - name: state_value
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Categorical reading (for example a health status code).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
+      - name: unit
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Unit of the numeric reading.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}
+      - name: observed_at
+        logicalType: timestamp
+        physicalType: string
+        required: true
+        description: ISO-8601 timestamp the reading was taken.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 7}
+      - name: quality_flag
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Source quality marker, retained for analysis only.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 8}
+      - name: ingested_at
+        logicalType: string
+        physicalType: string
+        required: false
+        description: >-
+          ISO-8601 timestamp the reading arrived at the platform; makes
+          arrival order exact across restarts.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 9}

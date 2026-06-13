@@ -1,10 +1,12 @@
 """Input preparation for one cluster solve."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from fl_op.canonical.enums import ReasonCode
 from fl_op.solver.cluster.infeasible import mark_all_infeasible
+from fl_op.solver.enforcement import BlockedWindows
+from fl_op.solver.travel_time import TravelLookup
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,11 @@ class ClusterContext:
     routing_vehicles: list[dict[str, Any]]
     depot_lat: float
     depot_lon: float
+    # Directed (from, to) location-pair travel times from the travel network.
+    travel_lookup: TravelLookup = field(default_factory=dict)
+    # task_id -> blocked epoch intervals (non-compliant weather windows) the
+    # routing model must keep execution out of, occupancy-aware.
+    weather_blocked: BlockedWindows = field(default_factory=dict)
 
 
 def prepare_cluster_context(
@@ -28,6 +35,8 @@ def prepare_cluster_context(
     all_implements: list[dict[str, Any]],
     all_fields: list[dict[str, Any]],
     all_depots: list[dict[str, Any]],
+    travel_lookup: Optional[TravelLookup] = None,
+    weather_blocked: Optional[BlockedWindows] = None,
 ) -> tuple[Optional[ClusterContext], Optional[tuple[list[dict], list[dict]]]]:
     """Build routing context or return an early infeasibility result."""
     cluster_id = cluster_dict.get("cluster_id", "")
@@ -38,11 +47,11 @@ def prepare_cluster_context(
     if not task_ids:
         return None, ([], [])
 
-    order_map = {o["task_id"]: o for o in all_orders}
-    field_map = {f["location_id"]: f for f in all_fields}
-    depot_map = {d["location_id"]: d for d in all_depots}
-    vehicle_map = {v["asset_id"]: v for v in all_vehicles}
-    implement_map = {im["asset_id"]: im for im in all_implements}
+    order_map = {o.task_id: o for o in all_orders}
+    field_map = {f.location_id: f for f in all_fields}
+    depot_map = {d.location_id: d for d in all_depots}
+    vehicle_map = {v.asset_id: v for v in all_vehicles}
+    implement_map = {im.asset_id: im for im in all_implements}
 
     cluster_orders = [order_map[oid] for oid in task_ids if oid in order_map]
     if not cluster_orders:
@@ -71,8 +80,10 @@ def prepare_cluster_context(
         cluster_orders=cluster_orders,
         field_map=field_map,
         routing_vehicles=routing_vehicles,
-        depot_lat=float(depot["lat"]),
-        depot_lon=float(depot["lon"]),
+        depot_lat=float(depot.lat),
+        depot_lon=float(depot.lon),
+        travel_lookup=travel_lookup or {},
+        weather_blocked=weather_blocked or {},
     ), None
 
 

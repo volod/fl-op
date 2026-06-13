@@ -100,3 +100,23 @@ schema:
             value:
               avro: {default: ""}
               proto: {fieldNumber: 7}
+      - name: restricted_operations
+        logicalType: array
+        physicalType: string
+        required: false
+        description: Operation types prohibited on this field (stringified list).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: "[]"}
+              proto: {fieldNumber: 8}
+      - name: restricted_windows
+        logicalType: array
+        physicalType: string
+        required: false
+        description: ISO-8601 "from/to" intervals when no work may start here (stringified list).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: "[]"}
+              proto: {fieldNumber: 9}

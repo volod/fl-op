@@ -80,7 +80,7 @@ def _print_economics(stats: ScheduleStats) -> None:
     print("Economics")
     _print_metric("total margin", _fmt_money(stats.total_margin))
     _print_metric("greedy baseline", _fmt_money(stats.greedy_margin))
-    _print_metric("solver improvement", _fmt_money(stats.improvement))
+    _print_metric("solver margin delta", _fmt_money(stats.improvement))
     _print_metric("avg margin/order", _fmt_money(stats.avg_margin))
     _print_metric("total fuel", _fmt_number(stats.total_fuel, "L"))
     _print_metric("avg fuel/order", _fmt_number(stats.avg_fuel, "L"))

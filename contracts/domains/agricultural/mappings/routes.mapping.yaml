@@ -1,0 +1,43 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+# Projects the agricultural physical 'routes' schema onto the canonical
+# TravelLink entity (directed travel-network edge).
+metadata:
+  domain: agricultural
+  sourceContract: routes
+  canonicalEntity: travel-link
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: roadNetwork
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+
+fieldMappings:
+  - sourceField: route_id
+    binding: travelLink.linkId
+    semanticTerm: urn:xopt:identity:travel-link-id
+    planningUse: [identity]
+  - sourceField: from_id
+    binding: travelLink.fromLocationRef
+    semanticTerm: urn:xopt:relationship:from-location
+    planningUse: [routing]
+    missingValuePolicy: reject-for-planning
+  - sourceField: to_id
+    binding: travelLink.toLocationRef
+    semanticTerm: urn:xopt:relationship:to-location
+    planningUse: [routing]
+    missingValuePolicy: reject-for-planning
+  - sourceField: travel_time_s
+    binding: travelLink.travelTimeS
+    semanticTerm: urn:xopt:travel:travel-time
+    canonicalUnit: s
+    quantityKind: duration
+    planningUse: [routing]
+    missingValuePolicy: reject-for-planning
+  - sourceField: distance_km
+    binding: travelLink.distanceKm
+    semanticTerm: urn:xopt:travel:distance
+    canonicalUnit: km
+    quantityKind: length
+    planningUse: [cost]
+    missingValuePolicy: accept-optional

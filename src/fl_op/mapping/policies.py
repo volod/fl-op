@@ -55,6 +55,9 @@ def apply_missing_value_policy(
     if not _is_missing(raw_value):
         return PolicyOutcome(value=raw_value, drop_entity=False, finding=None)
 
+    if policy == MissingValuePolicy.ACCEPT_OPTIONAL:
+        return PolicyOutcome(value=None, drop_entity=False, finding=None)
+
     now = datetime.now(tz=timezone.utc)
     rule_id = quality_policy_ref or "dq://default/missing-value"
     fid = f"qf-{entity_ref}-{field_ref}-{finding_seq}"

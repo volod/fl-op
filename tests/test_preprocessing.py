@@ -6,10 +6,11 @@ from fl_op.solver.preprocessing import (
     cluster_orders_by_depot,
     filter_feasible_vehicle_implement_pairs,
 )
+from fl_op.solver.types import DepotRow, PrimeMoverRow, RelatedRow, SiteRow, TaskRow
 
 
-def _vehicle(vid: str, power_kw: float = 150.0, depot: str = "d0") -> dict:
-    return {
+def _vehicle(vid: str, power_kw: float = 150.0, depot: str = "d0") -> PrimeMoverRow:
+    return PrimeMoverRow.from_canonical_dict({
         "asset_id": vid,
         "asset_type": "TRACTOR",
         "rated_power": str(power_kw),
@@ -19,11 +20,11 @@ def _vehicle(vid: str, power_kw: float = 150.0, depot: str = "d0") -> dict:
         "lon": "32.0",
         "home_depot_ref": depot,
         "travel_speed": "15",
-    }
+    })
 
 
-def _implement(iid: str, power_kw: float = 120.0, op: str = "SPRAYING", depot: str = "d0") -> dict:
-    return {
+def _implement(iid: str, power_kw: float = 120.0, op: str = "SPRAYING", depot: str = "d0") -> RelatedRow:
+    return RelatedRow.from_canonical_dict({
         "asset_id": iid,
         "asset_type": "SPRAYER",
         "compatible_operations": f"['{op}']",
@@ -33,11 +34,11 @@ def _implement(iid: str, power_kw: float = 120.0, op: str = "SPRAYING", depot: s
         "max_speed": "12",
         "material_capacity": "0",
         "home_depot_ref": depot,
-    }
+    })
 
 
-def _order(oid: str, op: str = "SPRAYING", fid: str = "f0") -> dict:
-    return {
+def _order(oid: str, op: str = "SPRAYING", fid: str = "f0") -> TaskRow:
+    return TaskRow.from_canonical_dict({
         "task_id": oid,
         "operation_type": op,
         "location_ref": fid,
@@ -47,22 +48,23 @@ def _order(oid: str, op: str = "SPRAYING", fid: str = "f0") -> dict:
         "status": "pending",
         "revenue": "5000",
         "order_ref": "c0",
-    }
+    })
 
 
-def _field(fid: str, lat: float, lon: float) -> dict:
-    return {
+def _field(fid: str, lat: float, lon: float) -> SiteRow:
+    return SiteRow.from_canonical_dict({
         "location_id": fid,
         "lat": str(lat),
         "lon": str(lon),
         "area": "100",
         "name": fid,
-    }
+    })
 
 
-def _depot(did: str, lat: float, lon: float) -> dict:
-    return {"location_id": did, "lat": str(lat), "lon": str(lon), "name": did,
-            "inventory_fuel": "5000", "inventory_material": "0"}
+def _depot(did: str, lat: float, lon: float) -> DepotRow:
+    return DepotRow.from_canonical_dict(
+        {"location_id": did, "lat": str(lat), "lon": str(lon), "name": did,
+         "inventory_fuel": "5000", "inventory_material": "0"})
 
 
 class TestPowerFilter:

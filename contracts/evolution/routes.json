@@ -1,0 +1,37 @@
+{
+  "contractId": "routes",
+  "fields": {
+    "distance_km": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "from_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "road_class": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "route_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "to_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "travel_time_s": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    }
+  },
+  "odcsId": "routes",
+  "version": "1.0.0"
+}

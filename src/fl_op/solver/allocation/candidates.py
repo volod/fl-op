@@ -4,12 +4,12 @@ from typing import Any
 
 import numpy as np
 
-from fl_op.solver.allocation.scoring import ScoredLookup, score_vi_pair
+from fl_op.solver.allocation.scoring import FreeCapacity, ScoredLookup, score_vi_pair
 from fl_op.solver.allocation.state import AllocationState
 
 
 def collect_pair_candidates(
-    cluster_orders: list[dict[str, Any]],
+    cluster_orders: list[Any],
     feasible_pairs: dict[str, list[tuple[int, int]]],
     idx_to_vehicle: dict[int, str],
     idx_to_implement: dict[int, str],
@@ -17,11 +17,12 @@ def collect_pair_candidates(
     scored_lookup: ScoredLookup | None,
     state: AllocationState,
     max_vehicle_uses: int,
+    free_capacity: FreeCapacity | None = None,
 ) -> dict[tuple[str, str], float]:
     """Collect scored (vehicle_id, implement_id) candidates for one cluster."""
     candidates: dict[tuple[str, str], float] = {}
     for order in cluster_orders:
-        for v_idx, i_idx in feasible_pairs.get(order["task_id"], []):
+        for v_idx, i_idx in feasible_pairs.get(order.task_id, []):
             vehicle_id = idx_to_vehicle.get(v_idx)
             implement_id = idx_to_implement.get(i_idx)
             if vehicle_id is None or implement_id is None:
@@ -31,7 +32,10 @@ def collect_pair_candidates(
             if state.vehicle_assignment_count.get(vehicle_id, 0) >= max_vehicle_uses:
                 continue
 
-            score = score_vi_pair(order, power_margin, v_idx, i_idx, scored_lookup)
+            score = score_vi_pair(
+                order, power_margin, v_idx, i_idx, scored_lookup,
+                free_capacity, vehicle_id, implement_id,
+            )
             key = (vehicle_id, implement_id)
             candidates[key] = candidates.get(key, 0.0) + score
     return candidates

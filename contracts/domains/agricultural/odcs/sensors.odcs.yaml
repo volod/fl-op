@@ -1,0 +1,129 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: sensors
+version: 1.0.0
+status: active
+name: Field Sensor Stations
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: >-
+    Master data of stationary in-field sensor stations (soil moisture and
+    weather probes). Stations are anchored to a field, never scheduled as
+    movable resources, and receive monitoring-derived service visits.
+  usage: Stationary-equipment monitoring, service-task derivation.
+  # Canonical projection lives in mappings/sensors.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: sensors.csv
+schema:
+  - name: sensors
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.sensors
+            recordName: SensorStation
+            recordDoc: "Stationary in-field sensor station. Source dataset: sensors.csv."
+          proto:
+            package: org.example.agri.sensors
+            messageName: SensorStation
+            syntax: proto3
+          es:
+            indexName: sensors
+            dynamic: strict
+    properties:
+      - name: sensor_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the sensor station.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
+      - name: sensor_type
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Station category (soil-moisture probe, weather station).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
+      - name: field_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Field the station is anchored to (service-visit location).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
+      - name: lat
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Station latitude.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
+      - name: lon
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Station longitude.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 5}
+      - name: mobility
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Mobility class; always stationary for installed stations.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 6}
+      - name: last_service_at
+        logicalType: timestamp
+        physicalType: string
+        required: false
+        description: ISO-8601 timestamp of the last completed service visit.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 7}
+      - name: service_interval_days
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Planned days between service visits.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 8}
+      - name: install_date
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Installation date, retained for analysis only.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 9}
+      - name: firmware_version
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Firmware version, retained for analysis only.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 10}

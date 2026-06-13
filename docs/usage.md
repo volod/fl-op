@@ -13,7 +13,7 @@ never overwrites a previous run.
 
 ## Batch solver workflow
 
-### Step 1 — Generate data
+### Step 1 - Generate data
 
 ```bash
 .venv/bin/fl-op generate-data \
@@ -42,6 +42,8 @@ Output written to `.data/generate-data/<timestamp>/`:
 ```
 depots.avro        implements.avro   operators.avro
 fields.avro        orders.avro       vehicles.avro
+sensors.avro       routes.avro       prices.avro
+sensor-readings.jsonl
 contracts.json     weather.json      metadata.json
 ```
 
@@ -59,9 +61,39 @@ To load real fleet data instead of synthetic:
 
 Real CSVs take priority; missing fields fill from synthetic distributions.
 
+To generate and plan another registered domain pack, select the domain at
+generation time and activate it for planning with the `ACTIVE_DOMAIN` override.
+Counts map onto each domain's entities: construction uses
+vehicles=machines, implements=attachments, orders=jobs, depots=yards;
+roadside uses vehicles=service vehicles, implements=service kits,
+orders=signage assets, depots=service depots.
+
+```bash
+.venv/bin/fl-op generate-data --domain construction --seed 42
+ACTIVE_DOMAIN=construction .venv/bin/fl-op plan periodic --data latest
+
+.venv/bin/fl-op generate-data --domain roadside --vehicles 4 --implements 8 --orders 10 --depots 2 --seed 42
+ACTIVE_DOMAIN=roadside .venv/bin/fl-op plan periodic --data latest
+```
+
+Available generator domains come from `contracts/registry.yaml` domain entries;
+each entry declares the Python generator callable used by the `generate-data`
+command's `--domain` option.
+
+Shared-fleet planning can project several selected domain packs into one
+canonical snapshot/solve when the source directory has been staged with the
+needed datasets. Select the set with `ACTIVE_DOMAINS` (or adapter config
+`domains` in Python). Policy merging is not automatic; the plan call still uses
+one optimization profile.
+
+```bash
+ACTIVE_DOMAINS=agricultural,construction .venv/bin/fl-op snapshot build --data mixed-data --mode periodic
+ACTIVE_DOMAINS=agricultural,construction .venv/bin/fl-op plan periodic --data mixed-data
+```
+
 ---
 
-### Step 2 — Solve
+### Step 2 - Solve
 
 ```bash
 .venv/bin/fl-op solve --data latest
@@ -73,7 +105,7 @@ Or point to a specific dataset directory:
 .venv/bin/fl-op solve --data .data/generate-data/<timestamp>/
 ```
 
-**Example output** (small run — 50 vehicles / 200 implements / 20 orders):
+**Example output** (small run -- 50 vehicles / 200 implements / 20 orders):
 
 ```
 Fleet Optimization Schedule Report
@@ -82,7 +114,7 @@ Dispatched:   17
 Infeasible:   3
 Total margin: 347629.82 EUR
 Greedy base:  386670.36 EUR
-Improvement:  -39040.54 EUR
+Margin delta: -39040.54 EUR
 Total fuel:   6905.8 L
 
 Infeasibility reasons:
@@ -135,8 +167,11 @@ Dispatch packages are keyed by canonical names (`prime_asset_id`,
 }
 ```
 
-`greedy_baseline_margin_eur` is what a naive nearest-vehicle greedy assignment
-would earn. `solver_improvement_eur` is how much OR-Tools improved on it.
+`greedy_baseline_margin_eur` is the admitted-task greedy warm-start margin
+estimated with the same fuel/material prices as the final plan.
+`solver_improvement_eur` is the signed final-plan margin delta against that
+baseline; it can be negative when routing feasibility, assignment-count
+priority, or other constraints trade away margin.
 
 To inspect the latest solver run in the terminal:
 
@@ -149,7 +184,7 @@ economic KPIs, top-used resources, and ASCII bar charts by cluster/day.
 
 ---
 
-### Step 3 — Reschedule after field events
+### Step 3 - Reschedule after field events
 
 Create an events file describing what changed in the field:
 
@@ -177,7 +212,7 @@ summary of what changed vs. the previous schedule).
 
 ---
 
-### Step 4 — Query a new contract
+### Step 4 - Query a new contract
 
 Before accepting a new order, check feasibility and get margin estimates without
 running the full solver:
@@ -249,9 +284,19 @@ See [`docs/current-implementation.md`](current-implementation.md).
 .venv/bin/fl-op contracts generate --format avro            # or proto, es, parquet
 # or: make contracts-gen   (generates all four formats)
 
-# Validate the contract suite: dual fingerprints, generation-ready check.
+# Validate the contract suite: generated schemas, canonical mappings,
+# fingerprints, profiles, and metadata-loss guards.
 .venv/bin/fl-op contracts validate
 # or: make contracts
+
+# Schema evolution: check every ODCS contract against its committed reviewed
+# history (contracts/evolution/), enforcing pairwise version-bump policy:
+# added optional fields need a minor bump, anything breaking needs a major
+# bump, and mapping-semantic hash drift must be reviewed in the same gate.
+.venv/bin/fl-op contracts evolution-check     # or: make evolution-check
+# After a reviewed contract/mapping change (with the policy-required version
+# bump where structural schema changed), record the new history snapshot:
+.venv/bin/fl-op contracts evolution-freeze    # or: make evolution-freeze
 
 # Build an immutable, reproducibly-hashed planning snapshot from source data.
 .venv/bin/fl-op snapshot build --data latest --mode periodic
@@ -262,6 +307,10 @@ See [`docs/current-implementation.md`](current-implementation.md).
 # Rolling (stream) dispatch: one immutable revision per execution event, with a
 # freeze window protecting started/imminent tasks and a plan-instability penalty.
 .venv/bin/fl-op plan rolling --data latest --events events.jsonl
+
+# Explain why every changed assignment moved between rolling revisions. Plain
+# re-solve changes include solver attribution from plan scores when available.
+.venv/bin/fl-op plan diff-revisions --plan latest
 
 # Full story end to end (contracts -> snapshot -> batch -> stream).
 .venv/bin/fl-op demo --data latest      # or: make demo
@@ -275,6 +324,89 @@ and uses the same solver chain as periodic planning.
 
 Artifacts land under `.data/snapshot/`, `.data/plan-periodic/`, and
 `.data/plan-rolling/<ts>/revisions/<n>/`.
+
+---
+
+## Parameter tuning and experiment tracking
+
+`fl-op tune` runs a seeded Optuna TPE study over the tunable solver
+parameters (cluster target size, greedy score weights, per-cluster time
+limit) against recorded KPI baselines:
+
+```bash
+.venv/bin/fl-op tune --data latest --trials 20 --seed 7
+.venv/bin/fl-op tune --data latest --extra-data .data/generate-data/20260601T120000 --jobs 4
+.venv/bin/fl-op tune-promote --best-params .data/tune/20260612T090000/best_params.json --reviewed-by ops
+```
+
+Artifacts land under `.data/tune/<timestamp>/`: `baseline.json`,
+`trials.json`, and `best_params.json` (best parameters plus the improvement
+over the baseline objective). By default the study records a Pareto frontier:
+maximize business objective, minimize instability, and minimize wall time.
+`--extra-data` averages the objective across datasets, and `--jobs > 1` uses
+Optuna RDB storage (`study.db` in the run directory unless `--storage` or
+`TUNE_STORAGE_URI` is set).
+
+`fl-op tune-promote` writes the reviewed overlay
+`.data/tune/solver-parameters-tuned.json`; periodic and rolling plan runs load
+that overlay on top of the checked-in profile defaults. With
+`MLFLOW_LOGGING_ENABLED=1`, every trial, the tuning baseline, and every
+periodic/rolling plan run are logged as MLflow runs (KPIs, version dimensions,
+solve-telemetry summary) to a local SQLite store under `.data/mlruns` -- or to
+`MLFLOW_TRACKING_URI` if set -- so parameter experiments are comparable across
+datasets.
+
+---
+
+## Serving API
+
+`fl-op serve` exposes the published planning state over HTTP (loopback by
+default; FastAPI + uvicorn):
+
+```bash
+.venv/bin/fl-op serve            # or: make serve
+```
+
+Plan and feasibility routes are public only when `SERVE_AUTH_TOKEN` is unset
+for local development. Set `SERVE_AUTH_TOKEN` to require
+`Authorization: Bearer <token>`; binding outside loopback, for example
+`SERVE_HOST=0.0.0.0`, requires the token. `/health` remains unauthenticated
+for load balancers. By default the API reads artifacts from `$DATA_DIR`; set
+`SERVE_ARTIFACT_ROOT=/mnt/fl-op-artifacts` to serve a shared mounted artifact
+tree from several instances.
+
+| Endpoint | Meaning |
+|----------|---------|
+| `GET /health` | liveness probe |
+| `GET /plans/{periodic\|rolling}` | published run ids, newest last |
+| `GET /plans/{mode}/{run_id}` | plan document (`latest` allowed; rolling returns the newest revision) |
+| `GET /plans/rolling/{run_id}/revisions` | rolling revision summary |
+| `GET /plans/rolling/{run_id}/revisions/{n}` | one revision's plan |
+| `POST /feasibility` | query-contract evaluation for a new order |
+
+`POST /feasibility` takes `{"order": {...}, "data": "latest", "schedule":
+"latest"}` and returns the same feasibility/candidate result as
+`fl-op query-contract`, without writing run artifacts. `data` and `schedule`
+may also be run ids (`20260612T120000`) or artifact-root-relative paths under
+`generate-data/` and `solve/`.
+
+---
+
+## Event-bus ingestion
+
+Rolling planning reads execution events from the source selected by
+`EVENT_SOURCE_KIND`: `jsonl` (default) reads the `--events` file; `kafka`
+consumes `EVENT_BROKER_TOPIC` from `EVENT_BROKER_BOOTSTRAP_SERVERS` instead
+(requires the broker extra: `uv sync --extra broker`). Both sources validate
+events identically, and a rolling run drains the visible backlog
+(`EVENT_BROKER_MAX_EMPTY_POLLS` consecutive empty polls) before publishing
+revisions.
+
+Integrations can register more source kinds with
+`fl_op.stream.broker.register_event_source(kind, factory,
+uses_dedup_store=True)`. Use the dedup flag for sources that may redeliver
+events after a process restart; leave it off for intentionally replayed files
+or test feeds.
 
 ---
 
@@ -313,6 +445,17 @@ $DATA_DIR/                       # default: .data/ -- override via DATA_DIR env 
   snapshot/<timestamp>/          # snapshot.json (canonical + reproducible hash)
   plan-periodic/<timestamp>/     # plan.json + snapshot.json (batch plan)
   plan-rolling/<timestamp>/      # revisions/<n>/plan.json + revisions_summary.json
+  revision-diff/<timestamp>/     # revision_diff.json + revision_diff.txt
+  tune/<timestamp>/              # baseline.json, trials.json, best_params.json
+  tune/solver-parameters-tuned.json       # reviewed tuned solver overlay
+  cache/compat-matrix/            # content-keyed compatibility matrices
+  cache/preprocessing/            # candidate-filter and cluster-spec caches
+  cache/feasibility/              # exact /feasibility response cache
+  cache/solver-feedback/          # worker RSS and LNS objective-delta feedback
+  mlruns/                        # local MLflow store (MLFLOW_LOGGING_ENABLED=1)
+  quality/observation-error-rates.jsonl   # append-only cross-run error-rate trend
+  quality/service-prognosis.jsonl         # per-revision service-prognosis outcomes
+  quality/completion-lead-times.jsonl     # task completion lead/schedule errors
 ```
 
 All solve/reschedule JSON files include `schema_version: "1.0"`, `run_metadata`

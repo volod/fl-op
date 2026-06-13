@@ -1,7 +1,10 @@
 """Mapping engine: source records + x-optimization bindings -> canonical objects.
 
 This module keeps the public MappingEngine API. Row accumulation and canonical
-object construction live in helper modules under ``fl_op.mapping``.
+object construction live in helper modules under ``fl_op.mapping``. Entity
+dispatch is adaptive: any canonical entity registered in
+``builders.ENTITY_EMITTERS`` is mappable, so new entities (and domain packs that
+use them) require no engine changes.
 """
 
 import logging
@@ -10,12 +13,7 @@ from typing import Optional
 from fl_op.contracts.registry import FileRegistry
 from fl_op.mapping.accumulator import accumulate_row
 from fl_op.mapping.bindings import load_binding_table
-from fl_op.mapping.builders import (
-    build_asset,
-    build_forecast,
-    build_location,
-    build_task,
-)
+from fl_op.mapping.builders import ENTITY_EMITTERS, register_entity_emitter
 from fl_op.mapping.result import MappingResult
 
 logger = logging.getLogger(__name__)
@@ -38,20 +36,16 @@ class MappingEngine:
         table = load_binding_table(self.registry, contract_id)
         entity = table.canonical_entity
 
+        emitter = ENTITY_EMITTERS.get(entity)
+        if emitter is None:
+            logger.warning("Unhandled canonical entity '%s' for %s", entity, contract_id)
+            return result
+
         for row in rows:
             acc = accumulate_row(table, row, result)
             if acc is None:
                 continue
-            if entity == "asset":
-                result.assets.append(build_asset(table, acc))
-            elif entity == "location":
-                result.locations.append(build_location(table, acc, result))
-            elif entity == "task":
-                result.tasks.append(build_task(table, acc))
-            elif entity == "forecast":
-                result.forecasts.append(build_forecast(table, acc))
-            else:
-                logger.warning("Unhandled canonical entity '%s' for %s", entity, contract_id)
+            emitter(table, acc, result)
 
         logger.info(
             "Mapped %s: %d rows -> %s (excluded %d)",
@@ -63,4 +57,4 @@ class MappingEngine:
         return result
 
 
-__all__ = ["MappingEngine", "MappingResult"]
+__all__ = ["MappingEngine", "MappingResult", "register_entity_emitter"]

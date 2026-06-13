@@ -1,0 +1,71 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: technicians
+version: 1.0.0
+status: active
+name: Roadside Technicians
+domain: roadside-infrastructure
+tenant: road-ops
+description:
+  purpose: Technician identity, shift availability, and service certifications.
+  usage: Operator assignment for roadside service visits.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: technicians.csv
+schema:
+  - name: technicians
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.roadside.operators
+            recordName: Technician
+            recordDoc: "Roadside technician, mapped to canonical operator."
+          proto:
+            package: org.example.roadside.operators
+            messageName: Technician
+            syntax: proto3
+          es:
+            indexName: technicians
+            dynamic: strict
+    properties:
+      - name: technician_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the technician.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 1}}}]
+      - name: full_name
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Display name.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 2}}}]
+      - name: shift_start_s
+        logicalType: integer
+        physicalType: int
+        required: true
+        description: Shift start, seconds since midnight.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 3}}}]
+      - name: shift_end_s
+        logicalType: integer
+        physicalType: int
+        required: true
+        description: Shift end, seconds since midnight.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 4}}}]
+      - name: certified_operations
+        logicalType: array
+        physicalType: string
+        required: true
+        description: Certified operation types.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 5}}}]
+      - name: depot_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Home service depot.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 6}}}]

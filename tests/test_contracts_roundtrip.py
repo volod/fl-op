@@ -37,7 +37,7 @@ def test_every_contract_has_canonical_mapping(registry: FileRegistry) -> None:
 
 
 def test_generated_avro_has_no_xoptimization(registry: FileRegistry) -> None:
-    for cid in _odcs_contract_ids(registry):
+    for cid in _avro_contract_ids(registry):
         avro = registry.get_avro(cid)
         assert "x-optimization" not in avro.schema_json, (
             f"{cid}: generated Avro schema must not contain x-optimization blocks"

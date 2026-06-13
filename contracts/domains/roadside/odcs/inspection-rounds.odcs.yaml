@@ -1,0 +1,114 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: inspection-rounds
+version: 1.0.0
+status: active
+name: Roadside Inspection Rounds
+domain: roadside-infrastructure
+tenant: road-ops
+description:
+  purpose: >-
+    Findings recorded during periodic inspection rounds along road segments
+    (sign condition ratings, battery checks, retroreflectivity measurements),
+    mapped to canonical Observations about signage assets.
+  usage: >-
+    Condition-based maintenance: assessed observation series drive the
+    monitoring policy's derived service visits. One shape serves historical
+    batches and streamed observation.recorded events.
+  # Canonical projection lives in mappings/inspection-rounds.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: jsonl
+    path: inspection-rounds.jsonl
+schema:
+  - name: inspectionRounds
+    logicalType: object
+    physicalType: jsonl
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.roadside.inspections
+            recordName: InspectionFinding
+            recordDoc: "One inspection-round finding about a roadside asset, mapped to a canonical Observation. Source dataset: inspection-rounds.jsonl."
+          proto:
+            package: org.example.roadside.inspections
+            messageName: InspectionFinding
+            syntax: proto3
+          es:
+            indexName: inspection-rounds
+            dynamic: strict
+    properties:
+      - name: finding_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the inspection finding.
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 1}}
+      - name: round_id
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Inspection round the finding was recorded in (analytical grouping).
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 2}}
+      - name: sign_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Signage/sensor asset the finding is about.
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 3}}
+      - name: metric
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Raw metric code (sign_condition, battery_pct, retroreflectivity_pct).
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 4}}
+      - name: value
+        logicalType: number
+        physicalType: double
+        required: false
+        description: Numeric finding value, when the metric is numeric.
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 5}}
+      - name: state_value
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Categorical finding value (condition rating), when not numeric.
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 6}}
+      - name: unit
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Unit of the numeric value.
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 7}}
+      - name: inspected_at
+        logicalType: string
+        physicalType: string
+        required: true
+        description: When the inspector recorded the finding (ISO-8601).
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 8}}
+      - name: quality_flag
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Source quality flag (ok, suspect, bad, error).
+        customProperties:
+          - property: fieldGeneration
+            value: {proto: {fieldNumber: 9}}

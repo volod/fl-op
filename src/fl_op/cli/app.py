@@ -10,6 +10,7 @@ load_dotenv()
 
 from fl_op.cli.data_commands import register_data_commands  # noqa: E402
 from fl_op.cli.planning_commands import register_planning_commands  # noqa: E402
+from fl_op.cli.serving_commands import register_serving_commands  # noqa: E402
 from fl_op.cli.solver_commands import register_solver_commands  # noqa: E402
 
 
@@ -27,6 +28,7 @@ def cli(verbose: bool) -> None:
 register_data_commands(cli)
 register_solver_commands(cli)
 register_planning_commands(cli)
+register_serving_commands(cli)
 
 
 def main() -> None:

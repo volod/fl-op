@@ -1,0 +1,52 @@
+{
+  "contractId": "fields",
+  "fields": {
+    "area_ha": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "centroid_lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "centroid_lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "field_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "name": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "polygon": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": false
+    },
+    "restricted_operations": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": false
+    },
+    "restricted_windows": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": false
+    },
+    "soil_type": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    }
+  },
+  "odcsId": "fields",
+  "version": "1.0.0"
+}

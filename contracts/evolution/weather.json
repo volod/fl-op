@@ -1,0 +1,47 @@
+{
+  "contractId": "weather",
+  "fields": {
+    "lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "rain_mm_per_h": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "soil_moisture_pct": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "valid_from": {
+      "logicalType": "timestamp",
+      "physicalType": "string",
+      "required": true
+    },
+    "valid_to": {
+      "logicalType": "timestamp",
+      "physicalType": "string",
+      "required": true
+    },
+    "wind_ms": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "window_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    }
+  },
+  "odcsId": "weather",
+  "version": "1.0.0"
+}

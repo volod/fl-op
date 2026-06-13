@@ -1,0 +1,89 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: service-kits
+version: 1.0.0
+status: active
+name: Roadside Service Kits
+domain: roadside-infrastructure
+tenant: road-ops
+description:
+  purpose: Tooling kits carried by service vehicles.
+  usage: Related equipment compatible with EQUIPMENT_SERVICE work.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: service-kits.csv
+schema:
+  - name: serviceKits
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.roadside.assets
+            recordName: ServiceKit
+            recordDoc: "Roadside service tooling kit, mapped to canonical related equipment."
+          proto:
+            package: org.example.roadside.assets
+            messageName: ServiceKit
+            syntax: proto3
+          es:
+            indexName: service-kits
+            dynamic: strict
+    properties:
+      - name: kit_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the service kit.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 1}}}]
+      - name: kit_class
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Source kit class.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 2}}}]
+      - name: supported_operations
+        logicalType: array
+        physicalType: string
+        required: true
+        description: Supported operation types.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 3}}}]
+      - name: draw_power_kw
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Vehicle power draw.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 4}}}]
+      - name: working_width_m
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Nominal service footprint width.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 5}}}]
+      - name: min_speed_kmh
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Minimum operating speed.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 6}}}]
+      - name: max_speed_kmh
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Maximum operating speed.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 7}}}]
+      - name: depot_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Home service depot.
+        customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 8}}}]
+      - name: work_rates
+        logicalType: object
+        physicalType: string
+        required: false
+        description: Unit-to-rate map, stringified.
+        customProperties: [{property: fieldGeneration, value: {avro: {default: "{}"}, proto: {fieldNumber: 9}}}]

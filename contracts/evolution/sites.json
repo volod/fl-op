@@ -1,0 +1,37 @@
+{
+  "contractId": "sites",
+  "fields": {
+    "entry_lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "entry_lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "ground_class": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "label": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "plot_ha": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "site_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    }
+  },
+  "odcsId": "sites",
+  "version": "1.0.0"
+}

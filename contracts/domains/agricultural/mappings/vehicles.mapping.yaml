@@ -70,3 +70,10 @@ fieldMappings:
     quantityKind: speed
     planningUse: [routing]
     missingValuePolicy: fallback-to-conservative-value
+  - sourceField: load_capacity_kg
+    binding: asset.capabilities.loadCapacity
+    semanticTerm: urn:xopt:capability:load-capacity
+    canonicalUnit: kg
+    quantityKind: mass
+    planningUse: [capacity]
+    missingValuePolicy: accept-optional

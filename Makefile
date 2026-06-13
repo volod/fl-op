@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: venv setenv quickstart analyse data demo contracts canonical-validate validate-construction avro-gen proto-gen es-gen parquet-gen contracts-gen check-gen clean
+.PHONY: venv setenv quickstart analyse data demo contracts canonical-validate validate-construction validate-roadside avro-gen proto-gen es-gen parquet-gen contracts-gen check-gen evolution-check evolution-freeze test ci serve clean
 
 PYTHON := .venv/bin/python
 FL_OP := .venv/bin/fl-op
@@ -61,6 +61,11 @@ canonical-validate: venv
 validate-construction: venv
 	$(FL_OP) contracts validate-domain --domain construction
 
+# Validate the roadside-infrastructure runnable pack (stationary signage along
+# road segments with inspection rounds driving service visits).
+validate-roadside: venv
+	$(FL_OP) contracts validate-domain --domain roadside
+
 # Validate the declarative data-contract suite (canonical model + ODCS + generated schemas + dual fingerprints).
 contracts: venv
 	$(FL_OP) contracts validate
@@ -84,6 +89,24 @@ check-gen: venv  ## Check ODCS contracts have complete generation hints for all 
 	$(FL_OP) contracts check-generation --format proto
 	$(FL_OP) contracts check-generation --format es
 	$(FL_OP) contracts check-generation --format parquet
+
+evolution-check: venv  ## Check ODCS contracts against committed schema baselines
+	$(FL_OP) contracts evolution-check
+
+evolution-freeze: venv  ## Record reviewed schema baselines for all ODCS contracts
+	$(FL_OP) contracts evolution-freeze
+
+test: venv  ## Run the test suite
+	$(PYTHON) -m pytest
+
+serve: venv  ## Run the thin service API (feasibility + plan retrieval)
+	$(FL_OP) serve
+
+# CI entrypoint. Physical schemas are regenerated from the ODCS contracts
+# BEFORE any validation runs, so stale committed/generated schemas can never
+# pass unnoticed; the schema-evolution gate then enforces the version-bump
+# policy against the committed baselines.
+ci: contracts-gen check-gen contracts canonical-validate validate-construction validate-roadside evolution-check test
 
 # Full declarative demo: contracts -> snapshot -> periodic (batch) -> rolling (stream).
 # Depends on avro-gen because contracts/generated/ is gitignored: the demo's first

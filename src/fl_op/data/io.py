@@ -21,6 +21,12 @@ def _write_json(obj: Any, path: pathlib.Path) -> None:
         json.dump(obj, fh, indent=2, default=str)
 
 
+def _write_jsonl(records: list[dict[str, Any]], path: pathlib.Path) -> None:
+    with path.open("w") as fh:
+        for record in records:
+            fh.write(json.dumps(record, default=str) + "\n")
+
+
 def _load_csv_or_empty(path: pathlib.Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []

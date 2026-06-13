@@ -1,0 +1,37 @@
+{
+  "contractId": "operators",
+  "fields": {
+    "certified_operations": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": true
+    },
+    "depot_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "name": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "operator_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "shift_end_s": {
+      "logicalType": "integer",
+      "physicalType": "int",
+      "required": true
+    },
+    "shift_start_s": {
+      "logicalType": "integer",
+      "physicalType": "int",
+      "required": true
+    }
+  },
+  "odcsId": "operators",
+  "version": "1.0.0"
+}

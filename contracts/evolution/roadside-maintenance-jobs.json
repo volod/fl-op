@@ -1,0 +1,18 @@
+{
+  "contractId": "roadside-maintenance-jobs",
+  "odcsId": "maintenance-jobs",
+  "version": "1.0.0",
+  "fields": {
+    "job_id": {"logicalType": "string", "physicalType": "string", "required": true},
+    "work_order_id": {"logicalType": "string", "physicalType": "string", "required": false},
+    "road_segment_id": {"logicalType": "string", "physicalType": "string", "required": true},
+    "operation_type": {"logicalType": "string", "physicalType": "string", "required": true},
+    "service_area_ha": {"logicalType": "number", "physicalType": "double", "required": false},
+    "service_duration_minutes": {"logicalType": "number", "physicalType": "double", "required": false},
+    "deadline": {"logicalType": "string", "physicalType": "string", "required": false},
+    "penalty_per_day_eur": {"logicalType": "number", "physicalType": "double", "required": false},
+    "priority": {"logicalType": "integer", "physicalType": "int", "required": false},
+    "status": {"logicalType": "string", "physicalType": "string", "required": false},
+    "estimated_revenue_eur": {"logicalType": "number", "physicalType": "double", "required": false}
+  }
+}

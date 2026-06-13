@@ -1,0 +1,37 @@
+{
+  "contractId": "depots",
+  "fields": {
+    "depot_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "fertilizer_available_kg": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "fuel_available_l": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "name": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    }
+  },
+  "odcsId": "depots",
+  "version": "1.0.0"
+}

@@ -53,9 +53,14 @@ def accumulate_row(
 
 
 def route_value(acc: dict[str, Any], binding: FieldBinding, value: Any) -> None:
-    """Route a coerced value into the accumulator based on its binding path."""
+    """Route a coerced value into the accumulator based on its binding path.
+
+    Capability-like segments (capabilities, availability, state) all become
+    semantic-term-keyed Capability records, so asset state (battery level,
+    health status, last service) is queryable the same way static abilities are.
+    """
     tokens = binding.meta.binding.split(".")
-    if "capabilities" in tokens or "availability" in tokens:
+    if "capabilities" in tokens or "availability" in tokens or "state" in tokens:
         acc["_capabilities"].append(
             Capability(
                 capability_id=f"{tokens[-1]}",

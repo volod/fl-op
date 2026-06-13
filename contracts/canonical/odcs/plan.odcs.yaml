@@ -1,0 +1,219 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: canonical-plan
+version: 0.1.0
+status: active
+name: Canonical Plan (output)
+domain: canonical
+tenant: optimization
+description:
+  purpose: >-
+    The canonical OUTPUT contract for published plans, mirroring the input
+    entity contracts: the plan/revision envelope plus its assignment,
+    unassigned-task, and material-reservation records.
+  usage: >-
+    Produced by solver adapters (src/fl_op/canonical/plan.py) and validated on
+    publication (src/fl_op/contracts/plan_contract.py). Never consumed as
+    snapshot input.
+customProperties:
+  - property: canonicalEntity
+    value:
+      entity: plan
+      canonicalModelRef: urn:xopt:model:canonical:0.1.0
+      # Output entity: validated against produced plan artifacts, not mapped
+      # from domain sources.
+schema:
+  - name: plan
+    logicalType: object
+    properties:
+      - name: planId
+        logicalType: string
+        required: true
+        description: Stable identifier of the plan.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.planId, semanticTerm: urn:xopt:identity:plan-id, planningUse: [identity]}
+      - name: revisionId
+        logicalType: string
+        required: true
+        description: Immutable revision identifier; rolling updates create new revisions.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.revisionId, semanticTerm: urn:xopt:identity:revision-id, planningUse: [identity]}
+      - name: parentRevisionId
+        logicalType: string
+        required: false
+        description: Predecessor revision in a rolling chain; absent for a baseline.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.parentRevisionId, semanticTerm: urn:xopt:identity:revision-id, planningUse: [lineage]}
+      - name: snapshotRef
+        logicalType: string
+        required: true
+        description: Planning snapshot the plan was solved from.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.snapshotRef, semanticTerm: urn:xopt:identity:snapshot-id, planningUse: [lineage]}
+      - name: planningMode
+        logicalType: string
+        required: true
+        description: Planning mode (periodic, rolling).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.planningMode, semanticTerm: urn:xopt:plan:planning-mode, planningUse: [classification]}
+      - name: status
+        logicalType: string
+        required: true
+        description: Plan lifecycle status (draft, approved, published, superseded, rejected).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.status, semanticTerm: urn:xopt:plan:status, planningUse: [lifecycle]}
+      - name: generatedAt
+        logicalType: string
+        required: true
+        description: Wall-clock the plan was produced (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.generatedAt, semanticTerm: urn:xopt:time:generated-at, quantityKind: timestamp, planningUse: [lineage]}
+      - name: effectiveFrom
+        logicalType: string
+        required: true
+        description: Start of the interval the plan governs (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.effectiveFrom, semanticTerm: urn:xopt:time:valid-from, quantityKind: timestamp, planningUse: [time-window]}
+      - name: effectiveTo
+        logicalType: string
+        required: false
+        description: End of the interval the plan governs (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.effectiveTo, semanticTerm: urn:xopt:time:valid-to, quantityKind: timestamp, planningUse: [time-window]}
+  - name: assignment
+    logicalType: object
+    properties:
+      - name: assignmentId
+        logicalType: string
+        required: true
+        description: Stable identifier of the assignment record.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.assignment.assignmentId, semanticTerm: urn:xopt:identity:assignment-id, planningUse: [identity]}
+      - name: taskRef
+        logicalType: string
+        required: true
+        description: Task the bundle is assigned to.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.assignment.taskRef, semanticTerm: urn:xopt:relationship:task, planningUse: [assignment]}
+      - name: assetRefs
+        logicalType: array
+        required: false
+        description: Assets of the executing bundle (prime mover, related equipment).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.assignment.assetRefs, semanticTerm: urn:xopt:relationship:entity-refs, quantityKind: categorical-set, planningUse: [assignment]}
+      - name: operatorRefs
+        logicalType: array
+        required: false
+        description: Operators executing the assignment.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.assignment.operatorRefs, semanticTerm: urn:xopt:relationship:entity-refs, quantityKind: categorical-set, planningUse: [assignment]}
+      - name: plannedStart
+        logicalType: string
+        required: true
+        description: Scheduled execution start (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.assignment.plannedStart, semanticTerm: urn:xopt:time:planned-start, quantityKind: timestamp, planningUse: [time-window]}
+      - name: plannedFinish
+        logicalType: string
+        required: true
+        description: Scheduled execution end (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.assignment.plannedFinish, semanticTerm: urn:xopt:time:planned-end, quantityKind: timestamp, planningUse: [time-window]}
+      - name: expectedRevenue
+        logicalType: number
+        required: false
+        description: Expected revenue of the assignment.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.assignment.expectedRevenue, semanticTerm: urn:xopt:attribute:expected-revenue, canonicalUnit: EUR, quantityKind: money, planningUse: [objective]}
+      - name: expectedCost
+        logicalType: number
+        required: false
+        description: Expected execution cost of the assignment.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.assignment.expectedCost, semanticTerm: urn:xopt:plan:expected-cost, canonicalUnit: EUR, quantityKind: money, planningUse: [objective]}
+      - name: expectedMargin
+        logicalType: number
+        required: false
+        description: Expected margin of the assignment.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.assignment.expectedMargin, semanticTerm: urn:xopt:plan:expected-margin, canonicalUnit: EUR, quantityKind: money, planningUse: [objective]}
+  - name: unassignedTask
+    logicalType: object
+    properties:
+      - name: taskRef
+        logicalType: string
+        required: true
+        description: Task that could not be assigned.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.unassignedTask.taskRef, semanticTerm: urn:xopt:relationship:task, planningUse: [assignment]}
+      - name: reasonCode
+        logicalType: string
+        required: true
+        description: Normalized canonical reason code for the exclusion.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.unassignedTask.reasonCode, semanticTerm: urn:xopt:plan:reason-code, planningUse: [explanation]}
+  - name: materialReservation
+    logicalType: object
+    properties:
+      - name: reservationId
+        logicalType: string
+        required: true
+        description: Stable identifier of the reservation record.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.materialReservation.reservationId, semanticTerm: urn:xopt:identity:reservation-id, planningUse: [identity]}
+      - name: taskRef
+        logicalType: string
+        required: true
+        description: Task the material is reserved for.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.materialReservation.taskRef, semanticTerm: urn:xopt:relationship:task, planningUse: [assignment]}
+      - name: materialType
+        logicalType: string
+        required: true
+        description: Canonical material code reserved.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.materialReservation.materialType, semanticTerm: urn:xopt:inventory:material-type, planningUse: [material-availability]}
+      - name: inventoryLocationRef
+        logicalType: string
+        required: true
+        description: Location whose inventory the reservation draws from.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.materialReservation.inventoryLocationRef, semanticTerm: urn:xopt:relationship:location, planningUse: [material-availability]}
+      - name: quantity
+        logicalType: number
+        required: true
+        description: Reserved quantity, in the record's canonical unit.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.materialReservation.quantity, semanticTerm: urn:xopt:inventory:quantity, quantityKind: measurement, planningUse: [material-availability]}
+      - name: status
+        logicalType: string
+        required: true
+        description: Reservation lifecycle status (provisional, confirmed, consumed, released).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.materialReservation.status, semanticTerm: urn:xopt:plan:reservation-status, planningUse: [lifecycle]}

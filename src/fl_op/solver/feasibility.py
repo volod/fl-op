@@ -1,8 +1,8 @@
 """Capability-based compatibility between prime-mover and related-equipment assets.
 
-Domain-agnostic replacement for the former models.compat_matrix: it operates on
-the generic solver rows projected from canonical assets, reading only canonical
-power capabilities, so it works for any domain (agricultural, construction, ...).
+Operates on the generic solver rows projected from canonical assets, reading
+only canonical power capabilities, so it works for any domain (agricultural,
+construction, ...).
 
 Layout: rows = prime movers (indexed 0..N_p-1), cols = related equipment
 (indexed 0..N_r-1).
@@ -12,29 +12,33 @@ Layout: rows = prime movers (indexed 0..N_p-1), cols = related equipment
                         negative means overload.
 
 Workers load via np.load(mmap_mode='r') for zero-copy read access.
+
+Matrices are cacheable by dataset hash (``cached_compat_matrix``): the cache
+key is a content hash over exactly the inputs the matrix derives from (asset
+ids, power capabilities, the power margin), so a repeated solve over the same
+fleet skips the rebuild while any input change misses the cache.
 """
 
+import hashlib
 import logging
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from fl_op.core import constants
 from fl_op.core.constants import POWER_MARGIN_PCT
+from fl_op.core.paths import DATA_ROOT
 
 logger = logging.getLogger(__name__)
 
 COMPAT_FILENAME = "compat.npy"
 POWER_MARGIN_FILENAME = "power_margin.npy"
 
-# Canonical solver-row keys for the two power capabilities used by compatibility.
-RATED_POWER_KEY = "rated_power"
-REQUIRED_POWER_KEY = "required_power"
-
 
 def build_compat_matrix(
-    prime_movers: list[dict[str, Any]],
-    related_equipment: list[dict[str, Any]],
+    prime_movers: list[Any],
+    related_equipment: list[Any],
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return (compat bool ndarray, power_margin float32 ndarray), shape (N_p, N_r).
 
@@ -46,9 +50,9 @@ def build_compat_matrix(
     n_p = len(prime_movers)
     n_r = len(related_equipment)
 
-    rated = np.array([p[RATED_POWER_KEY] for p in prime_movers], dtype=np.float32)  # (N_p,)
+    rated = np.array([p.rated_power for p in prime_movers], dtype=np.float32)  # (N_p,)
     required = np.array(
-        [r[REQUIRED_POWER_KEY] for r in related_equipment], dtype=np.float32
+        [r.required_power for r in related_equipment], dtype=np.float32
     )  # (N_r,)
 
     # power_margin[p, r] = (rated[p] - required[r]) / rated[p] * 100, via broadcast.
@@ -66,6 +70,66 @@ def build_compat_matrix(
         100.0 * compat.sum() / (n_p * n_r) if n_p and n_r else 0.0,
     )
     return compat, power_margin
+
+
+def compat_cache_key(
+    prime_movers: list[Any],
+    related_equipment: list[Any],
+) -> str:
+    """Content hash over everything the compatibility matrix derives from."""
+    digest = hashlib.sha256()
+    digest.update(f"margin:{POWER_MARGIN_PCT!r}".encode("ascii"))
+    for prime in prime_movers:
+        digest.update(f"p:{prime.asset_id}:{float(prime.rated_power)!r}".encode())
+    for related in related_equipment:
+        digest.update(
+            f"r:{related.asset_id}:{float(related.required_power)!r}".encode()
+        )
+    return digest.hexdigest()
+
+
+def cached_compat_matrix(
+    prime_movers: list[Any],
+    related_equipment: list[Any],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Build the compatibility matrix, reusing a dataset-hash-keyed cache.
+
+    Disabled (COMPAT_MATRIX_CACHE_ENABLED=0) or on any cache trouble this
+    falls back to a plain rebuild; the cache can never change results, only
+    skip recomputation. The cache directory retains at most
+    COMPAT_MATRIX_CACHE_MAX_ENTRIES matrices (oldest pruned).
+    """
+    if not constants.COMPAT_MATRIX_CACHE_ENABLED:
+        return build_compat_matrix(prime_movers, related_equipment)
+
+    cache_dir = DATA_ROOT / constants.COMPAT_MATRIX_CACHE_DIRNAME
+    cache_path = cache_dir / f"{compat_cache_key(prime_movers, related_equipment)}.npz"
+    if cache_path.exists():
+        try:
+            with np.load(cache_path, allow_pickle=False) as data:
+                compat = data["compat"]
+                power_margin = data["power_margin"]
+            logger.info("Compatibility matrix cache hit: %s", cache_path.name)
+            return compat, power_margin
+        except (OSError, ValueError, KeyError) as exc:
+            logger.warning("Compat cache read failed (%s); rebuilding", exc)
+
+    compat, power_margin = build_compat_matrix(prime_movers, related_equipment)
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        np.savez(cache_path, compat=compat, power_margin=power_margin)
+        _prune_cache(cache_dir)
+        logger.debug("Compatibility matrix cached: %s", cache_path.name)
+    except OSError as exc:
+        logger.warning("Compat cache write failed (%s); continuing uncached", exc)
+    return compat, power_margin
+
+
+def _prune_cache(cache_dir: Path) -> None:
+    """Drop the oldest cached matrices beyond the retention bound."""
+    entries = sorted(cache_dir.glob("*.npz"), key=lambda p: p.stat().st_mtime)
+    for stale in entries[: max(0, len(entries) - constants.COMPAT_MATRIX_CACHE_MAX_ENTRIES)]:
+        stale.unlink(missing_ok=True)
 
 
 def save_compat_matrix(

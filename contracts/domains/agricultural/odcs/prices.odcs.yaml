@@ -1,0 +1,92 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: prices
+version: 1.0.0
+status: active
+name: Resource Prices
+domain: agricultural-custom-services
+tenant: fleet-ops
+description:
+  purpose: Fuel and consumable-material prices mapped to canonical cost rates.
+  usage: Cost estimation in greedy scoring and plan KPIs; engine constants are the fallback.
+  # Canonical projection lives in mappings/prices.mapping.yaml.
+servers:
+  - server: batch
+    type: local
+    format: csv
+    path: prices.csv
+schema:
+  - name: prices
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro:
+            namespace: org.example.agri.prices
+            recordName: ResourcePrice
+            recordDoc: "Priced resource rate with a validity window, mapped to a canonical CostRate. Source dataset: prices.csv."
+          proto:
+            package: org.example.agri.prices
+            messageName: ResourcePrice
+            syntax: proto3
+          es:
+            indexName: prices
+            dynamic: strict
+    properties:
+      - name: price_id
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Stable identifier of the price row.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 1}
+      - name: resource_type
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Canonical resource code priced (fuel, fertilizer).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 2}
+      - name: price_eur
+        logicalType: number
+        physicalType: double
+        required: true
+        description: Price of one unit in EUR.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 3}
+      - name: per_unit
+        logicalType: string
+        physicalType: string
+        required: true
+        description: Unit one price buys (L, kg).
+        customProperties:
+          - property: fieldGeneration
+            value:
+              proto: {fieldNumber: 4}
+      - name: valid_from
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Validity start (ISO-8601); empty means always valid.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 5}
+      - name: valid_to
+        logicalType: string
+        physicalType: string
+        required: false
+        description: Validity end (ISO-8601, exclusive); empty means open-ended.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 6}

@@ -1,0 +1,32 @@
+{
+  "contractId": "execution-events",
+  "fields": {
+    "entity_ref": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "event_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "event_type": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "observed_at": {
+      "logicalType": "timestamp",
+      "physicalType": "string",
+      "required": true
+    },
+    "payload_json": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    }
+  },
+  "odcsId": "execution-events",
+  "version": "1.0.0"
+}

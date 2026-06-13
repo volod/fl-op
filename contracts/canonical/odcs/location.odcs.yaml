@@ -67,6 +67,22 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: location.soilType, semanticTerm: urn:xopt:attribute:soil-type, planningUse: [field-restriction]}
+      - name: restrictedOperations
+        logicalType: array
+        required: false
+        description: Operation types prohibited at this location (restricted zone).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.restrictedOperations, semanticTerm: urn:xopt:restriction:prohibited-operations, quantityKind: categorical-set, planningUse: [field-restriction]}
+      - name: restrictionWindows
+        logicalType: array
+        required: false
+        description: >-
+          ISO-8601 "from/to" intervals during which no execution may start at
+          this location (time-restricted area).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.restrictionWindows, semanticTerm: urn:xopt:restriction:restricted-windows, quantityKind: interval-set, planningUse: [field-restriction, time-window]}
       - name: inventoryFuel
         logicalType: number
         required: false

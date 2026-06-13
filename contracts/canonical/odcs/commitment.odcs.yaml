@@ -1,0 +1,88 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: canonical-commitment
+version: 0.1.0
+status: active
+name: Canonical Commitment
+domain: canonical
+tenant: optimization
+description:
+  purpose: >-
+    Minimal optimization contract for a contractual obligation attached to work:
+    a deadline, a lateness penalty, and how hard the obligation is. Domains that
+    keep commitments separate from their order rows project them here; domains
+    that embed deadline/penalty in the order rows map those fields on the task
+    entity instead.
+  usage: Penalty-aware prioritization, commitment-window feasibility.
+customProperties:
+  - property: canonicalEntity
+    value:
+      entity: commitment
+      canonicalModelRef: urn:xopt:model:canonical:0.1.0
+schema:
+  - name: commitment
+    logicalType: object
+    properties:
+      - name: commitmentId
+        logicalType: string
+        required: true
+        description: Stable canonical identifier of the commitment.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: commitment.commitmentId, semanticTerm: urn:xopt:identity:commitment-id, planningUse: [identity]}
+      - name: contractRef
+        logicalType: string
+        required: false
+        description: Source contract/agreement the commitment belongs to.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: commitment.contractRef, semanticTerm: urn:xopt:relationship:contract, planningUse: [explanation]}
+      - name: taskRef
+        logicalType: string
+        required: false
+        description: Canonical task the commitment constrains, when task-scoped.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: commitment.taskRef, semanticTerm: urn:xopt:relationship:entity-ref, planningUse: [assignment]}
+      - name: commitmentType
+        logicalType: string
+        required: false
+        description: Kind of obligation (completion-deadline, service-level, volume).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: commitment.commitmentType, semanticTerm: urn:xopt:commitment:type, planningUse: [classification]}
+      - name: hardness
+        logicalType: string
+        required: false
+        description: Obligation hardness (hard, medium, soft).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: commitment.hardness, semanticTerm: urn:xopt:commitment:hardness, planningUse: [prioritization]}
+      - name: deadline
+        logicalType: string
+        required: false
+        description: Latest completion timestamp the commitment allows (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: commitment.deadline, semanticTerm: urn:xopt:commitment:deadline, quantityKind: timestamp, planningUse: [feasibility]}
+      - name: latenessPenalty
+        logicalType: number
+        required: false
+        description: Penalty accrued per day of lateness.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: commitment.latenessPenalty, semanticTerm: urn:xopt:commitment:lateness-penalty, canonicalUnit: EUR, quantityKind: money, planningUse: [cost]}
+      - name: validFrom
+        logicalType: string
+        required: false
+        description: Start of the commitment's validity window (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: commitment.validFrom, semanticTerm: urn:xopt:time:valid-from, quantityKind: timestamp, planningUse: [feasibility]}
+      - name: validTo
+        logicalType: string
+        required: false
+        description: End of the commitment's validity window (ISO-8601).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: commitment.validTo, semanticTerm: urn:xopt:time:valid-to, quantityKind: timestamp, planningUse: [feasibility]}

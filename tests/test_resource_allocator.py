@@ -7,40 +7,44 @@ T13: Equal penalty sum -> tiebreak by cluster_id.
 
 from fl_op.solver.allocation import allocate_resources
 from fl_op.solver.feasibility import build_compat_matrix
-from fl_op.solver.types import ClusterSpec
+from fl_op.solver.types import ClusterSpec, OperatorRow, PrimeMoverRow, RelatedRow, TaskRow
 
 
-def _veh(vid: str, power: float = 150.0) -> dict:
-    return {"asset_id": vid, "asset_type": "TRACTOR", "rated_power": str(power),
-            "fuel_tank_volume": "400", "fuel_consumption_rate": "18",
-            "lat": "48.5", "lon": "32.0", "home_depot_ref": "d0", "travel_speed": "15"}
+def _veh(vid: str, power: float = 150.0) -> PrimeMoverRow:
+    return PrimeMoverRow.from_canonical_dict(
+        {"asset_id": vid, "asset_type": "TRACTOR", "rated_power": str(power),
+         "fuel_tank_volume": "400", "fuel_consumption_rate": "18",
+         "lat": "48.5", "lon": "32.0", "home_depot_ref": "d0", "travel_speed": "15"})
 
 
-def _impl(iid: str, power: float = 100.0) -> dict:
-    return {"asset_id": iid, "asset_type": "SPRAYER",
-            "compatible_operations": "['SPRAYING']", "required_power": str(power),
-            "working_width": "24", "min_speed": "5", "max_speed": "12",
-            "material_capacity": "0", "home_depot_ref": "d0"}
+def _impl(iid: str, power: float = 100.0) -> RelatedRow:
+    return RelatedRow.from_canonical_dict(
+        {"asset_id": iid, "asset_type": "SPRAYER",
+         "compatible_operations": "['SPRAYING']", "required_power": str(power),
+         "working_width": "24", "min_speed": "5", "max_speed": "12",
+         "material_capacity": "0", "home_depot_ref": "d0"})
 
 
-def _order(oid: str, penalty: float = 100.0) -> dict:
-    return {"task_id": oid, "operation_type": "SPRAYING", "location_ref": "f0",
-            "area": "100", "deadline": "2026-06-01T00:00:00+00:00",
-            "penalty_per_day": str(penalty), "status": "pending",
-            "revenue": "5000", "order_ref": "c0"}
+def _order(oid: str, penalty: float = 100.0) -> TaskRow:
+    return TaskRow.from_canonical_dict(
+        {"task_id": oid, "operation_type": "SPRAYING", "location_ref": "f0",
+         "area": "100", "deadline": "2026-06-01T00:00:00+00:00",
+         "penalty_per_day": str(penalty), "status": "pending",
+         "revenue": "5000", "order_ref": "c0"})
 
 
-def _operator(opid: str, depot: str = "d0") -> dict:
-    return {"asset_id": opid, "name": opid, "shift_start": "21600",
-            "shift_end": "57600", "certified_operations": "['SPRAYING']", "home_depot_ref": depot}
+def _operator(opid: str, depot: str = "d0") -> OperatorRow:
+    return OperatorRow.from_canonical_dict(
+        {"asset_id": opid, "name": opid, "shift_start": "21600",
+         "shift_end": "57600", "certified_operations": "['SPRAYING']", "home_depot_ref": depot})
 
 
 def _build_setup(n_vehicles: int = 2, n_implements: int = 2):
     vehicles_raw = [_veh(f"v{i}") for i in range(n_vehicles)]
     implements_raw = [_impl(f"i{i}") for i in range(n_implements)]
     compat, power_margin = build_compat_matrix(vehicles_raw, implements_raw)
-    vehicle_index = {v["asset_id"]: i for i, v in enumerate(vehicles_raw)}
-    implement_index = {im["asset_id"]: i for i, im in enumerate(implements_raw)}
+    vehicle_index = {v.asset_id: i for i, v in enumerate(vehicles_raw)}
+    implement_index = {im.asset_id: i for i, im in enumerate(implements_raw)}
     return vehicles_raw, implements_raw, compat, power_margin, vehicle_index, implement_index
 
 
@@ -130,5 +134,154 @@ class TestScoredPreallocation:
         cluster = _cluster("cluster_a", ["o0"], 500.0)
         result = allocate_resources(
             [cluster], orders, operators, pm, v_idx, i_idx, feasible, scored,
+        )
+        assert result[0]["allocated_prime_related"] == {"v1": ["i1"]}
+
+
+def _starved_cluster_inputs():
+    """Two clusters contesting i0; the high cluster has an i1 alternative.
+
+    Greedy lets the high-penalty cluster grab its best pair (v0, i0) and
+    starves the low cluster (whose only option is i0). The global model must
+    route the high cluster to (v1, i1) so both clusters are served.
+    """
+    setup = _build_setup(2, 2)
+    orders = [_order("o_high", 1000), _order("o_low", 10)]
+    operators = [_operator("op0"), _operator("op1")]
+    feasible = {"o_high": [(0, 0), (1, 1)], "o_low": [(0, 0)]}
+    scored = {"o_high": [(100.0, 0, 0), (90.0, 1, 1)], "o_low": [(50.0, 0, 0)]}
+    clusters = [
+        _cluster("c_high", ["o_high"], 1000.0),
+        _cluster("c_low", ["o_low"], 10.0),
+    ]
+    return setup, orders, operators, feasible, scored, clusters
+
+
+class TestGlobalAssignmentModel:
+    def test_global_model_recovers_greedy_starved_cluster(self):
+        setup, orders, operators, feasible, scored, clusters = _starved_cluster_inputs()
+        _vr, _ir, _compat, pm, v_idx, i_idx = setup
+        result = allocate_resources(
+            clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+        )
+        by_id = {c["cluster_id"]: c for c in result}
+        assert by_id["c_high"]["allocated_prime_related"] == {"v1": ["i1"]}
+        assert by_id["c_low"]["allocated_prime_related"] == {"v0": ["i0"]}
+
+    def test_greedy_fallback_starves_low_cluster(self, monkeypatch):
+        from fl_op.core import constants
+
+        monkeypatch.setattr(constants, "GLOBAL_ASSIGNMENT_ENABLED", False)
+        setup, orders, operators, feasible, scored, clusters = _starved_cluster_inputs()
+        _vr, _ir, _compat, pm, v_idx, i_idx = setup
+        result = allocate_resources(
+            clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+        )
+        by_id = {c["cluster_id"]: c for c in result}
+        assert by_id["c_high"]["allocated_prime_related"] == {"v0": ["i0"]}
+        assert by_id["c_low"]["allocated_prime_related"] == {}
+
+    def test_oversized_model_falls_back_to_greedy(self, monkeypatch):
+        from fl_op.core import constants
+
+        monkeypatch.setattr(constants, "GLOBAL_ASSIGNMENT_MAX_MODEL_CANDIDATES", 1)
+        setup, orders, operators, feasible, scored, clusters = _starved_cluster_inputs()
+        _vr, _ir, _compat, pm, v_idx, i_idx = setup
+        result = allocate_resources(
+            clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+        )
+        by_id = {c["cluster_id"]: c for c in result}
+        # Greedy semantics: the high-penalty cluster takes its best pair.
+        assert by_id["c_high"]["allocated_prime_related"] == {"v0": ["i0"]}
+
+    def test_global_model_is_deterministic(self):
+        results = []
+        for _ in range(2):
+            setup, orders, operators, feasible, scored, clusters = (
+                _starved_cluster_inputs()
+            )
+            _vr, _ir, _compat, pm, v_idx, i_idx = setup
+            result = allocate_resources(
+                clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+            )
+            results.append(
+                [
+                    (c["cluster_id"], c["allocated_prime_related"], c.get("operator_ref"))
+                    for c in result
+                ]
+            )
+        assert results[0] == results[1]
+
+    def test_global_model_assigns_qualified_operator(self):
+        setup, orders, operators, feasible, scored, clusters = _starved_cluster_inputs()
+        _vr, _ir, _compat, pm, v_idx, i_idx = setup
+        result = allocate_resources(
+            clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+        )
+        assigned = [c.get("operator_ref") for c in result]
+        assert sorted(a for a in assigned if a) == ["op0", "op1"]
+
+
+class TestCountVsMarginObjective:
+    """countPriority blends count-first allocation against pure score."""
+
+    @staticmethod
+    def _contended_inputs():
+        """One pair dominates on score; serving both clusters costs margin."""
+        setup, orders, operators, feasible, _scored, clusters = (
+            _starved_cluster_inputs()
+        )
+        scored = {
+            "o_high": [(1000.0, 0, 0), (90.0, 1, 1)],
+            "o_low": [(50.0, 0, 0)],
+        }
+        return setup, orders, operators, feasible, scored, clusters
+
+    def test_full_count_priority_allocates_both_clusters(self):
+        setup, orders, operators, feasible, scored, clusters = self._contended_inputs()
+        _vr, _ir, _compat, pm, v_idx, i_idx = setup
+        result = allocate_resources(
+            clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+            count_priority=1.0,
+        )
+        by_id = {c["cluster_id"]: c for c in result}
+        assert by_id["c_high"]["allocated_prime_related"] == {"v1": ["i1"]}
+        assert by_id["c_low"]["allocated_prime_related"] == {"v0": ["i0"]}
+
+    def test_zero_count_priority_prefers_the_high_margin_allocation(self):
+        setup, orders, operators, feasible, scored, clusters = self._contended_inputs()
+        _vr, _ir, _compat, pm, v_idx, i_idx = setup
+        result = allocate_resources(
+            clusters, orders, operators, pm, v_idx, i_idx, feasible, scored,
+            count_priority=0.0,
+        )
+        by_id = {c["cluster_id"]: c for c in result}
+        assert by_id["c_high"]["allocated_prime_related"] == {"v0": ["i0"]}
+        assert by_id["c_low"]["allocated_prime_related"] == {}
+
+
+class TestHoldAwareScoring:
+    def test_build_free_capacity_fraction(self):
+        from fl_op.solver.allocation.scoring import build_free_capacity
+
+        now = 1_000_000
+        held = {
+            "v0": [(now, now + 12 * 3600)],
+            "i0": [(now - 100, now - 50)],
+        }
+        capacity = build_free_capacity(held, now, horizon_s=24 * 3600)
+        assert capacity["v0"] == 0.5
+        assert capacity["i0"] == 1.0
+
+    def test_held_implement_discounted_among_equals(self):
+        _vr, _ir, _compat, pm, v_idx, i_idx = _build_setup(2, 2)
+        orders = [_order("o0", 500)]
+        operators = [_operator("op0")]
+        feasible = {"o0": [(0, 0), (1, 1)]}
+        scored = {"o0": [(100.0, 0, 0), (100.0, 1, 1)]}
+        cluster = _cluster("cluster_a", ["o0"], 500.0)
+        result = allocate_resources(
+            [cluster], orders, operators, pm, v_idx, i_idx, feasible, scored,
+            free_capacity={"i0": 0.5},
         )
         assert result[0]["allocated_prime_related"] == {"v1": ["i1"]}

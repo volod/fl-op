@@ -1,0 +1,74 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+
+metadata:
+  domain: roadside
+  sourceContract: maintenance-jobs
+  canonicalEntity: task
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: serviceOrders
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+
+fieldMappings:
+  - sourceField: job_id
+    binding: task.taskId
+    semanticTerm: urn:xopt:identity:task-id
+    planningUse: [identity]
+  - sourceField: work_order_id
+    binding: task.orderId
+    semanticTerm: urn:xopt:relationship:contract
+    planningUse: [commitment]
+  - sourceField: road_segment_id
+    binding: task.locationRef
+    semanticTerm: urn:xopt:relationship:location
+    planningUse: [geospatial]
+    missingValuePolicy: reject-for-planning
+  - sourceField: operation_type
+    binding: task.operationType
+    semanticTerm: urn:xopt:attribute:operation-type
+    planningUse: [compatibility-filter]
+    missingValuePolicy: reject-for-planning
+  - sourceField: service_area_ha
+    binding: task.areaHa
+    semanticTerm: urn:xopt:attribute:service-area
+    canonicalUnit: ha
+    quantityKind: area
+    planningUse: [duration-estimation]
+    missingValuePolicy: accept-optional
+  - sourceField: service_duration_minutes
+    binding: task.serviceDurationMinutes
+    semanticTerm: urn:xopt:attribute:service-duration
+    canonicalUnit: min
+    quantityKind: duration
+    planningUse: [duration-estimation]
+    missingValuePolicy: accept-optional
+  - sourceField: deadline
+    binding: task.deadline
+    semanticTerm: urn:xopt:commitment:deadline
+    quantityKind: timestamp
+    planningUse: [time-window, commitment]
+    missingValuePolicy: accept-optional
+  - sourceField: penalty_per_day_eur
+    binding: task.penaltyPerDay
+    semanticTerm: urn:xopt:commitment:lateness-penalty
+    canonicalUnit: EUR
+    quantityKind: money
+    planningUse: [objective, commitment]
+    missingValuePolicy: fallback-to-conservative-value
+  - sourceField: priority
+    binding: task.priorityClass
+    semanticTerm: urn:xopt:attribute:priority-class
+    planningUse: [objective]
+    missingValuePolicy: fallback-to-conservative-value
+  - sourceField: status
+    binding: task.status
+    semanticTerm: urn:xopt:attribute:task-status
+    planningUse: [freeze]
+  - sourceField: estimated_revenue_eur
+    binding: task.revenueValue
+    semanticTerm: urn:xopt:attribute:expected-revenue
+    canonicalUnit: EUR
+    quantityKind: money
+    planningUse: [objective]
+    missingValuePolicy: fallback-to-conservative-value

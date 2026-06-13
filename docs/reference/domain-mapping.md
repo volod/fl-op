@@ -48,6 +48,41 @@ the same `FieldBinding` shape the mapping engine consumes. The registry exposes
 `FileRegistry.get_mapping(contract_id)`; `fl_op/mapping/bindings.py`
 (`load_binding_table`) sources its bindings from the mapping document.
 
+Use `missingValuePolicy: accept-optional` for fields that are optional by
+design (for example an observation row carries either a numeric `value` or a
+categorical `state_value`): the field is skipped silently, without a quality
+finding and without dropping the row.
+
+Observation mappings may declare a `metricCodes` table in their metadata to
+normalize raw source metric vocabularies onto the canonical metric codes the
+engine's monitoring policy interprets; unmapped codes pass through unchanged
+(retained for analysis, not interpreted):
+
+```yaml
+metadata:
+  canonicalEntity: observation
+  metricCodes:
+    battery_pct: battery-level
+    health_state: health-status
+```
+
+## Adaptive dataset discovery
+
+Which datasets feed a snapshot is derived from the registry, not hardcoded: the
+snapshot builder maps every selected-domain contract whose mapping targets a
+snapshot-input canonical entity (`asset`, `location`, `task`, `forecast`,
+`observation`, `commitment`, `travel-link`, `cost-rate`), in registry
+declaration order. The default selection is the registry `activeDomain` or
+`ACTIVE_DOMAIN=<domain>`; shared-fleet runs can select several packs with
+`ACTIVE_DOMAINS=agricultural,construction` or adapter config `domains=[...]`.
+Adding a dataset to a domain therefore means adding the ODCS + mapping +
+registry entry; the engine picks it up automatically. The same holds in the
+stream layer: execution events resolve their target collection and key column
+from the mapping documents (canonical entity + identity binding), so
+`task.started`, `task.completed`, `asset.unavailable`, or
+`observation.recorded` work for any selected domain without column-name
+knowledge.
+
 ## Extra (analytical) fields
 
 A physical ODCS schema may declare **more fields than the optimizer needs**.
@@ -84,10 +119,23 @@ The metadata-loss guard (`FileRegistry.verify_no_metadata_loss`) fails the suite
 if a stored `optimizationMetadataHash` diverges from the recomputed one; re-stamp
 with `fl-op contracts validate --write`.
 
-## Adding a new domain (worked example: construction)
+The schema-evolution gate records the reviewed `optimizationMetadataHash` in
+`contracts/evolution/<contract>.json` history entries as well. That means a
+mapping-semantic change (unit switch, binding change, planning-use change) is
+reviewed in the same `contracts evolution-check` / `evolution-freeze` flow as
+physical field-schema changes, even though semantic drift is still a hash gate
+rather than a semver-classified structural delta.
 
-`contracts/domains/construction/` is a proof pack that maps a different physical
-schema onto the **same** canonical model with no engine changes:
+## Adding a New Domain
+
+`contracts/domains/construction/` maps a different physical schema onto the
+**same** canonical model with no engine changes -- and is fully runnable:
+`fl-op generate-data --domain construction` produces a conforming dataset and
+`ACTIVE_DOMAIN=construction fl-op plan periodic --data latest` plans it
+through the identical pipeline. A staged mixed source tree can also be projected
+with `ACTIVE_DOMAINS=agricultural,construction` so one canonical shared-fleet
+snapshot contains demand/resources from both packs; policy selection is still a
+caller decision, not an automatic profile merge.
 
 | Construction physical | Canonical entity / role | Reuses agricultural binding |
 |---|---|---|
@@ -106,10 +154,21 @@ To add a domain:
    new vocabulary entry to `contracts/canonical/model.yaml` only if a genuinely
    new meaning is needed.
 3. Register the domain in `contracts/registry.yaml` under `domains:` (with its
-   `mappings:` list) and add a `profile.yaml`.
+   `mappings:` list, generator callable, and profile id) and add a
+   `profile.yaml`.
 4. Validate: `fl-op contracts validate-domain --domain <domain>` (for the
    construction pack: `make validate-construction`). This asserts the pack maps
    completely onto the canonical model.
+5. To make the pack runnable, register its contracts under `contracts:`
+   with a globally unique registry key and, when useful, a domain-local `id`.
+   Profiles can then reference local ids (`operators` in construction resolves
+   to the `construction-operators` compatibility key). Register the profile
+   under `profiles:`, provide source data or a generator, and select the
+   domain at run time with `ACTIVE_DOMAIN=<domain>` or include it in
+   `ACTIVE_DOMAINS` for a shared-fleet run. The engine needs no change:
+   solver inputs resolve binding tables by canonical entity and asset role.
 
-Wiring a new domain through the solver additionally requires source data and a
-generator; the engine itself is already domain-agnostic and needs no change.
+`contracts/domains/roadside/` is the runnable monitoring-driven example:
+service vehicles, service kits, and technicians are dispatch resources;
+stationary signage/sensor assets live along road segments; inspection rounds
+feed derived `EQUIPMENT_SERVICE` visits that the periodic adapter dispatches.

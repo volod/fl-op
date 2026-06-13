@@ -11,16 +11,18 @@ taking the top-1 scoring V-I pair for each order.
 
 import logging
 import math
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 
 from fl_op.core.constants import (
     EARTH_RADIUS_KM,
+    FALLBACK_REVENUE_EUR_PER_HA,
     FUEL_COST_EUR_PER_L,
     SCORE_WEIGHT_MARGIN,
     SCORE_WEIGHT_REPOSITION,
 )
+from fl_op.solver.travel_time import TravelLookup
 
 logger = logging.getLogger(__name__)
 
@@ -40,67 +42,103 @@ def _haversine_km(
     return 2 * r * math.asin(math.sqrt(a))
 
 
-def _estimate_gross_margin(
-    order: dict[str, Any],
-    implement: dict[str, Any],
+def _estimate_gross_margin(order: Any) -> float:
+    """Rough gross revenue estimate for completing this order."""
+    revenue = float(order.revenue)
+    return revenue if revenue > 0 else float(order.area) * FALLBACK_REVENUE_EUR_PER_HA
+
+
+def _network_seconds_or_nan(
+    travel_lookup: TravelLookup, from_ref: str, to_ref: str
 ) -> float:
-    """Rough gross revenue estimate for completing this order with this implement."""
-    area = float(order.get("area", 0))
-    revenue = float(order.get("revenue", 0))
-    return revenue if revenue > 0 else area * 200.0  # fallback: 200 EUR/ha
+    """Directed network time for a pair (reverse fallback), NaN when no path."""
+    if not from_ref or not to_ref or from_ref == to_ref:
+        return math.nan
+    seconds = travel_lookup.get((from_ref, to_ref)) or travel_lookup.get(
+        (to_ref, from_ref)
+    )
+    return float(seconds) if seconds else math.nan
 
 
 def _estimate_repositioning_cost(
-    vehicle: dict[str, Any],
-    field: dict[str, Any],
+    vehicle: Any,
+    field: Any,
+    fuel_price_eur_per_l: Optional[float] = None,
 ) -> float:
     """Diesel cost to drive from vehicle's current position to the field centroid."""
-    dist_km = _haversine_km(
-        float(vehicle.get("lat", 0)),
-        float(vehicle.get("lon", 0)),
-        float(field.get("lat", 0)),
-        float(field.get("lon", 0)),
+    fuel_price = (
+        fuel_price_eur_per_l if fuel_price_eur_per_l is not None else FUEL_COST_EUR_PER_L
     )
-    speed_kmh = float(vehicle.get("travel_speed", 15))
+    dist_km = _haversine_km(
+        float(vehicle.lat),
+        float(vehicle.lon),
+        float(field.lat),
+        float(field.lon),
+    )
+    speed_kmh = float(vehicle.travel_speed)
     hours = dist_km / speed_kmh if speed_kmh > 0 else 0
-    fuel_l_per_h = float(vehicle.get("fuel_consumption_rate", 18))
-    return hours * fuel_l_per_h * FUEL_COST_EUR_PER_L
+    fuel_l_per_h = float(vehicle.fuel_consumption_rate)
+    return hours * fuel_l_per_h * fuel_price
 
 
 def vectorized_score(
-    orders: list[dict[str, Any]],
-    vehicles: list[dict[str, Any]],
-    implements: list[dict[str, Any]],
-    fields: list[dict[str, Any]],
+    orders: list[Any],
+    vehicles: list[Any],
+    implements: list[Any],
+    fields: list[Any],
     feasible_pairs: dict[str, list[tuple[int, int]]],
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
+    fuel_price_eur_per_l: Optional[float] = None,
+    score_weight_margin: Optional[float] = None,
+    score_weight_reposition: Optional[float] = None,
+    travel_lookup: Optional[TravelLookup] = None,
 ) -> dict[str, list[tuple[float, int, int]]]:
     """Return {task_id: [(score, v_idx, i_idx), ...]} sorted descending by score.
 
     Vectorises over all orders and their feasible pairs using numpy broadcast.
+    ``fuel_price_eur_per_l`` is the resolved cost-rate price; the engine
+    constant applies when no rate is supplied. The score weights default to
+    the engine constants and are tunable via SolverParameters.
+
+    With a travel network, repositioning hours use the network shortest path
+    from the vehicle's home depot (its road access point) to the field where
+    one exists; the straight-line estimate from the vehicle's current
+    position remains the fallback.
     """
-    field_map = {f["location_id"]: f for f in fields}
-    idx_to_vehicle = {idx: v for v in vehicles for idx in [vehicle_index[v["asset_id"]]]}
-    idx_to_implement = {idx: im for im in implements for idx in [implement_index[im["asset_id"]]]}
+    fuel_price = (
+        fuel_price_eur_per_l if fuel_price_eur_per_l is not None else FUEL_COST_EUR_PER_L
+    )
+    weight_margin = (
+        score_weight_margin if score_weight_margin is not None else SCORE_WEIGHT_MARGIN
+    )
+    weight_reposition = (
+        score_weight_reposition
+        if score_weight_reposition is not None
+        else SCORE_WEIGHT_REPOSITION
+    )
+    field_map = {f.location_id: f for f in fields}
+    idx_to_vehicle = {idx: v for v in vehicles for idx in [vehicle_index[v.asset_id]]}
+    idx_to_implement = {idx: im for im in implements for idx in [implement_index[im.asset_id]]}
 
     # Pre-compute vehicle current positions as arrays for batch distance calculation
-    v_lats = np.array([float(v.get("lat", 0)) for v in vehicles])
-    v_lons = np.array([float(v.get("lon", 0)) for v in vehicles])
-    v_speeds = np.array([float(v.get("travel_speed", 15)) for v in vehicles])
-    v_consumptions = np.array([float(v.get("fuel_consumption_rate", 18)) for v in vehicles])
+    v_lats = np.array([float(v.lat) for v in vehicles])
+    v_lons = np.array([float(v.lon) for v in vehicles])
+    v_speeds = np.array([float(v.travel_speed) for v in vehicles])
+    v_consumptions = np.array([float(v.fuel_consumption_rate) for v in vehicles])
+    v_home_refs = [str(v.home_depot_ref or "") for v in vehicles]
 
     results: dict[str, list[tuple[float, int, int]]] = {}
 
     for order in orders:
-        oid = order["task_id"]
-        field = field_map.get(order.get("location_ref", ""))
+        oid = order.task_id
+        field = field_map.get(order.location_ref)
         if field is None:
             results[oid] = []
             continue
 
-        f_lat = float(field.get("lat", 0))
-        f_lon = float(field.get("lon", 0))
+        f_lat = float(field.lat)
+        f_lon = float(field.lon)
 
         pairs = feasible_pairs.get(oid, [])
         if not pairs:
@@ -120,14 +158,23 @@ def vectorized_score(
         a = np.sin(dphi / 2) ** 2 + np.cos(lat1) * math.cos(lat2) * np.sin(dlambda / 2) ** 2
         dist_km = 2 * EARTH_RADIUS_KM * np.arcsin(np.sqrt(a.clip(0, 1)))
         hours = dist_km / v_speeds[v_indices].clip(1)
-        reposition_cost = hours * v_consumptions[v_indices] * FUEL_COST_EUR_PER_L
+        if travel_lookup:
+            net_by_vehicle = np.array([
+                _network_seconds_or_nan(
+                    travel_lookup, home_ref, str(order.location_ref or "")
+                )
+                for home_ref in v_home_refs
+            ])
+            net_hours = net_by_vehicle[v_indices] / 3600.0
+            hours = np.where(np.isnan(net_hours), hours, net_hours)
+        reposition_cost = hours * v_consumptions[v_indices] * fuel_price
 
         # Gross margin: per-order constant for all pairs
-        gross_margins = np.full(len(pairs), _estimate_gross_margin(order, {}))
+        gross_margins = np.full(len(pairs), _estimate_gross_margin(order))
 
         scores = (
-            SCORE_WEIGHT_MARGIN * gross_margins
-            - SCORE_WEIGHT_REPOSITION * reposition_cost
+            weight_margin * gross_margins
+            - weight_reposition * reposition_cost
         )
 
         scored_pairs = sorted(

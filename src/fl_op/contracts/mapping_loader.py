@@ -6,10 +6,8 @@ record-level metadata (domain, source contract, canonical entity, asset role) an
 a ``fieldMappings`` list, each entry binding one physical source field to a
 canonical binding path + semantic term.
 
-The mapping document is the authority for all semantic bindings (it replaces the
-field-level xOptimization blocks that previously lived inside the physical ODCS
-contract). Field mappings are parsed into the same ``FieldBinding`` shape the
-mapping engine already consumes.
+The mapping document is the authority for all semantic bindings. Field mappings
+are parsed into the ``FieldBinding`` shape the mapping engine consumes.
 """
 
 import logging
@@ -38,6 +36,9 @@ class CanonicalMapping(BaseModel):
     mapping_version: Optional[str] = None
     data_product_role: Optional[str] = None
     permitted_planning_uses: list[str] = Field(default_factory=list)
+    # Value-level normalization for observation mappings: raw source metric
+    # code -> canonical metric code the monitoring policy interprets.
+    metric_codes: dict[str, str] = Field(default_factory=dict)
     bindings: list[FieldBinding] = Field(default_factory=list)
 
 
@@ -49,8 +50,8 @@ def _parse_field_mappings(field_mappings: Any) -> list[FieldBinding]:
         if not isinstance(fm, dict):
             continue
         meta_dict = {k: v for k, v in fm.items() if k != "sourceField"}
-        # Field mappings omit the extension version for brevity; inject it so the
-        # binding metadata carries the same provenance the ODCS blocks used to.
+        # Field mappings omit the extension version for brevity; inject it so
+        # every binding still carries its extension provenance.
         meta_dict.setdefault("extensionVersion", XOPT_EXTENSION_VERSION)
         bindings.append(
             FieldBinding(
@@ -76,6 +77,7 @@ def load_mapping(path: pathlib.Path) -> CanonicalMapping:
         mapping_version=meta.get("mappingVersion"),
         data_product_role=meta.get("dataProductRole"),
         permitted_planning_uses=list(meta.get("permittedPlanningUses") or []),
+        metric_codes=dict(meta.get("metricCodes") or {}),
         bindings=_parse_field_mappings(doc.get("fieldMappings")),
     )
     logger.debug(
