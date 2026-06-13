@@ -5,11 +5,14 @@ import json
 import pathlib
 import sys
 import types
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
+from click.testing import CliRunner
 
 from fl_op.core import constants
+from fl_op.main import cli
 from fl_op.solver.chain import SolverChainResult
 from fl_op.solver.parameters import SolverParameters
 
@@ -119,6 +122,50 @@ def test_tune_can_average_multiple_datasets(dataset_dir, tmp_path, monkeypatch) 
     assert baseline["kpis"]["n_dataset_cases"] == 2
     assert len(baseline["cases"]) == 2
     assert len(best["snapshot_hashes"]) == 2
+    assert baseline["kpis"]["workload_weight_total"] > 0
+
+
+def test_multi_dataset_evaluation_is_workload_weighted(monkeypatch) -> None:
+    from fl_op.tuning.optuna_tuner import _DatasetCase, _evaluate
+
+    def weighted_chain(rows, **kwargs):
+        tasks = rows["tasks"]
+        margin = 100.0 if len(tasks) == 1 else 0.0
+        return SolverChainResult(
+            dispatch=[],
+            infeasible=[],
+            kpis={"total_estimated_margin_eur": margin},
+            greedy_assignment={},
+            n_clusters=1,
+        )
+
+    monkeypatch.setattr("fl_op.solver.chain.run_solver_chain", weighted_chain)
+    small = _DatasetCase(
+        data_dir="small",
+        snapshot_id="snap-small",
+        snapshot_hash="hash-small",
+        rows={"tasks": [SimpleNamespace(task_id="s", penalty_per_day=0.0)]},
+        enforcement=None,
+        workload_weight=1,
+    )
+    large = _DatasetCase(
+        data_dir="large",
+        snapshot_id="snap-large",
+        snapshot_hash="hash-large",
+        rows={
+            "tasks": [
+                SimpleNamespace(task_id=f"l{i}", penalty_per_day=0.0)
+                for i in range(3)
+            ]
+        },
+        enforcement=None,
+        workload_weight=3,
+    )
+
+    evaluation = _evaluate([small, large], SolverParameters())
+    assert evaluation.objective == pytest.approx(25.0)
+    assert evaluation.kpis["total_estimated_margin_eur"] == pytest.approx(25.0)
+    assert evaluation.kpis["workload_weight_total"] == pytest.approx(4.0)
 
 
 def test_parallel_tune_defaults_to_local_rdb_storage(
@@ -176,6 +223,141 @@ def test_promote_best_params_creates_reviewed_overlay(tmp_path) -> None:
     params = solver_parameters_for_profile(profile, tuned_path=overlay)
     assert params.cluster_target_size == 42
     assert params.assignment_count_priority == pytest.approx(0.25)
+
+
+def test_scoped_tuned_overlay_requires_matching_scope_and_expiry(
+    tmp_path, monkeypatch
+) -> None:
+    from fl_op.tuning import solver_profile
+
+    monkeypatch.setattr(solver_profile, "DATA_ROOT", tmp_path)
+    best_path = tmp_path / "best_params.json"
+    best_path.write_text(
+        json.dumps(
+            {
+                "best_params": {"cluster_target_size": 44},
+                "snapshot_hash": "abc",
+                "n_trials": 2,
+            }
+        )
+    )
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    overlay = solver_profile.promote_best_params(
+        best_path,
+        domain_id="drone_logistics",
+        profile_id="drone-logistics",
+        adapter_version="0.1.0",
+        expires_at=(now + timedelta(days=1)).isoformat(),
+    )
+    assert overlay == solver_profile.scoped_tuned_solver_profile_path(
+        "drone_logistics", "drone-logistics", "0.1.0"
+    )
+    assert solver_profile.load_tuned_solver_parameters(
+        overlay,
+        domain_id="drone_logistics",
+        profile_id="drone-logistics",
+        adapter_version="0.1.0",
+        now=now,
+    )["cluster_target_size"] == 44
+    assert solver_profile.load_tuned_solver_parameters(
+        overlay,
+        domain_id="agricultural",
+        profile_id="agricultural-custom-services",
+        adapter_version="0.1.0",
+        now=now,
+    ) == {}
+    assert solver_profile.load_tuned_solver_parameters(
+        overlay,
+        domain_id="drone_logistics",
+        profile_id="drone-logistics",
+        adapter_version="0.1.0",
+        now=now + timedelta(days=2),
+    ) == {}
+
+
+def test_tune_promote_cli_can_write_scoped_overlay(tmp_path, monkeypatch) -> None:
+    from fl_op.tuning import solver_profile
+
+    monkeypatch.setattr(solver_profile, "DATA_ROOT", tmp_path)
+    best_path = tmp_path / "best_params.json"
+    best_path.write_text(
+        json.dumps(
+            {
+                "best_params": {"cluster_target_size": 45},
+                "snapshot_hash": "cli-scoped",
+                "n_trials": 2,
+            }
+        )
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "tune-promote",
+            "--best-params",
+            str(best_path),
+            "--domain",
+            "drone_logistics",
+            "--profile",
+            "drone-logistics",
+            "--adapter-version",
+            "0.1.0",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    overlay = solver_profile.scoped_tuned_solver_profile_path(
+        "drone_logistics", "drone-logistics", "0.1.0"
+    )
+    assert overlay.exists()
+    assert solver_profile.load_tuned_solver_parameters(
+        overlay,
+        domain_id="drone_logistics",
+        profile_id="drone-logistics",
+        adapter_version="0.1.0",
+    )["cluster_target_size"] == 45
+
+
+def test_drone_profile_uses_scoped_overlay_not_shared_overlay(
+    tmp_path, monkeypatch
+) -> None:
+    from fl_op.contracts.registry import FileRegistry
+    from fl_op.tuning import solver_profile
+
+    monkeypatch.setattr(solver_profile, "DATA_ROOT", tmp_path)
+    best_path = tmp_path / "best_params.json"
+    best_path.write_text(
+        json.dumps(
+            {
+                "best_params": {"cluster_target_size": 12},
+                "snapshot_hash": "shared",
+                "n_trials": 2,
+            }
+        )
+    )
+    solver_profile.promote_best_params(
+        best_path,
+        output_path=solver_profile.default_tuned_solver_profile_path(),
+    )
+    profile = FileRegistry().get_profile("drone-logistics")
+    assert solver_profile.solver_parameters_for_profile(profile).cluster_target_size == 36
+
+    best_path.write_text(
+        json.dumps(
+            {
+                "best_params": {"cluster_target_size": 44},
+                "snapshot_hash": "scoped",
+                "n_trials": 2,
+            }
+        )
+    )
+    solver_profile.promote_best_params(
+        best_path,
+        domain_id="drone_logistics",
+        profile_id="drone-logistics",
+        adapter_version="0.1.0",
+    )
+    assert solver_profile.solver_parameters_for_profile(profile).cluster_target_size == 44
 
 
 def test_mlflow_logging_disabled_returns_none(monkeypatch) -> None:

@@ -27,7 +27,11 @@ is the default domain. It models autonomous last-mile delivery for
 manufacturers, restaurants, and online stores with mixed uncrewed ground
 vehicles (`UGV`) and uncrewed aerial vehicles (`UAV`), payload modules,
 operators, logistics hubs, delivery points, road/air travel links, weather,
-restricted zones, and fuel-equivalent energy prices. The roadside pack is
+restricted zones, explicit battery kWh capacity/use, electricity cost-rate
+rows, and compatibility fuel-equivalent fields for older integrations. Drone
+datasets also write `drone-scenarios.json` and `scenario-events.jsonl`; drone
+plans include `score.drone_logistics_kpis`; and checked-in tuning defaults live in
+`contracts/domains/drone_logistics/tuning.yaml`. The roadside pack is
 monitoring-driven: service vehicles, service kits, and technicians dispatch
 `EQUIPMENT_SERVICE` visits derived from inspection findings about stationary
 signage and sensor assets along road segments.
@@ -152,9 +156,9 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    intersections, or restriction windows covering every admissible start
    (`RESTRICTED_ZONE`, `solver/restrictions.py`) -- and, transitively,
    dependents of any excluded predecessor
-   (`PREDECESSOR_UNSERVED`). Fuel and material prices are resolved from the
-   snapshot's cost-rate entities (`solver/cost_rates.py`), falling back to
-   the engine cost constants for unpriced resources.
+   (`PREDECESSOR_UNSERVED`). Fuel, electricity, and material prices are
+   resolved from the snapshot's cost-rate entities (`solver/cost_rates.py`),
+   falling back to the engine cost constants for unpriced resources.
    Geometric restrictions are a pre-solve exclusion: a task's site polygon
    (or centroid when the site has no polygon) is tested against other
    locations whose polygon declares the task's operation as prohibited.
@@ -232,11 +236,12 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    `TRAVEL_NETWORK_MAX_COMPOSE_NODES`) and is indexed by `networkMode`
    (`road`, `air`, or `any`), with a reverse-direction and haversine fallback
    for pairs without any network path (`solver/travel_time.py`). Per-vehicle
-   time matrices keep road and air travel isolated. Arcs are priced per vehicle as travel fuel
-   cost (burn rate x the resolved fuel price) in the same objective currency
-   as the drop penalties (1 EUR = 600 penalty seconds), so a fuel-efficient
-   machine wins time-equal legs and dropping an order is weighed against the
-   money cost of serving it. Each task or pickup node is constrained to routing
+   time matrices keep road and air travel isolated. Arcs are priced per
+   vehicle as travel energy cost (consumption rate x the resolved resource
+   price) in the same objective currency as the drop penalties (1 EUR = 600
+   penalty seconds), so an energy-efficient machine wins time-equal legs and
+   dropping an order is weighed against the money cost of serving it. Each
+   task or pickup node is constrained to routing
    vehicles whose prime mover and related equipment can serve the task's
    operation, preventing an aerial bundle from serving a ground variant or the
    reverse. Task
@@ -281,11 +286,12 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    (`$DATA_DIR/cache/solver-feedback/lns-budget.json`) within configured
    min/max multipliers. The first solution is kept unless strictly improved.
 9. Aggregate dispatch packages, canonical reason codes, KPIs (priced with the
-   resolved cost rates), and reports. Each dispatch package's fuel estimate
-   covers the operation plus the inbound travel leg, and its
-   `estimated_margin_eur` is the order revenue net of fuel and material at
-   the resolved prices (`ResourcePrices`), so per-dispatch margins and KPI
-   aggregates are priced from the same cost-rate data. A task whose predecessor
+   resolved cost rates), and reports. Each dispatch package's energy estimate
+   covers the operation plus the inbound travel leg, carries explicit resource
+   type and unit fields, and its `estimated_margin_eur` is the order revenue
+   net of energy and material at the resolved prices (`ResourcePrices`), so
+   per-dispatch margins and KPI aggregates are priced from the same cost-rate
+   data. A task whose predecessor
    went unserved in the solve is withdrawn post-solve
    (`PREDECESSOR_UNSERVED`), so no plan dispatches work whose precondition was
    dropped. Every cluster solve yields a machine-readable telemetry record
@@ -327,8 +333,8 @@ domain-specific column names. Supported triggers:
 - `order.created` / `order.cancelled`;
 - `asset.unavailable`: removes any asset by id -- vehicles, implements,
   operators, and stationary equipment share one path;
-- `inventory.adjusted`: partial merge into a location row (depot fuel and
-  material balances) without touching its other fields;
+- `inventory.adjusted`: partial merge into a location row (depot fuel, energy,
+  and material balances) without touching its other fields;
 - `forecast.updated`: with a payload, upserts the forecast window (weather
   invalidation by data); without one, a pure replan trigger;
 - `observation.recorded`: streamed sensor readings upserted by reading id, so
@@ -459,22 +465,29 @@ a rolling replan. Each check writes a `freshness.json` artifact under
 
 - `fl-op tune` (`tuning/optuna_tuner.py`) runs a seeded Optuna TPE study over
   the tunable solver parameters (`solver/parameters.py:SolverParameters`:
-  cluster target size, greedy score weights, per-cluster time limit) against
-  recorded KPI baselines built at the trial-scale time budget. It can average
-  the objective across additional datasets (`--extra-data`) and, by default,
-  records a multi-objective study: maximize business objective (margin minus
+  cluster target size, greedy score weights, per-cluster time limit, LNS
+  budget, and rolling change penalty) against recorded KPI baselines built at
+  the trial-scale time budget. Additional datasets (`--extra-data`) are scored
+  with workload weights derived from task counts, and, by default, the study
+  records a multi-objective frontier: maximize business objective (margin minus
   unassigned penalty exposure), minimize plan-instability penalty, and
   minimize wall time. Parallel workers (`--jobs` or TUNE_N_JOBS) use Optuna
   RDB storage; without an explicit URI, `n_jobs > 1` creates
   `study.db` in the tuning run directory. Artifacts: `baseline.json`,
   `trials.json`, `best_params.json` under `$DATA_DIR/tune/<ts>/`, including
-  per-dataset case scores and the Pareto frontier.
+  per-dataset case scores, workload-weight contributions, and the Pareto
+  frontier.
 - `fl-op tune-promote --best-params <run>/best_params.json`
   (`tuning/solver_profile.py`) writes the reviewed tuned solver profile
-  overlay `$DATA_DIR/tune/solver-parameters-tuned.json`. Periodic and rolling
-  adapters layer that artifact onto the active profile's allocation policy
-  when no explicit `SolverParameters` were passed, so deleting the artifact
-  reverts to the checked-in profile defaults.
+  overlay. Without scope flags it writes the legacy shared artifact
+  `$DATA_DIR/tune/solver-parameters-tuned.json`. With `--domain`, `--profile`,
+  and `--adapter-version`, it writes a scoped artifact under
+  `$DATA_DIR/tune/<domain>/<profile>/<adapter-version>/solver-parameters-tuned.json`
+  and records optional `--expires-at` metadata. Periodic and rolling adapters
+  layer matching scoped artifacts onto the active profile's allocation policy
+  when no explicit `SolverParameters` were passed. Drone logistics reads only
+  its checked-in tuning file and matching scoped overlays, so the shared legacy
+  overlay does not silently alter drone behavior.
 - Opt-in MLflow logging (`tuning/mlflow_logger.py`, MLFLOW_LOGGING_ENABLED):
   tuning trials, the baseline, periodic plans, and the final revision of
   each rolling run are logged with KPIs, version dimensions, and the

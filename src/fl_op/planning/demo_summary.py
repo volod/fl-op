@@ -106,6 +106,7 @@ def _log_periodic_plan(
         score.get("total_fuel_l", 0.0),
         score.get("total_fertilizer_kg", 0.0),
     )
+    _log_drone_kpis(score.get("drone_logistics_kpis") or {})
     _log_unassigned_reasons(unassigned)
 
 
@@ -135,6 +136,14 @@ def _log_rolling_revisions(revisions: list[dict[str, Any]]) -> None:
         max(0, len(revisions) - 1),
         total_instability,
     )
+    final_drone = (revisions[-1].get("drone_logistics_kpis") if revisions else {}) or {}
+    if final_drone:
+        logger.info(
+            "  drone rolling  : %.1f%% churn, %d changed, %d carried",
+            final_drone.get("rolling_churn_pct", 0.0),
+            final_drone.get("rolling_changed_assignments", 0),
+            final_drone.get("rolling_carried_forward_assignments", 0),
+        )
 
 
 def _log_unassigned_reasons(unassigned: list[dict[str, Any]]) -> None:
@@ -146,3 +155,43 @@ def _log_unassigned_reasons(unassigned: list[dict[str, Any]]) -> None:
         reasons[reason] = reasons.get(reason, 0) + 1
     for code, count in sorted(reasons.items(), key=lambda kv: -kv[1]):
         logger.info("    unassigned reason %-26s %d", code + ":", count)
+
+
+def _log_drone_kpis(kpis: dict[str, Any]) -> None:
+    if not kpis:
+        return
+    mode_split = kpis.get("mode_split") or {}
+    energy = kpis.get("energy_or_fuel_equivalent_usage") or {}
+    logger.info(
+        "  drone KPIs      : %.1f%% on-time, mode UGV=%d/UAV=%d, "
+        "%.2f EUR margin",
+        kpis.get("on_time_rate_pct", 0.0),
+        mode_split.get("UGV", 0),
+        mode_split.get("UAV", 0),
+        kpis.get("delivery_margin_eur", 0.0),
+    )
+    usage_label = _energy_usage_label(energy)
+    logger.info(
+        "  drone resources : %s, UGV %.1f%%, UAV %.1f%%, support %.1f%%",
+        usage_label,
+        kpis.get("ugv_utilization_pct", 0.0),
+        kpis.get("uav_utilization_pct", 0.0),
+        kpis.get("support_team_utilization_pct", 0.0),
+    )
+    logger.info(
+        "  drone blocks    : %d weather-blocked UAV tasks, %d no-fly exclusions",
+        kpis.get("weather_blocked_uav_tasks", 0),
+        kpis.get("no_fly_exclusion_count", 0),
+    )
+
+
+def _energy_usage_label(energy: dict[str, Any]) -> str:
+    if energy.get("electricity_kwh", 0.0):
+        return f"{float(energy.get('electricity_kwh', 0.0)):.1f} kWh"
+    if energy.get("fuel_equivalent_l", 0.0):
+        return f"{float(energy.get('fuel_equivalent_l', 0.0)):.1f} fuel-eq"
+    by_unit = energy.get("by_unit") or {}
+    if by_unit:
+        unit, quantity = next(iter(sorted(by_unit.items())))
+        return f"{float(quantity):.1f} {unit}"
+    return "0.0 energy"

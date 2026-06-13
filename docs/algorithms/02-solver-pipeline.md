@@ -357,7 +357,7 @@ After all cluster workers complete, the aggregator:
 2. Merges all `InfeasibleOrder` lists into `infeasible_orders.json`
 3. Computes a **greedy baseline** over the post-enforcement admitted task set
    by running the greedy scorer alone (no OR-Tools) and netting the same
-   fuel/material prices used by the final plan
+   energy/material prices used by the final plan
 4. Emits `schedule_kpis.json` with:
    - `n_dispatched`, `n_infeasible`
    - `total_estimated_margin_eur`

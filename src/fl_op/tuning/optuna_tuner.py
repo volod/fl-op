@@ -3,14 +3,15 @@
 One tuning run builds one or more canonical snapshots, records the baseline
 KPIs of the default SolverParameters (at trial-scale time budget, for
 comparability), then runs a seeded TPE study over the tunable parameters
-(cluster target size, greedy score weights, per-cluster time limit). Each
-trial executes the full solver chain on every projected dataset case.
+(cluster target size, greedy score weights, per-cluster time limit, LNS budget,
+and rolling change penalty). Each trial executes the full solver chain on every
+projected dataset case.
 
-Primary objective (maximized): average estimated margin minus the
+Primary objective (maximized): workload-weighted estimated margin minus the
 lateness-penalty exposure of unassigned tasks, so a parameter set cannot win by
-dropping penalty-heavy work. Multi-objective runs also minimize plan
-instability and wall time, retaining a Pareto frontier while still reporting a
-recommended primary-best parameter set.
+dropping penalty-heavy work or overfitting a tiny case. Multi-objective runs
+also minimize plan instability and wall time, retaining a Pareto frontier while
+still reporting a recommended primary-best parameter set.
 
 Artifacts under $DATA_DIR/tune/<run_timestamp>/: baseline.json, trials.json,
 best_params.json. With MLFLOW_LOGGING_ENABLED=1 every trial and the baseline
@@ -60,6 +61,7 @@ class _DatasetCase:
     snapshot_hash: str
     rows: dict[str, list[Any]]
     enforcement: Any
+    workload_weight: float
 
 
 def _evaluate(
@@ -68,29 +70,41 @@ def _evaluate(
 ) -> _Evaluation:
     """Run the solver chain over every dataset case and score the outcome."""
     evaluations = [_evaluate_case(case, parameters) for case in cases]
-    n = max(1, len(evaluations))
+    weights = [max(1.0, case.workload_weight) for case in cases]
+    weight_total = sum(weights) or 1.0
     return _Evaluation(
-        objective=sum(e.objective for e in evaluations) / n,
-        instability=sum(e.instability for e in evaluations) / n,
-        wall_time_s=sum(e.wall_time_s for e in evaluations),
-        kpis=_average_numeric_kpis([e.kpis for e in evaluations]),
-        unassigned_penalty_eur_per_day=sum(
-            e.unassigned_penalty_eur_per_day for e in evaluations
+        objective=sum(
+            e.objective * weight for e, weight in zip(evaluations, weights)
         )
-        / n,
+        / weight_total,
+        instability=sum(
+            e.instability * weight for e, weight in zip(evaluations, weights)
+        )
+        / weight_total,
+        wall_time_s=sum(e.wall_time_s for e in evaluations),
+        kpis=_average_numeric_kpis([e.kpis for e in evaluations], weights),
+        unassigned_penalty_eur_per_day=sum(
+            e.unassigned_penalty_eur_per_day * weight
+            for e, weight in zip(evaluations, weights)
+        )
+        / weight_total,
         cases=[
             {
                 "data_dir": case.data_dir,
                 "snapshot_id": case.snapshot_id,
                 "snapshot_hash": case.snapshot_hash,
+                "workload_weight": case.workload_weight,
                 "objective": evaluation.objective,
+                "weighted_objective_contribution": (
+                    evaluation.objective * weight / weight_total
+                ),
                 "objectives": evaluation.objectives,
                 "kpis": evaluation.kpis,
                 "unassigned_penalty_eur_per_day": (
                     evaluation.unassigned_penalty_eur_per_day
                 ),
             }
-            for case, evaluation in zip(cases, evaluations)
+            for case, evaluation, weight in zip(cases, evaluations, weights)
         ],
     )
 
@@ -130,19 +144,31 @@ def _evaluate_case(
     )
 
 
-def _average_numeric_kpis(records: list[dict[str, Any]]) -> dict[str, Any]:
+def _average_numeric_kpis(
+    records: list[dict[str, Any]],
+    weights: Optional[list[float]] = None,
+) -> dict[str, Any]:
     keys = sorted({key for record in records for key in record})
+    weights = weights or [1.0] * len(records)
+    weight_by_index = [
+        max(1.0, weight) for weight in weights[: len(records)]
+    ]
+    weight_total = sum(weight_by_index) or 1.0
     averaged: dict[str, Any] = {}
     for key in keys:
         values = [
-            record[key]
-            for record in records
+            (record[key], weight_by_index[i])
+            for i, record in enumerate(records)
             if isinstance(record.get(key), (int, float))
             and not isinstance(record.get(key), bool)
         ]
         if values:
-            averaged[key] = sum(float(v) for v in values) / len(values)
+            value_weight = sum(weight for _value, weight in values) or 1.0
+            averaged[key] = (
+                sum(float(value) * weight for value, weight in values) / value_weight
+            )
     averaged["n_dataset_cases"] = len(records)
+    averaged["workload_weight_total"] = weight_total
     return averaged
 
 
@@ -211,13 +237,15 @@ def run_tune(
     cases = []
     for case_dir in data_dirs:
         snapshot = builder.build(case_dir, PlanningMode.PERIODIC)
+        rows = build_solver_inputs(snapshot, registry)
         cases.append(
             _DatasetCase(
                 data_dir=case_dir,
                 snapshot_id=snapshot.snapshot_id,
                 snapshot_hash=snapshot.snapshot_hash,
-                rows=build_solver_inputs(snapshot, registry),
+                rows=rows,
                 enforcement=enforcement,
+                workload_weight=max(1, len(rows.get("tasks", []))),
             )
         )
     snapshot_hashes = [case.snapshot_hash for case in cases]

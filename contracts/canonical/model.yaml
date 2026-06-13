@@ -127,6 +127,10 @@ semanticTerms:
   urn:xopt:capability:required-power: {valueType: number, quantityKind: power, canonicalUnit: kW}
   urn:xopt:capability:fuel-tank-volume: {valueType: number, quantityKind: volume, canonicalUnit: L}
   urn:xopt:capability:fuel-consumption-rate: {valueType: number, quantityKind: flow-rate, canonicalUnit: L/h}
+  urn:xopt:capability:energy-resource-type: {valueType: string, quantityKind: categorical}
+  urn:xopt:capability:energy-unit: {valueType: string, quantityKind: categorical}
+  urn:xopt:capability:energy-capacity: {valueType: number, quantityKind: energy, canonicalUnit: kWh}
+  urn:xopt:capability:energy-consumption-rate: {valueType: number, quantityKind: energy-flow-rate, canonicalUnit: kWh/h}
   urn:xopt:capability:travel-speed: {valueType: number, quantityKind: speed, canonicalUnit: km/h}
   urn:xopt:capability:working-width: {valueType: number, quantityKind: length, canonicalUnit: m}
   urn:xopt:capability:min-operating-speed: {valueType: number, quantityKind: speed, canonicalUnit: km/h}
@@ -181,7 +185,8 @@ semanticTerms:
   urn:xopt:travel:network-mode: {valueType: string, quantityKind: categorical}
   # -- cost rates --------------------------------------------------------------
   # rate-type uses canonical resource codes the engine interprets ("fuel",
-  # "fertilizer"); per-unit declares what one unit-price buys (L, kg, ...).
+  # "fertilizer", "electricity"); per-unit declares what one unit-price buys
+  # (L, kg, kWh, ...).
   urn:xopt:cost:rate-type: {valueType: string, quantityKind: categorical}
   urn:xopt:cost:unit-price: {valueType: number, quantityKind: money, canonicalUnit: EUR}
   urn:xopt:cost:per-unit: {valueType: string, quantityKind: categorical}
@@ -203,6 +208,7 @@ semanticTerms:
   # -- inventory -------------------------------------------------------------
   urn:xopt:inventory:fuel: {valueType: number, quantityKind: volume, canonicalUnit: L}
   urn:xopt:inventory:fertilizer: {valueType: number, quantityKind: mass, canonicalUnit: kg}
+  urn:xopt:inventory:energy: {valueType: number, quantityKind: energy, canonicalUnit: kWh}
   # -- forecast values -------------------------------------------------------
   urn:xopt:forecast:wind-speed: {valueType: number, quantityKind: speed, canonicalUnit: m/s}
   urn:xopt:forecast:precipitation-rate: {valueType: number, quantityKind: flow-rate, canonicalUnit: mm/h}

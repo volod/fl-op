@@ -277,6 +277,7 @@ CLUSTER_LNS_MAX_BUDGET_MULTIPLIER: float = float(
 # Canonical resource codes a cost-rate row may price (cost-rate.rateType).
 RATE_TYPE_FUEL: str = "fuel"
 RATE_TYPE_MATERIAL: str = "fertilizer"
+RATE_TYPE_ELECTRICITY: str = "electricity"
 
 # Canonical unit of depot material inventory and of the material-reservation
 # quantities derived from it (urn:xopt:inventory:fertilizer is kept in kg).
@@ -287,6 +288,12 @@ FUEL_COST_EUR_PER_L: float = float(os.environ.get("FUEL_COST_EUR_PER_L", "1.45")
 
 # Liquid fertilizer cost per kilogram for inventory arc cost estimation.
 FERTILIZER_COST_EUR_PER_KG: float = float(os.environ.get("FERTILIZER_COST_EUR_PER_KG", "0.55"))
+
+# Electricity cost per kWh used when a vehicle declares electricity as its
+# energy resource and no cost-rate row is supplied.
+ELECTRICITY_COST_EUR_PER_KWH: float = float(
+    os.environ.get("ELECTRICITY_COST_EUR_PER_KWH", "0.18")
+)
 
 # Share of a related-equipment material tank assumed consumed by one task.
 RELATED_MATERIAL_FILL_RATIO: float = 0.8

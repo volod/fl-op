@@ -57,7 +57,7 @@ class FeasibleAssignment(TypedDict):
     greedy_score: float
     # estimated gross revenue for this assignment
     gross_margin_estimate_eur: float
-    # estimated repositioning fuel cost
+    # estimated repositioning energy cost
     repositioning_cost_eur: float
 
 
@@ -74,6 +74,10 @@ class DispatchPackage(TypedDict):
     scheduled_end: str
     route_waypoints: list[dict[str, Any]]
     estimated_fuel_l: float
+    energy_resource_type: str
+    estimated_energy_quantity: float
+    estimated_energy_unit: str
+    estimated_energy_cost_eur: float
     estimated_fertilizer_kg: float
     estimated_margin_eur: float
 
@@ -145,6 +149,10 @@ class PrimeMoverRow(_SolverRow):
     rated_power: float = 0.0
     fuel_tank_volume: float = 0.0
     fuel_consumption_rate: float = FUEL_CONSUMPTION_DEFAULT_L_PER_H
+    energy_resource_type: str = "fuel"
+    energy_unit: str = "L"
+    energy_capacity: float = 0.0
+    energy_consumption_rate: float = 0.0
     travel_speed: float = TRAVEL_SPEED_DEFAULT_KMH
     # Total mass carried on one route; 0 means the load is unconstrained.
     load_capacity: float = 0.0
@@ -213,6 +221,9 @@ class DepotRow(_SolverRow):
     lon: float = 0.0
     inventory_fuel: float = 0.0
     inventory_material: float = 0.0
+    inventory_energy: float = 0.0
+    energy_resource_type: str = ""
+    energy_unit: str = ""
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

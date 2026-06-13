@@ -84,7 +84,7 @@ class OrToolsRollingAdapter:
         snapshot: "PlanningSnapshot",
         profile: "OptimizationProfile",
     ) -> Plan:
-        return normalize_rolling_result(raw_result, snapshot)
+        return normalize_rolling_result(raw_result, snapshot, profile)
 
     def plan(
         self,

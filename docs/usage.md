@@ -47,6 +47,7 @@ logistics-hubs.avro      delivery-locations.avro
 restricted-zones.avro    delivery-orders.avro
 travel-links.avro        prices.avro
 weather.json             metadata.json
+drone-scenarios.json     scenario-events.jsonl
 ```
 
 The default format is avro. Pass `--format csv` or `--format parquet` to
@@ -156,6 +157,10 @@ Dispatch packages are keyed by canonical names (`prime_asset_id`,
   "scheduled_start": "2026-05-21T16:55:12+00:00",
   "scheduled_end":   "2026-05-22T16:55:12+00:00",
   "estimated_fuel_l": 436.56,
+  "energy_resource_type": "fuel",
+  "estimated_energy_quantity": 436.56,
+  "estimated_energy_unit": "L",
+  "estimated_energy_cost_eur": 633.01,
   "estimated_margin_eur": 1358.08,
   "route_waypoints": [{"lat": 46.640382, "lon": 33.091568}]
 }
@@ -172,13 +177,16 @@ Dispatch packages are keyed by canonical names (`prime_asset_id`,
   "greedy_baseline_margin_eur": 386670.36,
   "solver_improvement_eur": -39040.54,
   "total_fuel_l": 6905.79,
+  "total_energy_cost_eur": 10013.40,
+  "total_energy_quantity_by_type": {"fuel": 6905.79},
+  "total_energy_quantity_by_unit": {"L": 6905.79},
   "total_fertilizer_kg": 1240.50,
   "infeasibility_reasons": {"NO_COMPATIBLE_BUNDLE": 3}
 }
 ```
 
 `greedy_baseline_margin_eur` is the admitted-task greedy warm-start margin
-estimated with the same fuel/material prices as the final plan.
+estimated with the same energy/material prices as the final plan.
 `solver_improvement_eur` is the signed final-plan margin delta against that
 baseline; it can be negative when routing feasibility, assignment-count
 priority, or other constraints trade away margin.
@@ -341,25 +349,30 @@ Artifacts land under `.data/snapshot/`, `.data/plan-periodic/`, and
 
 `fl-op tune` runs a seeded Optuna TPE study over the tunable solver
 parameters (cluster target size, greedy score weights, per-cluster time
-limit) against recorded KPI baselines:
+limit, LNS budget, and rolling change penalty) against recorded KPI baselines:
 
 ```bash
 .venv/bin/fl-op tune --data latest --trials 20 --seed 7
 .venv/bin/fl-op tune --data latest --extra-data .data/generate-data/20260601T120000 --jobs 4
 .venv/bin/fl-op tune-promote --best-params .data/tune/20260612T090000/best_params.json --reviewed-by ops
+.venv/bin/fl-op tune-promote --best-params .data/tune/20260612T090000/best_params.json --domain drone_logistics --profile drone-logistics --adapter-version 0.1.0 --reviewed-by ops
 ```
 
 Artifacts land under `.data/tune/<timestamp>/`: `baseline.json`,
 `trials.json`, and `best_params.json` (best parameters plus the improvement
 over the baseline objective). By default the study records a Pareto frontier:
 maximize business objective, minimize instability, and minimize wall time.
-`--extra-data` averages the objective across datasets, and `--jobs > 1` uses
-Optuna RDB storage (`study.db` in the run directory unless `--storage` or
-`TUNE_STORAGE_URI` is set).
+`--extra-data` scores multiple datasets with workload weights derived from task
+counts, and `--jobs > 1` uses Optuna RDB storage (`study.db` in the run
+directory unless `--storage` or `TUNE_STORAGE_URI` is set).
 
 `fl-op tune-promote` writes the reviewed overlay
-`.data/tune/solver-parameters-tuned.json`; periodic and rolling plan runs load
-that overlay on top of the checked-in profile defaults. With
+`.data/tune/solver-parameters-tuned.json` by default. Supplying `--domain`,
+`--profile`, and `--adapter-version` writes a scoped overlay under
+`.data/tune/<domain>/<profile>/<adapter-version>/solver-parameters-tuned.json`;
+`--expires-at` can bound that overlay's validity window. Drone logistics loads
+its checked-in tuning defaults plus matching scoped overlays, while legacy
+shared overlays continue to serve the older profiles. With
 `MLFLOW_LOGGING_ENABLED=1`, every trial, the tuning baseline, and every
 periodic/rolling plan run are logged as MLflow runs (KPIs, version dimensions,
 solve-telemetry summary) to a local SQLite store under `.data/mlruns` -- or to
@@ -458,6 +471,8 @@ $DATA_DIR/                       # default: .data/ -- override via DATA_DIR env 
   revision-diff/<timestamp>/     # revision_diff.json + revision_diff.txt
   tune/<timestamp>/              # baseline.json, trials.json, best_params.json
   tune/solver-parameters-tuned.json       # reviewed tuned solver overlay
+  tune/<domain>/<profile>/<adapter-version>/solver-parameters-tuned.json
+                                 # scoped reviewed tuned solver overlay
   cache/compat-matrix/            # content-keyed compatibility matrices
   cache/preprocessing/            # candidate-filter and cluster-spec caches
   cache/feasibility/              # exact /feasibility response cache

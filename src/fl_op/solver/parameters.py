@@ -12,6 +12,9 @@ from typing import Any
 from fl_op.core.constants import (
     CLUSTER_SOLVE_TIME_LIMIT_S,
     CLUSTER_TARGET_SIZE,
+    CLUSTER_LNS_ENABLED,
+    CLUSTER_LNS_TIME_LIMIT_S,
+    DEFAULT_CHANGE_PENALTY,
     GLOBAL_ASSIGNMENT_COUNT_PRIORITY,
     SCORE_WEIGHT_MARGIN,
     SCORE_WEIGHT_REPOSITION,
@@ -29,6 +32,12 @@ class SolverParameters:
     score_weight_reposition: float = SCORE_WEIGHT_REPOSITION
     # Wall-clock budget per cluster routing solve.
     cluster_solve_time_limit_s: int = CLUSTER_SOLVE_TIME_LIMIT_S
+    # Optional second-pass LNS budget per qualifying high-value cluster.
+    lns_time_limit_s: int = (
+        CLUSTER_LNS_TIME_LIMIT_S if CLUSTER_LNS_ENABLED else 0
+    )
+    # Score penalty applied per assignment changed after the freeze window.
+    rolling_change_penalty: int = DEFAULT_CHANGE_PENALTY
     # Count-vs-margin tradeoff of the global assignment objective
     # (1.0 = count-first, 0.0 = pure score maximization); profiles set it
     # via allocationPolicy.countPriority.

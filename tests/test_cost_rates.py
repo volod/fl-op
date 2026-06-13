@@ -2,7 +2,12 @@
 
 from datetime import datetime, timedelta, timezone
 
-from fl_op.core.constants import RATE_TYPE_FUEL, RATE_TYPE_MATERIAL
+from fl_op.core.constants import (
+    ELECTRICITY_COST_EUR_PER_KWH,
+    RATE_TYPE_ELECTRICITY,
+    RATE_TYPE_FUEL,
+    RATE_TYPE_MATERIAL,
+)
 from fl_op.solver.cost_rates import resolve_unit_price
 from fl_op.solver.types import CostRateRow
 
@@ -63,6 +68,15 @@ class TestResolveUnitPrice:
         ]
         assert resolve_unit_price(rates, RATE_TYPE_FUEL, now, _DEFAULT) == 1.60
 
+    def test_electricity_rate_resolves_by_resource_type(self):
+        rates = [_rate("r_e", RATE_TYPE_ELECTRICITY, 0.21)]
+        assert (
+            resolve_unit_price(
+                rates, RATE_TYPE_ELECTRICITY, _now(), ELECTRICITY_COST_EUR_PER_KWH
+            )
+            == 0.21
+        )
+
 
 class TestPricesMapping:
     def test_prices_rows_map_to_cost_rates(self):
@@ -121,4 +135,32 @@ class TestGreedyPriceConsumption:
             {"location_id": "f0", "lat": "48.9", "lon": "32.4"})
         cheap = _estimate_repositioning_cost(vehicle, field, fuel_price_eur_per_l=1.0)
         expensive = _estimate_repositioning_cost(vehicle, field, fuel_price_eur_per_l=2.0)
+        assert expensive == 2 * cheap > 0
+
+    def test_electricity_price_scales_repositioning_cost(self):
+        from fl_op.solver.cost_rates import ResourcePrices
+        from fl_op.solver.greedy import _estimate_repositioning_cost
+        from fl_op.solver.types import PrimeMoverRow, SiteRow
+
+        vehicle = PrimeMoverRow.from_canonical_dict({
+            "asset_id": "ev0",
+            "lat": "48.5",
+            "lon": "32.0",
+            "travel_speed": "20",
+            "energy_resource_type": RATE_TYPE_ELECTRICITY,
+            "energy_unit": "kWh",
+            "energy_consumption_rate": "20",
+        })
+        field = SiteRow.from_canonical_dict(
+            {"location_id": "f0", "lat": "48.9", "lon": "32.4"})
+        cheap = _estimate_repositioning_cost(
+            vehicle,
+            field,
+            resource_prices=ResourcePrices(electricity_eur_per_kwh=0.1),
+        )
+        expensive = _estimate_repositioning_cost(
+            vehicle,
+            field,
+            resource_prices=ResourcePrices(electricity_eur_per_kwh=0.2),
+        )
         assert expensive == 2 * cheap > 0

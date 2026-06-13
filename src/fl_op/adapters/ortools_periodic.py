@@ -105,6 +105,7 @@ class OrToolsPeriodicAdapter:
             snapshot,
             adapter_id=ADAPTER_ORTOOLS_PERIODIC_ID,
             planning_mode=PlanningMode.PERIODIC,
+            profile=profile,
         )
 
     def health(self) -> AdapterHealth:
@@ -166,6 +167,7 @@ def _build_plan(
     adapter_id: str,
     planning_mode: PlanningMode,
     parent_revision_id: str | None = None,
+    profile: Any = None,
 ) -> Plan:
     """Shared plan construction used by periodic and rolling adapters."""
     now = datetime.now(tz=timezone.utc)
@@ -188,6 +190,13 @@ def _build_plan(
         "solver_improvement_eur": kpis.get("solver_improvement_eur", 0.0),
         "total_fuel_l": kpis.get("total_fuel_l", 0.0),
         "total_fuel_cost_eur": kpis.get("total_fuel_cost_eur", 0.0),
+        "total_energy_cost_eur": kpis.get("total_energy_cost_eur", 0.0),
+        "total_energy_quantity_by_type": kpis.get(
+            "total_energy_quantity_by_type", {}
+        ),
+        "total_energy_quantity_by_unit": kpis.get(
+            "total_energy_quantity_by_unit", {}
+        ),
         "total_fertilizer_kg": kpis.get("total_fertilizer_kg", 0.0),
         "total_material_cost_eur": kpis.get("total_material_cost_eur", 0.0),
         "n_dispatched": kpis.get("n_dispatched", len(assignments)),
@@ -205,6 +214,16 @@ def _build_plan(
         score["assignment_attribution"] = assignment_attr
     if unassigned_attr:
         score["unassigned_attribution"] = unassigned_attr
+    from fl_op.planning.drone_kpis import (
+        DRONE_KPI_SCORE_KEY,
+        build_drone_logistics_kpis,
+    )
+
+    drone_kpis = build_drone_logistics_kpis(
+        snapshot, assignments, unassigned, score, profile
+    )
+    if drone_kpis:
+        score[DRONE_KPI_SCORE_KEY] = drone_kpis
     risk = RiskSummary(
         n_contract_deadlines_at_risk=len(unassigned),
         total_penalty_exposure_eur=sum(

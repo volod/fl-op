@@ -7,7 +7,7 @@ name: Drone Logistics Prices
 domain: drone-logistics
 tenant: logistics-ops
 description:
-  purpose: Fuel-equivalent energy and material rates.
+  purpose: Electricity, compatibility fuel-equivalent, and material rates.
   usage: Cost-rate inputs for margin calculations.
 servers: [{server: batch, type: local, format: csv, path: prices.csv}]
 schema:

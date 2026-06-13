@@ -97,3 +97,10 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: location.inventory.fertilizer, semanticTerm: urn:xopt:inventory:fertilizer, canonicalUnit: kg, quantityKind: mass, planningUse: [material-availability]}
+      - name: inventoryEnergy
+        logicalType: number
+        required: false
+        description: Available non-fuel energy inventory at this location.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.inventory.energy, semanticTerm: urn:xopt:inventory:energy, canonicalUnit: kWh, quantityKind: energy, planningUse: [capacity]}

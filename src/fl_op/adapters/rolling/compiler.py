@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Optional
 
 from fl_op.canonical.plan import Assignment, Plan
-from fl_op.core.constants import FREEZE_WINDOW_MINUTES
+from fl_op.core.constants import DEFAULT_CHANGE_PENALTY, FREEZE_WINDOW_MINUTES
 from fl_op.solver.chain import run_solver_chain
 
 from fl_op.adapters.rolling.corrective import (
@@ -61,6 +61,11 @@ def compile_rolling_state(
     On a baseline build with no previous plan, every task is re-solved.
     """
     now = config.get("now") or snapshot.effective_at
+    parameters = config.get("parameters")
+    change_penalty = int(
+        getattr(parameters, "rolling_change_penalty", DEFAULT_CHANGE_PENALTY)
+        or DEFAULT_CHANGE_PENALTY
+    )
     previous_plan: Optional[Plan] = config.get("previous_plan")
     previous_service_reasons: dict[str, str] = config.get("previous_service_reasons") or {}
     previous_assignments = list(previous_plan.assignments) if previous_plan else []
@@ -138,6 +143,7 @@ def compile_rolling_state(
         previous_by_task=previous_by_task,
         now=now,
         corrective_actions=corrective_actions,
+        change_penalty=change_penalty,
         carried_reservations=carried_reservations,
     )
 

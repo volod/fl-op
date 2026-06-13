@@ -7,7 +7,7 @@ name: Logistics Hubs
 domain: drone-logistics
 tenant: logistics-ops
 description:
-  purpose: Drone depots with fuel-equivalent energy inventory.
+  purpose: Drone depots with battery energy inventory and charging economics.
   usage: Route origins and cost/resource accounting.
 servers: [{server: batch, type: local, format: csv, path: logistics-hubs.csv}]
 schema:
@@ -26,3 +26,5 @@ schema:
       - {name: lat, logicalType: number, physicalType: double, required: true, description: Hub latitude., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 3}}}]}
       - {name: lon, logicalType: number, physicalType: double, required: true, description: Hub longitude., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 4}}}]}
       - {name: energy_units, logicalType: number, physicalType: double, required: false, description: Available energy in fuel-equivalent units., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 5}}}]}
+      - {name: battery_available_kwh, logicalType: number, physicalType: double, required: false, description: Available battery energy inventory., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 6}}}]}
+      - {name: charging_power_kw, logicalType: number, physicalType: double, required: false, description: Aggregate charger power at the hub., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 7}}}]}

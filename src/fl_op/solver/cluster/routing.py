@@ -13,7 +13,11 @@ from fl_op.solver.cluster.penalties import (
     EUR_TO_DROP_PENALTY_SECONDS,
     order_drop_penalty_s,
 )
-from fl_op.solver.cost_rates import ResourcePrices
+from fl_op.solver.cost_rates import (
+    ResourcePrices,
+    vehicle_energy_consumption_rate,
+    vehicle_energy_resource_type,
+)
 from fl_op.solver.routing_model import (
     NODE_PICKUP,
     NODE_RELOAD,
@@ -64,7 +68,7 @@ def solve_routing_context(
     (tunable via SolverParameters). ``now_epoch`` is the planning time origin
     for deadlines and held-window offsets (the snapshot effective time when
     solving through an adapter); None falls back to wall-clock now.
-    ``resource_prices`` are the resolved fuel/material prices driving arc
+    ``resource_prices`` are the resolved energy/material prices driving arc
     costs and dispatch margins; None falls back to the engine constants.
     """
     from ortools.constraint_solver import pywrapcp, routing_enums_pb2
@@ -215,21 +219,20 @@ def _add_arc_costs(
     context: ClusterContext,
     resource_prices: ResourcePrices,
 ) -> None:
-    """Price arcs by the serving vehicle's travel fuel cost.
+    """Price arcs by the serving vehicle's travel energy cost.
 
-    Arc cost = travel hours x the prime mover's burn rate x the resolved fuel
-    price, converted into the objective currency drop penalties use (one EUR
-    of business value = EUR_TO_DROP_PENALTY_SECONDS units). Per-vehicle
-    evaluators let a fuel-efficient machine win long repositioning legs over
-    a thirsty one on time-equal routes.
+    Arc cost = travel hours x the prime mover's consumption rate x the
+    resolved resource price, converted into the objective currency drop
+    penalties use (one EUR of business value = EUR_TO_DROP_PENALTY_SECONDS
+    units). Per-vehicle evaluators let efficient machines win long
+    repositioning legs over expensive ones on time-equal routes.
     """
     for rv_idx, routing_vehicle in enumerate(context.routing_vehicles):
-        burn_l_per_h = _nonnegative_rate(
-            routing_vehicle["prime"].fuel_consumption_rate
-        )
+        prime = routing_vehicle["prime"]
+        burn_l_per_h = _nonnegative_rate(vehicle_energy_consumption_rate(prime))
         cost_per_travel_second = (
             burn_l_per_h
-            * resource_prices.fuel_eur_per_l
+            * resource_prices.price_for(vehicle_energy_resource_type(prime))
             * EUR_TO_DROP_PENALTY_SECONDS
             / 3600.0
         )
@@ -754,8 +757,11 @@ def _maybe_improve_with_lns(
         "lns_improved": False,
         "lns_objective_delta": 0,
     }
-    if not constants.CLUSTER_LNS_ENABLED:
-        return solution, lns_info
+    lns_budget_s = int(cluster_dict.get("lns_time_limit_s", 0) or 0)
+    if lns_budget_s <= 0:
+        if not constants.CLUSTER_LNS_ENABLED:
+            return solution, lns_info
+        lns_budget_s = constants.CLUSTER_LNS_TIME_LIMIT_S
     total_penalty = float(cluster_dict.get("total_penalty_per_day", 0.0) or 0.0)
     if total_penalty < constants.CLUSTER_LNS_MIN_PENALTY_EUR_PER_DAY:
         return solution, lns_info
@@ -769,10 +775,6 @@ def _maybe_improve_with_lns(
     )
     lns_params.local_search_operators.use_path_lns = optional_boolean_pb2.BOOL_TRUE
     lns_params.local_search_operators.use_inactive_lns = optional_boolean_pb2.BOOL_TRUE
-    lns_budget_s = int(
-        cluster_dict.get("lns_time_limit_s", constants.CLUSTER_LNS_TIME_LIMIT_S)
-        or constants.CLUSTER_LNS_TIME_LIMIT_S
-    )
     lns_params.time_limit.seconds = lns_budget_s
     lns_params.log_search = False
     lns_params.sat_parameters.num_workers = 1

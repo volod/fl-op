@@ -183,6 +183,7 @@ def run_plan_rolling(
                 "n_changed_after_freeze": rev.plan.score.get("n_changed_after_freeze", 0),
                 "plan_instability_penalty": rev.plan.score.get("plan_instability_penalty", 0),
                 "n_unassigned": len(rev.plan.unassigned_tasks),
+                "drone_logistics_kpis": rev.plan.score.get("drone_logistics_kpis", {}),
             }
         )
     write_json(

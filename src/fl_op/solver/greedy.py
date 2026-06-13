@@ -22,6 +22,11 @@ from fl_op.core.constants import (
     SCORE_WEIGHT_MARGIN,
     SCORE_WEIGHT_REPOSITION,
 )
+from fl_op.solver.cost_rates import (
+    ResourcePrices,
+    vehicle_energy_consumption_rate,
+    vehicle_energy_resource_type,
+)
 from fl_op.solver.travel_time import TravelLookup, network_seconds, travel_mode_for_vehicle
 
 logger = logging.getLogger(__name__)
@@ -69,10 +74,16 @@ def _estimate_repositioning_cost(
     vehicle: Any,
     field: Any,
     fuel_price_eur_per_l: Optional[float] = None,
+    resource_prices: Optional[ResourcePrices] = None,
 ) -> float:
-    """Diesel cost to drive from vehicle's current position to the field centroid."""
+    """Energy cost to drive from vehicle's current position to the field centroid."""
     fuel_price = (
         fuel_price_eur_per_l if fuel_price_eur_per_l is not None else FUEL_COST_EUR_PER_L
+    )
+    energy_price = (
+        resource_prices.price_for(vehicle_energy_resource_type(vehicle))
+        if resource_prices is not None
+        else fuel_price
     )
     dist_km = _haversine_km(
         float(vehicle.lat),
@@ -82,8 +93,7 @@ def _estimate_repositioning_cost(
     )
     speed_kmh = float(vehicle.travel_speed)
     hours = dist_km / speed_kmh if speed_kmh > 0 else 0
-    fuel_l_per_h = float(vehicle.fuel_consumption_rate)
-    return hours * fuel_l_per_h * fuel_price
+    return hours * vehicle_energy_consumption_rate(vehicle) * energy_price
 
 
 def vectorized_score(
@@ -95,6 +105,7 @@ def vectorized_score(
     vehicle_index: dict[str, int],
     implement_index: dict[str, int],
     fuel_price_eur_per_l: Optional[float] = None,
+    resource_prices: Optional[ResourcePrices] = None,
     score_weight_margin: Optional[float] = None,
     score_weight_reposition: Optional[float] = None,
     travel_lookup: Optional[TravelLookup] = None,
@@ -102,9 +113,10 @@ def vectorized_score(
     """Return {task_id: [(score, v_idx, i_idx), ...]} sorted descending by score.
 
     Vectorises over all orders and their feasible pairs using numpy broadcast.
-    ``fuel_price_eur_per_l`` is the resolved cost-rate price; the engine
-    constant applies when no rate is supplied. The score weights default to
-    the engine constants and are tunable via SolverParameters.
+    ``resource_prices`` supplies resolved resource costs when vehicles declare
+    non-fuel energy. ``fuel_price_eur_per_l`` remains the legacy fallback. The
+    score weights default to the engine constants and are tunable via
+    SolverParameters.
 
     With a travel network, repositioning hours use the network shortest path
     from the vehicle's home depot (its road access point) to the field where
@@ -130,7 +142,15 @@ def vectorized_score(
     v_lats = np.array([float(v.lat) for v in vehicles])
     v_lons = np.array([float(v.lon) for v in vehicles])
     v_speeds = np.array([float(v.travel_speed) for v in vehicles])
-    v_consumptions = np.array([float(v.fuel_consumption_rate) for v in vehicles])
+    v_consumptions = np.array([vehicle_energy_consumption_rate(v) for v in vehicles])
+    v_energy_prices = np.array([
+        (
+            resource_prices.price_for(vehicle_energy_resource_type(v))
+            if resource_prices is not None
+            else fuel_price
+        )
+        for v in vehicles
+    ])
     v_home_refs = [str(v.home_depot_ref or "") for v in vehicles]
     v_travel_modes = [travel_mode_for_vehicle(v) for v in vehicles]
 
@@ -176,7 +196,9 @@ def vectorized_score(
             ])
             net_hours = net_by_vehicle[v_indices] / 3600.0
             hours = np.where(np.isnan(net_hours), hours, net_hours)
-        reposition_cost = hours * v_consumptions[v_indices] * fuel_price
+        reposition_cost = (
+            hours * v_consumptions[v_indices] * v_energy_prices[v_indices]
+        )
 
         # Gross margin: per-order constant for all pairs
         gross_margins = np.full(len(pairs), _estimate_gross_margin(order))

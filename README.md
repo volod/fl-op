@@ -38,8 +38,9 @@ make quickstart FORMAT=parquet
 
 `make demo` generates a drone logistics dataset and then runs the end-to-end
 story: validate the ODCS data contracts, build an immutable planning snapshot,
-produce a periodic (batch) mixed UGV/UAV plan, synthesize an execution-event
-stream, and produce rolling (stream) dispatch revisions. Artifacts land under
+produce a periodic (batch) mixed UGV/UAV plan with battery kWh/electricity cost
+accounting, synthesize an execution-event stream, and produce rolling (stream)
+dispatch revisions. Artifacts land under
 `$DATA_DIR` (default: `.data/`).
 
 ---
@@ -62,6 +63,7 @@ stream, and produce rolling (stream) dispatch revisions. Artifacts land under
 | `fl-op plan periodic` | Periodic (batch) OR-Tools plan from an immutable snapshot. |
 | `fl-op plan rolling` | Rolling (stream) dispatch producing immutable plan revisions. |
 | `fl-op tune` | Optuna study over solver parameters against a recorded KPI baseline. |
+| `fl-op tune-promote` | Promote reviewed tuned parameters to a shared or scoped overlay. |
 | `fl-op serve` | HTTP API: feasibility checks and published plan retrieval. |
 | `fl-op demo` | Full contract -> snapshot -> batch + stream demonstration. |
 

@@ -10,6 +10,11 @@ from fl_op.core.constants import (
     FUEL_COST_EUR_PER_L,
     RELATED_MATERIAL_FILL_RATIO,
 )
+from fl_op.solver.cost_rates import (
+    ResourcePrices,
+    vehicle_energy_consumption_rate,
+    vehicle_energy_resource_type,
+)
 from fl_op.solver.greedy import _estimate_repositioning_cost
 from fl_op.solver.travel_time import (
     TravelLookup,
@@ -28,6 +33,7 @@ def _compute_kpis(
     greedy_assignment: dict[str, tuple[int, int]],
     fuel_price_eur_per_l: Optional[float] = None,
     material_price_eur_per_kg: Optional[float] = None,
+    resource_prices: Optional[ResourcePrices] = None,
     vehicles: Optional[list[Any]] = None,
     implements: Optional[list[Any]] = None,
     fields: Optional[list[Any]] = None,
@@ -46,8 +52,31 @@ def _compute_kpis(
         if material_price_eur_per_kg is not None
         else FERTILIZER_COST_EUR_PER_KG
     )
+    resource_prices = resource_prices or ResourcePrices(
+        fuel_eur_per_l=fuel_price,
+        material_eur_per_kg=material_price,
+    )
     total_margin = sum(d.get("estimated_margin_eur", 0) for d in dispatch_packages)
     total_fuel = sum(d.get("estimated_fuel_l", 0) for d in dispatch_packages)
+    energy_by_type: dict[str, float] = {}
+    energy_by_unit: dict[str, float] = {}
+    total_energy_cost = 0.0
+    for dispatch in dispatch_packages:
+        resource_type = str(dispatch.get("energy_resource_type", "") or "fuel")
+        unit = str(dispatch.get("estimated_energy_unit", "") or "L")
+        quantity = float(
+            dispatch.get(
+                "estimated_energy_quantity",
+                dispatch.get("estimated_fuel_l", 0.0),
+            )
+            or 0.0
+        )
+        cost = dispatch.get("estimated_energy_cost_eur")
+        if cost is None:
+            cost = quantity * resource_prices.price_for(resource_type)
+        total_energy_cost += float(cost or 0.0)
+        energy_by_type[resource_type] = energy_by_type.get(resource_type, 0.0) + quantity
+        energy_by_unit[unit] = energy_by_unit.get(unit, 0.0) + quantity
     total_fertilizer = sum(d.get("estimated_fertilizer_kg", 0) for d in dispatch_packages)
 
     greedy_baseline = _compute_greedy_baseline_margin(
@@ -59,6 +88,7 @@ def _compute_kpis(
         implements=implements,
         fields=fields,
         travel_lookup=travel_lookup,
+        resource_prices=resource_prices,
     )
 
     infeasibility_reasons: dict[str, int] = {}
@@ -74,6 +104,13 @@ def _compute_kpis(
         "solver_improvement_eur": round(total_margin - greedy_baseline, 2),
         "total_fuel_l": round(total_fuel, 2),
         "total_fuel_cost_eur": round(total_fuel * fuel_price, 2),
+        "total_energy_cost_eur": round(total_energy_cost, 2),
+        "total_energy_quantity_by_type": {
+            key: round(value, 2) for key, value in sorted(energy_by_type.items())
+        },
+        "total_energy_quantity_by_unit": {
+            key: round(value, 2) for key, value in sorted(energy_by_unit.items())
+        },
         "total_fertilizer_kg": round(total_fertilizer, 2),
         "total_material_cost_eur": round(total_fertilizer * material_price, 2),
         "infeasibility_reasons": infeasibility_reasons,
@@ -89,6 +126,7 @@ def _compute_greedy_baseline_margin(
     implements: Optional[list[Any]] = None,
     fields: Optional[list[Any]] = None,
     travel_lookup: Optional[TravelLookup] = None,
+    resource_prices: Optional[ResourcePrices] = None,
 ) -> float:
     """Estimate the no-routing greedy baseline with dispatch-like net costs."""
     order_map = {o.task_id: o for o in orders}
@@ -115,8 +153,12 @@ def _compute_greedy_baseline_margin(
         service_fuel_cost = (
             _estimate_operation_seconds(order, implement)
             / 3600.0
-            * float(vehicle.fuel_consumption_rate)
-            * fuel_price
+            * vehicle_energy_consumption_rate(vehicle)
+            * (
+                resource_prices.price_for(vehicle_energy_resource_type(vehicle))
+                if resource_prices is not None
+                else fuel_price
+            )
         )
         material_cost = (
             float(implement.material_capacity)
@@ -124,7 +166,12 @@ def _compute_greedy_baseline_margin(
             * material_price
         )
         repositioning_cost = _greedy_repositioning_cost(
-            order, vehicle, field_map.get(order.location_ref), fuel_price, travel_lookup
+            order,
+            vehicle,
+            field_map.get(order.location_ref),
+            fuel_price,
+            travel_lookup,
+            resource_prices,
         )
         baseline += (
             float(order.revenue)
@@ -141,11 +188,17 @@ def _greedy_repositioning_cost(
     field: Any,
     fuel_price: float,
     travel_lookup: Optional[TravelLookup] = None,
+    resource_prices: Optional[ResourcePrices] = None,
 ) -> float:
     if field is None:
         return 0.0
     home_ref = str(getattr(vehicle, "home_depot_ref", "") or "")
     location_ref = str(getattr(order, "location_ref", "") or "")
+    energy_price = (
+        resource_prices.price_for(vehicle_energy_resource_type(vehicle))
+        if resource_prices is not None
+        else fuel_price
+    )
     if travel_lookup and home_ref and location_ref and home_ref != location_ref:
         mode = travel_mode_for_vehicle(vehicle)
         seconds = network_seconds(
@@ -157,10 +210,12 @@ def _greedy_repositioning_cost(
             return (
                 float(seconds)
                 / 3600.0
-                * float(vehicle.fuel_consumption_rate)
-                * fuel_price
+                * vehicle_energy_consumption_rate(vehicle)
+                * energy_price
             )
-    return _estimate_repositioning_cost(vehicle, field, fuel_price)
+    return _estimate_repositioning_cost(
+        vehicle, field, fuel_price, resource_prices=resource_prices
+    )
 
 
 def _write_json(obj: Any, path: pathlib.Path) -> None:
@@ -183,6 +238,7 @@ def _write_report(
         f"Greedy base:  {kpis['greedy_baseline_margin_eur']:.2f} EUR",
         f"Margin delta: {kpis['solver_improvement_eur']:.2f} EUR",
         f"Total fuel:   {kpis['total_fuel_l']:.1f} L",
+        f"Energy cost:  {kpis.get('total_energy_cost_eur', 0.0):.2f} EUR",
         "",
         "Infeasibility reasons:",
     ]

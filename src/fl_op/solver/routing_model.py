@@ -6,7 +6,13 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fl_op.core.constants import RELATED_MATERIAL_FILL_RATIO
-from fl_op.solver.cost_rates import ResourcePrices
+from fl_op.core.constants import RATE_TYPE_FUEL
+from fl_op.solver.cost_rates import (
+    ResourcePrices,
+    vehicle_energy_consumption_rate,
+    vehicle_energy_resource_type,
+    vehicle_energy_unit,
+)
 from fl_op.solver.travel_time import (
     TravelLookup,
     _estimate_operation_seconds,
@@ -207,10 +213,18 @@ def _extract_dispatch_packages(
             op_seconds = _estimate_operation_seconds(order, rv["related"])
             start_epoch = now_epoch + arrival_s
             end_epoch = start_epoch + op_seconds
-            fuel_l = (
+            energy_resource_type = vehicle_energy_resource_type(rv["prime"])
+            energy_unit = vehicle_energy_unit(rv["prime"])
+            energy_quantity = (
                 (op_seconds + travel_s_in)
                 / 3600.0
-                * float(rv["prime"].fuel_consumption_rate)
+                * vehicle_energy_consumption_rate(rv["prime"])
+            )
+            energy_cost = (
+                energy_quantity * resource_prices.price_for(energy_resource_type)
+            )
+            fuel_l = (
+                energy_quantity if energy_resource_type == RATE_TYPE_FUEL else 0.0
             )
             travel_s_in = 0
             fertilizer_kg = (
@@ -218,7 +232,7 @@ def _extract_dispatch_packages(
             )
             margin_eur = (
                 float(order.revenue)
-                - fuel_l * resource_prices.fuel_eur_per_l
+                - energy_cost
                 - fertilizer_kg * resource_prices.material_eur_per_kg
             )
 
@@ -238,6 +252,10 @@ def _extract_dispatch_packages(
                     "scheduled_end": datetime.fromtimestamp(end_epoch, tz=timezone.utc).isoformat(),
                     "route_waypoints": [{"lat": node.lat, "lon": node.lon}],
                     "estimated_fuel_l": round(fuel_l, 2),
+                    "energy_resource_type": energy_resource_type,
+                    "estimated_energy_quantity": round(energy_quantity, 2),
+                    "estimated_energy_unit": energy_unit,
+                    "estimated_energy_cost_eur": round(energy_cost, 2),
                     "estimated_fertilizer_kg": round(fertilizer_kg, 2),
                     "estimated_margin_eur": round(margin_eur, 2),
                 }

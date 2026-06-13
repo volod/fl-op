@@ -116,6 +116,34 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: asset.capabilities.fuelConsumptionRate, semanticTerm: urn:xopt:capability:fuel-consumption-rate, canonicalUnit: L/h, quantityKind: flow-rate, planningUse: [cost]}
+      - name: energyResourceType
+        logicalType: string
+        required: false
+        description: Resource code consumed by the asset for movement and service energy.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.energyResourceType, semanticTerm: urn:xopt:capability:energy-resource-type, quantityKind: categorical, planningUse: [cost]}
+      - name: energyUnit
+        logicalType: string
+        required: false
+        description: Unit code for energy capacity and consumption quantities.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.energyUnit, semanticTerm: urn:xopt:capability:energy-unit, quantityKind: categorical, planningUse: [cost]}
+      - name: energyCapacity
+        logicalType: number
+        required: false
+        description: Usable non-fuel energy capacity.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.energyCapacity, semanticTerm: urn:xopt:capability:energy-capacity, canonicalUnit: kWh, quantityKind: energy, planningUse: [capacity]}
+      - name: energyConsumptionRate
+        logicalType: number
+        required: false
+        description: Non-fuel energy consumed at working load.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.energyConsumptionRate, semanticTerm: urn:xopt:capability:energy-consumption-rate, canonicalUnit: kWh/h, quantityKind: energy-flow-rate, planningUse: [cost]}
       - name: travelSpeed
         logicalType: number
         required: false

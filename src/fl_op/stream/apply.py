@@ -372,7 +372,7 @@ class EventApplicator:
         sources[candidates[0]].append(payload)
 
     def _merge_inventory(self, sources: Sources, event: ExecutionEvent) -> None:
-        """Partial update of a location row (depot fuel/material balances).
+        """Partial update of a location row (depot fuel/energy/material balances).
 
         Only the fields present in the payload are merged into the matched
         row; everything else (coordinates, name) stays untouched.

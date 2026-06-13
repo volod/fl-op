@@ -15,3 +15,4 @@ fieldMappings:
   - {sourceField: lat, binding: location.lat, semanticTerm: urn:xopt:attribute:latitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
   - {sourceField: lon, binding: location.lon, semanticTerm: urn:xopt:attribute:longitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
   - {sourceField: energy_units, binding: location.inventory.fuel, semanticTerm: urn:xopt:inventory:fuel, canonicalUnit: L, quantityKind: volume, planningUse: [capacity]}
+  - {sourceField: battery_available_kwh, binding: location.inventory.energy, semanticTerm: urn:xopt:inventory:energy, canonicalUnit: kWh, quantityKind: energy, planningUse: [capacity]}
