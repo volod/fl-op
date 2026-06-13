@@ -62,6 +62,150 @@
       "required": true
     }
   },
+  "fingerprints": {
+    "avroParsingFingerprint": "5d891357098f54f0e0b50dd073962cf680221761b2fbb7d31aae7bff4abd00db",
+    "optimizationMetadataHash": "c32ca688064f21c681cba3ae1ab4870f7fb3c83c4970a4c989e188a50915a842"
+  },
+  "history": [
+    {
+      "contractId": "jobs",
+      "fields": {
+        "contract_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "deadline": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": true
+        },
+        "job_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "penalty_per_day_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "plot_ha": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "priority": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": false
+        },
+        "quantity_unit": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "quantity_value": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "revenue_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "site_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "status": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "work_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "odcsId": "jobs",
+      "version": "1.1.0"
+    },
+    {
+      "contractId": "jobs",
+      "fields": {
+        "contract_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "deadline": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": true
+        },
+        "job_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "penalty_per_day_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "plot_ha": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "priority": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": false
+        },
+        "quantity_unit": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "quantity_value": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "revenue_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "site_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "status": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "work_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "5d891357098f54f0e0b50dd073962cf680221761b2fbb7d31aae7bff4abd00db",
+        "optimizationMetadataHash": "c32ca688064f21c681cba3ae1ab4870f7fb3c83c4970a4c989e188a50915a842"
+      },
+      "odcsId": "jobs",
+      "version": "1.1.0"
+    }
+  ],
   "odcsId": "jobs",
   "version": "1.1.0"
 }

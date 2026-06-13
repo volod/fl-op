@@ -32,6 +32,90 @@
       "required": true
     }
   },
+  "fingerprints": {
+    "avroParsingFingerprint": "b0522d90dcdbc547fea9c92cb3a19ee202ced5964f7fc1a8676a3c6b600232c8",
+    "optimizationMetadataHash": "71034d72b7a2c8b4ec00ea37d957350e05422cbc376ad517ae9e30740f02abe9"
+  },
+  "history": [
+    {
+      "contractId": "routes",
+      "fields": {
+        "distance_km": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "from_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "road_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "route_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "to_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "travel_time_s": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        }
+      },
+      "odcsId": "routes",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "routes",
+      "fields": {
+        "distance_km": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "from_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "road_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "route_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "to_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "travel_time_s": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "b0522d90dcdbc547fea9c92cb3a19ee202ced5964f7fc1a8676a3c6b600232c8",
+        "optimizationMetadataHash": "71034d72b7a2c8b4ec00ea37d957350e05422cbc376ad517ae9e30740f02abe9"
+      },
+      "odcsId": "routes",
+      "version": "1.0.0"
+    }
+  ],
   "odcsId": "routes",
   "version": "1.0.0"
 }

@@ -2,14 +2,43 @@
 
 import json
 import pathlib
+from typing import Any
 
+import anyio
 import pytest
-from fastapi.testclient import TestClient
+from starlette import testclient as starlette_testclient
 
 from fl_op.core import constants
 from fl_op.core import paths
 from fl_op.serving import api as serving_api
 from fl_op.serving.artifacts import FilesystemArtifactStore
+
+httpx = starlette_testclient.httpx
+
+
+class AsgiClient:
+    """Synchronous test helper over ASGITransport.
+
+    Starlette's blocking TestClient portal can hang under the restricted
+    sandbox used for these tests. ASGITransport exercises the same FastAPI app
+    without that portal.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    def get(self, url: str, **kwargs: Any):
+        return anyio.run(self._request, "GET", url, kwargs)
+
+    def post(self, url: str, **kwargs: Any):
+        return anyio.run(self._request, "POST", url, kwargs)
+
+    async def _request(self, method: str, url: str, kwargs: dict[str, Any]):
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as client:
+            return await client.request(method, url, **kwargs)
 
 
 @pytest.fixture
@@ -39,8 +68,8 @@ def data_root(tmp_path, monkeypatch) -> pathlib.Path:
 
 
 @pytest.fixture
-def client(data_root) -> TestClient:
-    return TestClient(serving_api.create_app())
+def client(data_root) -> AsgiClient:
+    return AsgiClient(serving_api.create_app())
 
 
 def test_health(client) -> None:
@@ -130,7 +159,7 @@ def test_feasibility_without_dataset_is_client_error(client) -> None:
 
 
 def test_bearer_auth_protects_plan_and_feasibility_routes(data_root) -> None:
-    client = TestClient(serving_api.create_app(auth_token="secret-token"))
+    client = AsgiClient(serving_api.create_app(auth_token="secret-token"))
 
     assert client.get("/health").status_code == 200
     assert client.get("/plans/periodic").status_code == 401
@@ -156,7 +185,7 @@ def test_shared_artifact_root_serves_plans(tmp_path) -> None:
     run_dir.mkdir(parents=True)
     (run_dir / "plan.json").write_text(json.dumps({"plan_id": "shared-plan"}))
 
-    client = TestClient(
+    client = AsgiClient(
         serving_api.create_app(
             artifact_store=FilesystemArtifactStore(shared_root),
         )
@@ -181,7 +210,7 @@ def test_feasibility_accepts_artifact_relative_run_paths(
         return {"task_id": order["order_id"], "feasible": True, "candidates": []}
 
     monkeypatch.setattr(serving_api, "evaluate_query", fake_evaluate)
-    client = TestClient(serving_api.create_app())
+    client = AsgiClient(serving_api.create_app())
 
     response = client.post(
         "/feasibility",

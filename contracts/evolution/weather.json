@@ -42,6 +42,110 @@
       "required": true
     }
   },
+  "fingerprints": {
+    "avroParsingFingerprint": "05057d4e059617c578c0e3b2a35010246c56fda747a97405909491563448ac6c",
+    "optimizationMetadataHash": "5fc5c0195295bf0b489403b3813053306abcabbc961dcaf88550667ad563de08"
+  },
+  "history": [
+    {
+      "contractId": "weather",
+      "fields": {
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "rain_mm_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "soil_moisture_pct": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "valid_from": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": true
+        },
+        "valid_to": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": true
+        },
+        "wind_ms": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "window_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "odcsId": "weather",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "weather",
+      "fields": {
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "rain_mm_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "soil_moisture_pct": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "valid_from": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": true
+        },
+        "valid_to": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": true
+        },
+        "wind_ms": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "window_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "05057d4e059617c578c0e3b2a35010246c56fda747a97405909491563448ac6c",
+        "optimizationMetadataHash": "5fc5c0195295bf0b489403b3813053306abcabbc961dcaf88550667ad563de08"
+      },
+      "odcsId": "weather",
+      "version": "1.0.0"
+    }
+  ],
   "odcsId": "weather",
   "version": "1.0.0"
 }

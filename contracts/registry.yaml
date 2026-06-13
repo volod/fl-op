@@ -1,8 +1,13 @@
 extensionVersion: 0.1.0
 canonicalModel: canonical/model.yaml
 canonicalModelRef: urn:xopt:model:canonical:0.1.0
-activeDomain: agricultural
+activeDomain: drone_logistics
 domains:
+  drone_logistics:
+    root: domains/drone_logistics
+    profile: drone-logistics
+    semanticModelRef: urn:xopt:model:drone-logistics:0.1.0
+    generator: fl_op.data.drone_logistics_entities:generate_drone_logistics_domain
   agricultural:
     root: domains/agricultural
     profile: agricultural-custom-services
@@ -28,6 +33,9 @@ domains:
     - domains/roadside/mappings/maintenance-jobs.mapping.yaml
     - domains/roadside/mappings/inspection-rounds.mapping.yaml
 profiles:
+  drone-logistics:
+    path: domains/drone_logistics/profile.yaml
+    version: 0.1.0
   agricultural-custom-services:
     path: domains/agricultural/profile.yaml
     version: 0.1.0
@@ -38,6 +46,83 @@ profiles:
     path: domains/roadside/profile.yaml
     version: 0.1.0
 contracts:
+  drone-ugvs:
+    id: ugvs
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/ugvs.odcs.yaml
+    mapping: domains/drone_logistics/mappings/ugvs.mapping.yaml
+    sourceFile: ugvs.csv
+    sourceFormat: csv
+  drone-uavs:
+    id: uavs
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/uavs.odcs.yaml
+    mapping: domains/drone_logistics/mappings/uavs.mapping.yaml
+    sourceFile: uavs.csv
+    sourceFormat: csv
+  drone-payload-modules:
+    id: payload-modules
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/payload-modules.odcs.yaml
+    mapping: domains/drone_logistics/mappings/payload-modules.mapping.yaml
+    sourceFile: payload-modules.csv
+    sourceFormat: csv
+  drone-operators:
+    id: drone-operators
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/drone-operators.odcs.yaml
+    mapping: domains/drone_logistics/mappings/drone-operators.mapping.yaml
+    sourceFile: drone-operators.csv
+    sourceFormat: csv
+  drone-logistics-hubs:
+    id: logistics-hubs
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/logistics-hubs.odcs.yaml
+    mapping: domains/drone_logistics/mappings/logistics-hubs.mapping.yaml
+    sourceFile: logistics-hubs.csv
+    sourceFormat: csv
+  drone-delivery-locations:
+    id: delivery-locations
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/delivery-locations.odcs.yaml
+    mapping: domains/drone_logistics/mappings/delivery-locations.mapping.yaml
+    sourceFile: delivery-locations.csv
+    sourceFormat: csv
+  drone-restricted-zones:
+    id: restricted-zones
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/restricted-zones.odcs.yaml
+    mapping: domains/drone_logistics/mappings/restricted-zones.mapping.yaml
+    sourceFile: restricted-zones.csv
+    sourceFormat: csv
+  drone-delivery-orders:
+    id: delivery-orders
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/delivery-orders.odcs.yaml
+    mapping: domains/drone_logistics/mappings/delivery-orders.mapping.yaml
+    sourceFile: delivery-orders.csv
+    sourceFormat: csv
+  drone-travel-links:
+    id: travel-links
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/travel-links.odcs.yaml
+    mapping: domains/drone_logistics/mappings/travel-links.mapping.yaml
+    sourceFile: travel-links.csv
+    sourceFormat: csv
+  drone-weather:
+    id: weather
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/weather.odcs.yaml
+    mapping: domains/drone_logistics/mappings/weather.mapping.yaml
+    sourceFile: weather.json
+    sourceFormat: json
+  drone-prices:
+    id: prices
+    domain: drone_logistics
+    odcs: domains/drone_logistics/odcs/prices.odcs.yaml
+    mapping: domains/drone_logistics/mappings/prices.mapping.yaml
+    sourceFile: prices.csv
+    sourceFormat: csv
   vehicles:
     domain: agricultural
     odcs: domains/agricultural/odcs/vehicles.odcs.yaml

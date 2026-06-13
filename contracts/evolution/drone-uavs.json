@@ -1,0 +1,142 @@
+{
+  "contractId": "drone-uavs",
+  "fields": {
+    "compatible_operations": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": true
+    },
+    "current_lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "current_lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "energy_capacity_l_equiv": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "energy_use_l_per_h": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "hub_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "name": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "payload_capacity_kg": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "rated_power_kw": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "travel_speed_kmh": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "uav_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "vehicle_class": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "bc30f637c0123a8079ec225bedac9defb2a13ec5ee9a3c700e778e3c24364977"
+  },
+  "history": [
+    {
+      "contractId": "drone-uavs",
+      "fields": {
+        "compatible_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "current_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "energy_capacity_l_equiv": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "energy_use_l_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "hub_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "payload_capacity_kg": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "rated_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "travel_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "uav_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "vehicle_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "bc30f637c0123a8079ec225bedac9defb2a13ec5ee9a3c700e778e3c24364977"
+      },
+      "odcsId": "uavs",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "uavs",
+  "version": "1.0.0"
+}

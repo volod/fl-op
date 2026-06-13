@@ -1,16 +1,164 @@
 {
   "contractId": "roadside-inspection-rounds",
-  "odcsId": "inspection-rounds",
-  "version": "1.0.0",
   "fields": {
-    "finding_id": {"logicalType": "string", "physicalType": "string", "required": true},
-    "round_id": {"logicalType": "string", "physicalType": "string", "required": false},
-    "sign_id": {"logicalType": "string", "physicalType": "string", "required": true},
-    "metric": {"logicalType": "string", "physicalType": "string", "required": true},
-    "value": {"logicalType": "number", "physicalType": "double", "required": false},
-    "state_value": {"logicalType": "string", "physicalType": "string", "required": false},
-    "unit": {"logicalType": "string", "physicalType": "string", "required": false},
-    "inspected_at": {"logicalType": "string", "physicalType": "string", "required": true},
-    "quality_flag": {"logicalType": "string", "physicalType": "string", "required": false}
-  }
+    "finding_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "inspected_at": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "metric": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "quality_flag": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "round_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "sign_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "state_value": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "unit": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "value": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "6e835bc93432fa5942caf12a586e4241b12f4b5fd49dddc75218500f82ba1a14"
+  },
+  "history": [
+    {
+      "contractId": "roadside-inspection-rounds",
+      "fields": {
+        "finding_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "inspected_at": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "metric": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "quality_flag": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "round_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "sign_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "state_value": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "unit": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "value": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        }
+      },
+      "odcsId": "inspection-rounds",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "roadside-inspection-rounds",
+      "fields": {
+        "finding_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "inspected_at": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "metric": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "quality_flag": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "round_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "sign_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "state_value": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "unit": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "value": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "6e835bc93432fa5942caf12a586e4241b12f4b5fd49dddc75218500f82ba1a14"
+      },
+      "odcsId": "inspection-rounds",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "inspection-rounds",
+  "version": "1.0.0"
 }

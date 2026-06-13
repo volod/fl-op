@@ -1,0 +1,29 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: prices
+version: 1.0.0
+status: active
+name: Drone Logistics Prices
+domain: drone-logistics
+tenant: logistics-ops
+description:
+  purpose: Fuel-equivalent energy and material rates.
+  usage: Cost-rate inputs for margin calculations.
+servers: [{server: batch, type: local, format: csv, path: prices.csv}]
+schema:
+  - name: prices
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro: {namespace: org.example.drone.prices, recordName: PriceRate, recordDoc: "Cost rate mapped to canonical CostRate."}
+          proto: {package: org.example.drone.prices, messageName: PriceRate, syntax: proto3}
+          es: {indexName: drone-prices, dynamic: strict}
+    properties:
+      - {name: rate_id, logicalType: string, physicalType: string, required: true, description: Stable rate id., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 1}}}]}
+      - {name: rate_type, logicalType: string, physicalType: string, required: true, description: Canonical rate type., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 2}}}]}
+      - {name: unit_price_eur, logicalType: number, physicalType: double, required: true, description: Unit price., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 3}}}]}
+      - {name: per_unit, logicalType: string, physicalType: string, required: true, description: Unit code., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 4}}}]}
+      - {name: valid_from, logicalType: string, physicalType: string, required: false, description: Valid from timestamp., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 5}}}]}
+      - {name: valid_to, logicalType: string, physicalType: string, required: false, description: Valid to timestamp., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 6}}}]}

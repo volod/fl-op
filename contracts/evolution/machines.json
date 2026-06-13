@@ -52,6 +52,130 @@
       "required": true
     }
   },
+  "fingerprints": {
+    "avroParsingFingerprint": "f4563fa427bb845659293c2f67edbe26d37567a03480f505dd66e4bfcf2cacb6",
+    "optimizationMetadataHash": "3f40e6ba9b33715692bb3db6c06fe810f5d5fa05f3d0645e7ebdaaf34aebb034"
+  },
+  "history": [
+    {
+      "contractId": "machines",
+      "fields": {
+        "burn_l_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "engine_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "machine_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "machine_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "tank_litres": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "telematics_hours": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "transit_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "yard_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "odcsId": "machines",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "machines",
+      "fields": {
+        "burn_l_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "engine_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "machine_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "machine_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "tank_litres": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "telematics_hours": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "transit_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "yard_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "f4563fa427bb845659293c2f67edbe26d37567a03480f505dd66e4bfcf2cacb6",
+        "optimizationMetadataHash": "3f40e6ba9b33715692bb3db6c06fe810f5d5fa05f3d0645e7ebdaaf34aebb034"
+      },
+      "odcsId": "machines",
+      "version": "1.0.0"
+    }
+  ],
   "odcsId": "machines",
   "version": "1.0.0"
 }

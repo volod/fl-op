@@ -1,0 +1,82 @@
+{
+  "contractId": "drone-travel-links",
+  "fields": {
+    "distance_km": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "from_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "link_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "network_mode": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "to_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "travel_time_s": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "28d8cd8d9a16304d4eb4b06a18a663a7505a2044fa1e2b217605809144c13d2c"
+  },
+  "history": [
+    {
+      "contractId": "drone-travel-links",
+      "fields": {
+        "distance_km": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "from_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "link_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "network_mode": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "to_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "travel_time_s": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "28d8cd8d9a16304d4eb4b06a18a663a7505a2044fa1e2b217605809144c13d2c"
+      },
+      "odcsId": "travel-links",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "travel-links",
+  "version": "1.0.0"
+}

@@ -75,6 +75,14 @@ class StreamDriver:
             raise ValueError("Registry declares no active domain profile")
         self.profile = self.registry.get_profile(profile_id)
 
+    def _profile_for_builder(self):
+        profile_id = self.builder.profile_id or self.registry.active_profile_id
+        if profile_id is None:
+            raise ValueError("Registry declares no active domain profile")
+        if self.profile.metadata.id != profile_id:
+            self.profile = self.registry.get_profile(profile_id)
+        return self.profile
+
     def initial_revision(
         self,
         sources: dict[str, list[dict[str, Any]]],
@@ -92,7 +100,7 @@ class StreamDriver:
         snapshot = self.builder.build_from_sources(
             sources, PlanningMode.ROLLING, effective_at, lineage_ref="stream://initial"
         )
-        plan = self.adapter.plan(snapshot, self.profile, {"now": effective_at})
+        plan = self.adapter.plan(snapshot, self._profile_for_builder(), {"now": effective_at})
         revision = Revision(event=None, plan=plan, snapshot_id=snapshot.snapshot_id)
         return revision, _service_reasons(snapshot)
 
@@ -144,7 +152,7 @@ class StreamDriver:
             )
             plan = self.adapter.plan(
                 snapshot,
-                self.profile,
+                self._profile_for_builder(),
                 {
                     "now": now,
                     "previous_plan": previous_plan,

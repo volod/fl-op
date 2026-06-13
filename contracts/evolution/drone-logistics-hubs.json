@@ -1,0 +1,72 @@
+{
+  "contractId": "drone-logistics-hubs",
+  "fields": {
+    "energy_units": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "hub_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "lat": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "lon": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "name": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "118dd7dee88be4261f11e0a89d2b81449642bd8f51084b60e9561c6d57f60a96"
+  },
+  "history": [
+    {
+      "contractId": "drone-logistics-hubs",
+      "fields": {
+        "energy_units": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "hub_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "118dd7dee88be4261f11e0a89d2b81449642bd8f51084b60e9561c6d57f60a96"
+      },
+      "odcsId": "logistics-hubs",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "logistics-hubs",
+  "version": "1.0.0"
+}

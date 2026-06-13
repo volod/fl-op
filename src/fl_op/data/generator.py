@@ -98,6 +98,7 @@ def run_generate(
         "schema_version": ARTIFACT_SCHEMA_VERSION,
         "run_metadata": {
             "timestamp": ts,
+            "domain": "agricultural",
             "seed": seed,
             "data_format": fmt,
             "n_vehicles": len(vehicles),

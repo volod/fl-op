@@ -250,7 +250,7 @@ def roadside_plan(roadside_dataset_dir, roadside_domain):
 
 class TestActiveDomainOverride:
     def test_default_active_domain_is_registry_index(self):
-        assert FileRegistry().active_domain == "agricultural"
+        assert FileRegistry().active_domain == "drone_logistics"
 
     def test_env_override_selects_domain(self, monkeypatch):
         monkeypatch.setenv("ACTIVE_DOMAIN", "construction")

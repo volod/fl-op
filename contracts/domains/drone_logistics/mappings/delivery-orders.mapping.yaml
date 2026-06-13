@@ -1,0 +1,27 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+metadata:
+  domain: drone_logistics
+  sourceContract: delivery-orders
+  canonicalEntity: task
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: deliveryDemand
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+fieldMappings:
+  - {sourceField: task_id, binding: task.taskId, semanticTerm: urn:xopt:identity:task-id, planningUse: [identity]}
+  - {sourceField: delivery_id, binding: task.orderId, semanticTerm: urn:xopt:relationship:contract, planningUse: [commitment]}
+  - {sourceField: delivery_id, binding: task.alternativeGroupRef, semanticTerm: urn:xopt:relationship:alternative-group, planningUse: [alternative-selection]}
+  - {sourceField: dropoff_location_id, binding: task.locationRef, semanticTerm: urn:xopt:relationship:location, planningUse: [geospatial], missingValuePolicy: reject-for-planning}
+  - {sourceField: pickup_location_id, binding: task.pickupLocationRef, semanticTerm: urn:xopt:relationship:pickup-location, planningUse: [capacity, geospatial]}
+  - {sourceField: operation_type, binding: task.operationType, semanticTerm: urn:xopt:attribute:operation-type, planningUse: [compatibility-filter], missingValuePolicy: reject-for-planning}
+  - {sourceField: work_quantity, binding: task.workQuantity, semanticTerm: urn:xopt:attribute:work-quantity, quantityKind: work, planningUse: [duration-estimation]}
+  - {sourceField: work_quantity_unit, binding: task.workQuantityUnit, semanticTerm: urn:xopt:attribute:work-quantity-unit, planningUse: [duration-estimation]}
+  - {sourceField: service_duration_minutes, binding: task.serviceDurationMinutes, semanticTerm: urn:xopt:attribute:service-duration, canonicalUnit: min, quantityKind: duration, planningUse: [duration-estimation]}
+  - {sourceField: payload_kg, binding: task.loadDemand, semanticTerm: urn:xopt:attribute:load-demand, canonicalUnit: kg, quantityKind: mass, planningUse: [capacity]}
+  - {sourceField: payload_material, binding: task.loadMaterial, semanticTerm: urn:xopt:attribute:load-material, planningUse: [capacity]}
+  - {sourceField: deadline, binding: task.deadline, semanticTerm: urn:xopt:commitment:deadline, quantityKind: timestamp, planningUse: [time-window, commitment]}
+  - {sourceField: penalty_per_day_eur, binding: task.penaltyPerDay, semanticTerm: urn:xopt:commitment:lateness-penalty, canonicalUnit: EUR, quantityKind: money, planningUse: [objective, commitment]}
+  - {sourceField: priority, binding: task.priorityClass, semanticTerm: urn:xopt:attribute:priority-class, planningUse: [objective]}
+  - {sourceField: status, binding: task.status, semanticTerm: urn:xopt:attribute:task-status, planningUse: [freeze]}
+  - {sourceField: estimated_revenue_eur, binding: task.revenueValue, semanticTerm: urn:xopt:attribute:expected-revenue, canonicalUnit: EUR, quantityKind: money, planningUse: [objective]}

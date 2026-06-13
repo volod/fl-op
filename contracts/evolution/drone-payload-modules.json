@@ -1,0 +1,102 @@
+{
+  "contractId": "drone-payload-modules",
+  "fields": {
+    "hub_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "max_speed_kmh": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "min_speed_kmh": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "module_class": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "module_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "required_power_kw": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "supported_operations": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": true
+    },
+    "work_rates": {
+      "logicalType": "object",
+      "physicalType": "string",
+      "required": false
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "ec2f7b51e94d78f00517f313ee151b89e2d5d880ae1b4c160212c94a213d0e2e"
+  },
+  "history": [
+    {
+      "contractId": "drone-payload-modules",
+      "fields": {
+        "hub_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "max_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "min_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "module_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "module_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "required_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "supported_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "work_rates": {
+          "logicalType": "object",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "ec2f7b51e94d78f00517f313ee151b89e2d5d880ae1b4c160212c94a213d0e2e"
+      },
+      "odcsId": "payload-modules",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "payload-modules",
+  "version": "1.0.0"
+}

@@ -1,0 +1,30 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: restricted-zones
+version: 1.0.0
+status: active
+name: Drone Logistics Restricted Zones
+domain: drone-logistics
+tenant: logistics-ops
+description:
+  purpose: No-fly, ground-restricted, curfew, and temporary closure zones.
+  usage: Canonical restricted locations used by location restriction filters.
+servers: [{server: batch, type: local, format: csv, path: restricted-zones.csv}]
+schema:
+  - name: restrictedZones
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro: {namespace: org.example.drone.locations, recordName: RestrictedZone, recordDoc: "Restricted zone mapped to canonical location."}
+          proto: {package: org.example.drone.locations, messageName: RestrictedZone, syntax: proto3}
+          es: {indexName: drone-restricted-zones, dynamic: strict}
+    properties:
+      - {name: zone_id, logicalType: string, physicalType: string, required: true, description: Stable zone id., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 1}}}]}
+      - {name: name, logicalType: string, physicalType: string, required: false, description: Zone name., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 2}}}]}
+      - {name: lat, logicalType: number, physicalType: double, required: true, description: Zone centroid latitude., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 3}}}]}
+      - {name: lon, logicalType: number, physicalType: double, required: true, description: Zone centroid longitude., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 4}}}]}
+      - {name: polygon, logicalType: array, physicalType: string, required: true, description: "Zone polygon as [[lat, lon], ...].", customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 5}}}]}
+      - {name: restricted_operations, logicalType: array, physicalType: string, required: true, description: Prohibited operation types., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 6}}}]}
+      - {name: restriction_windows, logicalType: array, physicalType: string, required: false, description: Time windows when the restriction applies., customProperties: [{property: fieldGeneration, value: {avro: {default: ""}, proto: {fieldNumber: 7}}}]}

@@ -3,8 +3,8 @@
 > Terminology: this doc uses canonical terms (prime mover, related equipment,
 > operator, task, site) per [01-problem-formulation.md](01-problem-formulation.md).
 > "vehicle" in OR-Tools routing snippets is the library's term for a routed
-> resource (a prime-mover + related-equipment bundle here), not the agricultural
-> domain.
+> resource (a prime-mover + related-equipment bundle here), not a physical
+> source table such as UGVs, UAVs, or agricultural vehicles.
 
 ## 1. Pipeline Overview
 
@@ -13,7 +13,7 @@ uses a **four-stage hierarchical decomposition** that reduces the search space a
 stage before handing a tractable sub-problem to OR-Tools:
 
 ```
-Stage 1: Compatibility filter         (150B triples -> ~5M feasible pairs)
+Stage 1: Compatibility + operation filter (150B triples -> ~5M feasible pairs)
 Stage 2: Geographic clustering        (global problem -> 50 depot subproblems)
 Stage 3: Global pre-allocation        (shared resources claimed before solving)
 Stage 4: OR-Tools routing per cluster (small independent VRPs, solved in parallel)
@@ -66,9 +66,13 @@ After the power matrix is built, `preprocessing.py` further filters pairs per ta
 by checking:
 
     operation_type_t in related_equipment_r.compatible_operations
+    operation_type_t in prime_mover_m.compatible_operations  # when declared
 
 This filtering happens at scheduling time, not at matrix build time, because the same
-(m, r) pair may be compatible for one operation type but not another.
+(m, r) pair may be compatible for one operation type but not another. Older domains
+whose prime movers do not declare operation compatibility keep their historical
+behavior; the drone logistics pack uses prime-mover compatibility to keep
+`UGV_DELIVERY` on UGVs and `UAV_DELIVERY` on UAVs.
 
 ### 2.5 Memory layout
 
@@ -118,7 +122,9 @@ replacement and preserves identical behaviour.
 
 ### 3.3 Cluster construction
 
-Tasks assigned to the same depot form a cluster. Each cluster is described by a
+Tasks assigned to the same depot form a cluster. When travel-link data provides a
+usable mode-specific path, depot affinity uses the relevant network travel time;
+otherwise it falls back to haversine distance. Each cluster is described by a
 `ClusterSpec` TypedDict (`solver/types.py`):
 
 ```python
@@ -139,6 +145,18 @@ and used as the priority key in Stage 3.
 If a single depot's tasks exceed `CLUSTER_TARGET_SIZE = 50`, they are further split
 into sub-clusters by geographic proximity within the depot region. This keeps each
 OR-Tools subproblem tractable.
+
+### 3.5 Operation and alternative grouping
+
+Clustering also respects domain semantics that must survive decomposition:
+
+- tasks linked by `depends-on` stay in one cluster so routing can enforce
+  precedence;
+- tasks with the same `alternative_group_ref` stay in one cluster so the routing
+  model can choose at most one variant of a real demand;
+- when the fleet declares mode-specific prime-mover compatibility,
+  single-operation clusters are split by operation type, while multi-operation
+  alternative groups remain standalone.
 
 ---
 
@@ -225,17 +243,27 @@ For each cluster, a routing model is built with:
     )
     routing = pywrapcp.RoutingModel(manager)
 
-**Transit callback**: haversine travel time between field centroids:
+**Transit inputs**: mode-aware travel time between task locations:
 
-    def transit_callback(from_index, to_index):
-        from_node = manager.IndexToNode(from_index)
-        to_node = manager.IndexToNode(to_index)
-        return int(travel_time_h[from_node][to_node] * 3600)  # seconds
+    nodes = build_node_table(cluster_orders, sites, depot)
+    time_matrices = build_vehicle_time_matrices(nodes, routing_vehicles, travel_lookup)
+
+The implementation builds per-vehicle matrices before solving. A UGV matrix uses
+road-mode links, a UAV matrix uses air-mode links, legacy links without a mode behave
+as `any`, and missing network paths fall back to haversine travel at the asset speed.
+The cluster solver registers transit/cost evaluators per routing vehicle from these
+matrices.
 
 **Time dimension**: enforces time window [earliest_start, deadline] per order node.
 
-**Objective**: minimize total travel time (the margin maximization is handled by
-the greedy warm-start; OR-Tools refines the routing to reduce reposition cost).
+**Objective**: minimize priced travel and drop penalties (the margin maximization is
+handled by the greedy warm-start; OR-Tools refines the routing to reduce route cost
+while preserving feasibility).
+
+**Node eligibility and alternatives**: each task node is restricted to vehicles whose
+prime mover and related equipment can serve the task's operation. Nodes sharing an
+`alternative_group_ref` are grouped in a max-cardinality-one disjunction so one UGV or
+UAV variant can be served, but not both.
 
 ### 5.3 Greedy warm-start
 
@@ -246,11 +274,12 @@ triples by estimated margin. This warm-start is passed to OR-Tools via
 The greedy scorer computes for each candidate triple (m, r, t):
 
     gross_margin = revenue_t - fuel_cost(m, r, t) - material_cost(r, t)
-    reposition_cost = haversine(m.location, t.site.centroid) * fuel_burn_rate
+    reposition_cost = travel_time_or_distance(m.location, t.site.centroid) * cost_rate
 
     score = SCORE_WEIGHT_MARGIN * gross_margin - SCORE_WEIGHT_REPOSITION * reposition_cost
 
-The haversine computation is vectorized over all candidates in a single NumPy call:
+When no network path exists, the fallback haversine computation is vectorized over all
+candidates in a single NumPy call:
 
     lat1, lon1 = prime-mover positions  (broadcast over tasks)
     lat2, lon2 = site centroids          (broadcast over prime movers)

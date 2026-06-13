@@ -151,6 +151,9 @@ class PrimeMoverRow(_SolverRow):
     # Per-material compartment capacities (material code -> kg); materials
     # absent from the map fall back to load_capacity.
     load_capacities: Any = dataclasses.field(default_factory=dict)
+    # Optional prime-mover operation compatibility. Empty means unconstrained
+    # for legacy domains.
+    compatible_operations: Any = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -235,6 +238,7 @@ class TravelLinkRow(_SolverRow):
     to_location_ref: str = ""
     travel_time_s: float = 0.0
     distance_km: float = 0.0
+    network_mode: str = "any"
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -255,6 +259,7 @@ class TaskRow(_SolverRow):
 
     task_id: str
     order_ref: str = ""
+    alternative_group_ref: str = ""
     location_ref: str = ""
     operation_type: str = ""
     area: float = 0.0

@@ -62,6 +62,150 @@
       "required": true
     }
   },
+  "fingerprints": {
+    "avroParsingFingerprint": "ec4b25e4e0f6d84dd5f451b642ac840e359da3cbac97fe33977a16d98dd437b3",
+    "optimizationMetadataHash": "e1f9d70190377967edb2730b92b186e907bf7de586dcbb6cb5b2d6b5929a51ad"
+  },
+  "history": [
+    {
+      "contractId": "vehicles",
+      "fields": {
+        "current_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "fuel_consumption_l_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "fuel_tank_l": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "load_capacity_kg": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "manufacture_year": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": false
+        },
+        "rated_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "telematics_unit_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "travel_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "vehicle_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "vehicle_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "odcsId": "vehicles",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "vehicles",
+      "fields": {
+        "current_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "fuel_consumption_l_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "fuel_tank_l": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "load_capacity_kg": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "manufacture_year": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": false
+        },
+        "rated_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "telematics_unit_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "travel_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "vehicle_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "vehicle_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "ec4b25e4e0f6d84dd5f451b642ac840e359da3cbac97fe33977a16d98dd437b3",
+        "optimizationMetadataHash": "e1f9d70190377967edb2730b92b186e907bf7de586dcbb6cb5b2d6b5929a51ad"
+      },
+      "odcsId": "vehicles",
+      "version": "1.0.0"
+    }
+  ],
   "odcsId": "vehicles",
   "version": "1.0.0"
 }

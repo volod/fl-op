@@ -16,6 +16,11 @@
       "physicalType": "",
       "required": true
     },
+    "networkMode": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
     "toLocationRef": {
       "logicalType": "string",
       "physicalType": "",
@@ -27,6 +32,77 @@
       "required": true
     }
   },
+  "history": [
+    {
+      "contractId": "canonical-travel-link",
+      "fields": {
+        "distanceKm": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "fromLocationRef": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "linkId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "toLocationRef": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "travelTimeS": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": true
+        }
+      },
+      "odcsId": "canonical-travel-link",
+      "version": "0.1.0"
+    },
+    {
+      "contractId": "canonical-travel-link",
+      "fields": {
+        "distanceKm": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "fromLocationRef": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "linkId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "networkMode": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "toLocationRef": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "travelTimeS": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": true
+        }
+      },
+      "odcsId": "canonical-travel-link",
+      "version": "0.2.0"
+    }
+  ],
   "odcsId": "canonical-travel-link",
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

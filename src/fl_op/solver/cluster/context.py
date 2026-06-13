@@ -6,7 +6,7 @@ from typing import Any, Optional
 from fl_op.canonical.enums import ReasonCode
 from fl_op.solver.cluster.infeasible import mark_all_infeasible
 from fl_op.solver.enforcement import BlockedWindows
-from fl_op.solver.travel_time import TravelLookup
+from fl_op.solver.travel_time import TravelLookup, operation_set
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,9 @@ class ClusterContext:
     # task_id -> blocked epoch intervals (non-compliant weather windows) the
     # routing model must keep execution out of, occupancy-aware.
     weather_blocked: BlockedWindows = field(default_factory=dict)
+    # Tasks removed before routing because the allocated bundle cannot serve
+    # their operation type.
+    pre_infeasible: list[dict[str, Any]] = field(default_factory=list)
 
 
 def prepare_cluster_context(
@@ -72,10 +75,15 @@ def prepare_cluster_context(
             ReasonCode.NO_COMPATIBLE_BUNDLE,
             "allocation pre-pass found no feasible pairs",
         )
+    cluster_orders, pre_infeasible = _filter_orders_by_allocated_bundles(
+        cluster_id, cluster_orders, routing_vehicles
+    )
+    if not cluster_orders:
+        return None, ([], pre_infeasible)
 
     return ClusterContext(
         cluster_id=cluster_id,
-        task_ids=task_ids,
+        task_ids=[order.task_id for order in cluster_orders],
         depot_id=depot_id,
         cluster_orders=cluster_orders,
         field_map=field_map,
@@ -84,6 +92,7 @@ def prepare_cluster_context(
         depot_lon=float(depot.lon),
         travel_lookup=travel_lookup or {},
         weather_blocked=weather_blocked or {},
+        pre_infeasible=pre_infeasible,
     ), None
 
 
@@ -101,3 +110,41 @@ def _routing_vehicles(
         if vehicle is not None and implement is not None:
             routing_vehicles.append({"prime": vehicle, "related": implement})
     return routing_vehicles
+
+
+def _filter_orders_by_allocated_bundles(
+    cluster_id: str,
+    cluster_orders: list[Any],
+    routing_vehicles: list[dict[str, Any]],
+) -> tuple[list[Any], list[dict[str, Any]]]:
+    compatible: list[Any] = []
+    incompatible: list[dict[str, Any]] = []
+    for order in cluster_orders:
+        op = str(getattr(order, "operation_type", "") or "").upper()
+        if any(_bundle_supports_operation(rv, op) for rv in routing_vehicles):
+            compatible.append(order)
+            continue
+        incompatible.append(
+            {
+                "task_id": order.task_id,
+                "cluster_id": cluster_id,
+                "reason_code": ReasonCode.NO_COMPATIBLE_BUNDLE.value,
+                "detail": (
+                    "allocated bundle cannot serve operation "
+                    f"{op} for task {order.task_id}"
+                ),
+            }
+        )
+    return compatible, incompatible
+
+
+def _bundle_supports_operation(routing_vehicle: dict[str, Any], operation: str) -> bool:
+    prime_ops = operation_set(
+        getattr(routing_vehicle.get("prime"), "compatible_operations", [])
+    )
+    related_ops = operation_set(
+        getattr(routing_vehicle.get("related"), "compatible_operations", [])
+    )
+    return (not prime_ops or operation in prime_ops) and (
+        not related_ops or operation in related_ops
+    )

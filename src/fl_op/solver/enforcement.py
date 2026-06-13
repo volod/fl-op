@@ -16,7 +16,6 @@ Every exclusion is an explicit InfeasibleOrder record with a canonical reason
 code; nothing is dropped silently.
 """
 
-import ast
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -27,6 +26,7 @@ from fl_op.core.constants import (
     MATERIAL_INVENTORY_CANONICAL_UNIT,
     ROUTING_HORIZON_S,
 )
+from fl_op.solver.travel_time import operation_set
 from fl_op.solver.types import ClusterSpec, InfeasibleOrder
 
 if TYPE_CHECKING:
@@ -84,12 +84,7 @@ def _infeasible(task_id: str, cluster_id: str, reason: ReasonCode, detail: str) 
 
 def ops_set(raw: Any) -> set[str]:
     """Parse an operations list that may arrive as a stringified Python list."""
-    if isinstance(raw, str):
-        try:
-            raw = ast.literal_eval(raw)
-        except (ValueError, SyntaxError):
-            raw = [raw]
-    return set(raw or [])
+    return operation_set(raw)
 
 
 # -- respect-weather-window ----------------------------------------------------
@@ -224,6 +219,8 @@ def apply_operator_qualification(
         str(c.get("operator_ref", "")) for c in clusters if c.get("operator_ref")
     }
     for cluster in clusters:
+        if not cluster.get("allocated_prime_related") and not cluster.get("operator_ref"):
+            continue
         operator = operators_by_id.get(cluster.get("operator_ref", ""))
         certified = ops_set(operator.certified_operations) if operator is not None else set()
         cluster_backups: dict[str, str] = {}
@@ -231,7 +228,7 @@ def apply_operator_qualification(
         kept_ids: list[str] = []
         for task_id in cluster["task_ids"]:
             order = order_index.get(task_id)
-            operation = getattr(order, "operation_type", None)
+            operation = str(getattr(order, "operation_type", "") or "").upper() or None
             if order is not None and operation in certified:
                 kept_ids.append(task_id)
                 continue
@@ -330,7 +327,10 @@ def apply_material_limits(
 
         kept_ids = list(passthrough)
         for order, spec in demanding:
-            demand = spec.perAreaHa * float(order.area)
+            demand = spec.perAreaHa * _area_ha_for_material(order)
+            if demand <= 0:
+                kept_ids.append(order.task_id)
+                continue
             available = remaining.get(depot_ref, 0.0)
             if demand <= available:
                 remaining[depot_ref] = available - demand
@@ -360,6 +360,29 @@ def apply_material_limits(
     if infeasible:
         logger.info("Material availability excluded %d tasks", len(infeasible))
     return infeasible, reservations
+
+
+def _area_ha_for_material(order: Any) -> float:
+    """Area basis for per-hectare material demand.
+
+    `area` is the legacy field. When area-shaped work is present only on the
+    generic quantity surface, accept `work_quantity` if its unit is
+    hectare-like.
+    """
+    area = _nonnegative_float(getattr(order, "area", 0.0))
+    if area > 0:
+        return area
+    unit = str(getattr(order, "work_quantity_unit", "") or "").strip().lower()
+    if unit in {"", "ha", "hectare", "hectares"}:
+        return _nonnegative_float(getattr(order, "work_quantity", 0.0))
+    return 0.0
+
+
+def _nonnegative_float(value: Any) -> float:
+    try:
+        return max(0.0, float(value or 0.0))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def finalize_material_reservations(

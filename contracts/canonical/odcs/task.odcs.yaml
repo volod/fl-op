@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: canonical-task
-version: 0.2.0
+version: 0.3.0
 status: active
 name: Canonical Task
 domain: canonical
@@ -32,6 +32,13 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: task.orderId, semanticTerm: urn:xopt:relationship:contract, planningUse: [commitment]}
+      - name: alternativeGroupRef
+        logicalType: string
+        required: false
+        description: Mutually-exclusive alternative group for mode variants of one real task.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.alternativeGroupRef, semanticTerm: urn:xopt:relationship:alternative-group, planningUse: [alternative-selection]}
       - name: locationRef
         logicalType: string
         required: true

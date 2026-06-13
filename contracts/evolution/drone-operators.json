@@ -1,0 +1,82 @@
+{
+  "contractId": "drone-operators",
+  "fields": {
+    "certified_operations": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": true
+    },
+    "full_name": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "hub_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "operator_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "shift_end_s": {
+      "logicalType": "integer",
+      "physicalType": "int",
+      "required": true
+    },
+    "shift_start_s": {
+      "logicalType": "integer",
+      "physicalType": "int",
+      "required": true
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "878cd9746213493d323c6c02118baf7fbad532a91426dd4f758a10401019c364"
+  },
+  "history": [
+    {
+      "contractId": "drone-operators",
+      "fields": {
+        "certified_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "full_name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "hub_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "operator_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "shift_end_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "shift_start_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "878cd9746213493d323c6c02118baf7fbad532a91426dd4f758a10401019c364"
+      },
+      "odcsId": "drone-operators",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "drone-operators",
+  "version": "1.0.0"
+}

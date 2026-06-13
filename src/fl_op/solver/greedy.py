@@ -22,7 +22,7 @@ from fl_op.core.constants import (
     SCORE_WEIGHT_MARGIN,
     SCORE_WEIGHT_REPOSITION,
 )
-from fl_op.solver.travel_time import TravelLookup
+from fl_op.solver.travel_time import TravelLookup, network_seconds, travel_mode_for_vehicle
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +49,18 @@ def _estimate_gross_margin(order: Any) -> float:
 
 
 def _network_seconds_or_nan(
-    travel_lookup: TravelLookup, from_ref: str, to_ref: str
+    travel_lookup: TravelLookup,
+    from_ref: str,
+    to_ref: str,
+    travel_mode: str = "any",
 ) -> float:
     """Directed network time for a pair (reverse fallback), NaN when no path."""
     if not from_ref or not to_ref or from_ref == to_ref:
         return math.nan
-    seconds = travel_lookup.get((from_ref, to_ref)) or travel_lookup.get(
-        (to_ref, from_ref)
+    seconds = network_seconds(
+        travel_lookup, from_ref, to_ref, travel_mode
+    ) or network_seconds(
+        travel_lookup, to_ref, from_ref, travel_mode
     )
     return float(seconds) if seconds else math.nan
 
@@ -127,6 +132,7 @@ def vectorized_score(
     v_speeds = np.array([float(v.travel_speed) for v in vehicles])
     v_consumptions = np.array([float(v.fuel_consumption_rate) for v in vehicles])
     v_home_refs = [str(v.home_depot_ref or "") for v in vehicles]
+    v_travel_modes = [travel_mode_for_vehicle(v) for v in vehicles]
 
     results: dict[str, list[tuple[float, int, int]]] = {}
 
@@ -161,9 +167,12 @@ def vectorized_score(
         if travel_lookup:
             net_by_vehicle = np.array([
                 _network_seconds_or_nan(
-                    travel_lookup, home_ref, str(order.location_ref or "")
+                    travel_lookup,
+                    home_ref,
+                    str(order.location_ref or ""),
+                    v_travel_modes[idx],
                 )
-                for home_ref in v_home_refs
+                for idx, home_ref in enumerate(v_home_refs)
             ])
             net_hours = net_by_vehicle[v_indices] / 3600.0
             hours = np.where(np.isnan(net_hours), hours, net_hours)

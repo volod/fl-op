@@ -1,7 +1,8 @@
 # Domain mapping packs
 
-A domain mapping pack projects a concrete physical schema (agricultural,
-construction, marine, ...) onto the [canonical optimization model](canonical-model.md).
+A domain mapping pack projects a concrete physical schema (drone logistics,
+agricultural, construction, roadside, ...) onto the
+[canonical optimization model](canonical-model.md).
 Each pack lives under `contracts/domains/<domain>/`:
 
 ```
@@ -72,9 +73,11 @@ Which datasets feed a snapshot is derived from the registry, not hardcoded: the
 snapshot builder maps every selected-domain contract whose mapping targets a
 snapshot-input canonical entity (`asset`, `location`, `task`, `forecast`,
 `observation`, `commitment`, `travel-link`, `cost-rate`), in registry
-declaration order. The default selection is the registry `activeDomain` or
-`ACTIVE_DOMAIN=<domain>`; shared-fleet runs can select several packs with
-`ACTIVE_DOMAINS=agricultural,construction` or adapter config `domains=[...]`.
+declaration order. The default selection is the registry `activeDomain`
+(`drone_logistics`) or `ACTIVE_DOMAIN=<domain>`; if neither override is set,
+generated dataset metadata can select the matching domain. Shared-fleet runs
+can select several packs with `ACTIVE_DOMAINS=agricultural,construction` or
+adapter config `domains=[...]`.
 Adding a dataset to a domain therefore means adding the ODCS + mapping +
 registry entry; the engine picks it up automatically. The same holds in the
 stream layer: execution events resolve their target collection and key column
@@ -128,7 +131,14 @@ rather than a semver-classified structural delta.
 
 ## Adding a New Domain
 
-`contracts/domains/construction/` maps a different physical schema onto the
+`contracts/domains/drone_logistics/` is the default runnable pack. It maps UGVs,
+UAVs, payload modules, drone operators, logistics hubs, delivery locations,
+restricted zones, delivery orders, mode-tagged travel links, weather, and cost
+rates onto the same canonical model. The domain uses task
+`alternativeGroupRef` to represent UGV/UAV variants for one real delivery and
+`travel-link.networkMode` to keep road and air routing separate.
+
+`contracts/domains/construction/` maps another physical schema onto the
 **same** canonical model with no engine changes -- and is fully runnable:
 `fl-op generate-data --domain construction` produces a conforming dataset and
 `ACTIVE_DOMAIN=construction fl-op plan periodic --data latest` plans it

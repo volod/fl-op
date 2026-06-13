@@ -1,0 +1,31 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: weather
+version: 1.0.0
+status: active
+name: Drone Logistics Weather
+domain: drone-logistics
+tenant: logistics-ops
+description:
+  purpose: Forecast windows for weather-sensitive UAV deliveries.
+  usage: Weather-window feasibility.
+servers: [{server: stream, type: local, format: json, path: weather.json}]
+schema:
+  - name: weather
+    logicalType: object
+    physicalType: json
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro: {namespace: org.example.drone.weather, recordName: WeatherWindow, recordDoc: "Weather window mapped to canonical Forecast."}
+          proto: {package: org.example.drone.weather, messageName: WeatherWindow, syntax: proto3}
+          es: {indexName: drone-weather, dynamic: strict}
+    properties:
+      - {name: forecast_id, logicalType: string, physicalType: string, required: true, description: Stable forecast id., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 1}}}]}
+      - {name: valid_from, logicalType: string, physicalType: string, required: true, description: Forecast start., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 2}}}]}
+      - {name: valid_to, logicalType: string, physicalType: string, required: true, description: Forecast end., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 3}}}]}
+      - {name: wind_ms, logicalType: number, physicalType: double, required: true, description: Wind speed., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 4}}}]}
+      - {name: rain_mm_per_h, logicalType: number, physicalType: double, required: true, description: Rain rate., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 5}}}]}
+      - {name: soil_moisture_pct, logicalType: number, physicalType: double, required: false, description: Not used for drone delivery., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 6}}}]}
+      - {name: lat, logicalType: number, physicalType: double, required: true, description: Forecast latitude., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 7}}}]}
+      - {name: lon, logicalType: number, physicalType: double, required: true, description: Forecast longitude., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 8}}}]}

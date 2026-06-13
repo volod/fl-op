@@ -32,6 +32,90 @@
       "required": true
     }
   },
+  "fingerprints": {
+    "avroParsingFingerprint": "ffb96b57b6151846d0af0d30bfa961b4bcb45c555d8de01c7c3d59028fbed988",
+    "optimizationMetadataHash": "20c7f57e2068237507a650e370b947c2ef34392735383754557540e054dabe54"
+  },
+  "history": [
+    {
+      "contractId": "construction-operators",
+      "fields": {
+        "full_name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "licensed_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "operator_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "shift_end_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "shift_start_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "yard_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "odcsId": "operators",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "construction-operators",
+      "fields": {
+        "full_name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "licensed_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "operator_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "shift_end_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "shift_start_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "yard_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "ffb96b57b6151846d0af0d30bfa961b4bcb45c555d8de01c7c3d59028fbed988",
+        "optimizationMetadataHash": "20c7f57e2068237507a650e370b947c2ef34392735383754557540e054dabe54"
+      },
+      "odcsId": "operators",
+      "version": "1.0.0"
+    }
+  ],
   "odcsId": "operators",
   "version": "1.0.0"
 }

@@ -1,0 +1,35 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: ugvs
+version: 1.0.0
+status: active
+name: UGV Fleet
+domain: drone-logistics
+tenant: logistics-ops
+description:
+  purpose: Uncrewed ground vehicles for last-mile delivery.
+  usage: Prime movers for road-mode delivery variants.
+servers: [{server: batch, type: local, format: csv, path: ugvs.csv}]
+schema:
+  - name: ugvs
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro: {namespace: org.example.drone.assets, recordName: UGV, recordDoc: "UGV mapped to canonical prime mover."}
+          proto: {package: org.example.drone.assets, messageName: UGV, syntax: proto3}
+          es: {indexName: drone-ugvs, dynamic: strict}
+    properties:
+      - {name: ugv_id, logicalType: string, physicalType: string, required: true, description: Stable UGV id., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 1}}}]}
+      - {name: name, logicalType: string, physicalType: string, required: false, description: Display name., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 2}}}]}
+      - {name: vehicle_class, logicalType: string, physicalType: string, required: true, description: UGV class., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 3}}}]}
+      - {name: rated_power_kw, logicalType: number, physicalType: double, required: true, description: Rated power., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 4}}}]}
+      - {name: energy_capacity_l_equiv, logicalType: number, physicalType: double, required: false, description: Energy capacity in fuel-equivalent units., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 5}}}]}
+      - {name: energy_use_l_per_h, logicalType: number, physicalType: double, required: false, description: Energy use in fuel-equivalent units per hour., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 6}}}]}
+      - {name: current_lat, logicalType: number, physicalType: double, required: true, description: Current latitude., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 7}}}]}
+      - {name: current_lon, logicalType: number, physicalType: double, required: true, description: Current longitude., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 8}}}]}
+      - {name: hub_id, logicalType: string, physicalType: string, required: true, description: Home logistics hub., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 9}}}]}
+      - {name: travel_speed_kmh, logicalType: number, physicalType: double, required: false, description: Road speed., customProperties: [{property: fieldGeneration, value: {avro: {default: 25.0}, proto: {fieldNumber: 10}}}]}
+      - {name: payload_capacity_kg, logicalType: number, physicalType: double, required: true, description: Payload capacity., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 11}}}]}
+      - {name: compatible_operations, logicalType: array, physicalType: string, required: true, description: Supported delivery operations., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 12}}}]}

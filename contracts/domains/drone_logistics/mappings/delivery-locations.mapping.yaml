@@ -1,0 +1,19 @@
+apiVersion: x-optimization/v0.1.0
+kind: CanonicalMapping
+metadata:
+  domain: drone_logistics
+  sourceContract: delivery-locations
+  canonicalEntity: location
+  canonicalModelRef: urn:xopt:model:canonical:0.1.0
+  mappingVersion: 1.0.0
+  dataProductRole: customerLocations
+  permittedPlanningUses: [periodic-planning, rolling-dispatch]
+fieldMappings:
+  - {sourceField: location_id, binding: location.locationId, semanticTerm: urn:xopt:identity:location-id, planningUse: [identity]}
+  - {sourceField: name, binding: location.name, semanticTerm: urn:xopt:attribute:display-name, planningUse: [classification]}
+  - {sourceField: lat, binding: location.lat, semanticTerm: urn:xopt:attribute:latitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
+  - {sourceField: lon, binding: location.lon, semanticTerm: urn:xopt:attribute:longitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
+  - {sourceField: service_area_ha, binding: location.areaHa, semanticTerm: urn:xopt:attribute:area, canonicalUnit: ha, quantityKind: area, planningUse: [duration-estimation]}
+  - {sourceField: polygon, binding: location.polygon, semanticTerm: urn:xopt:attribute:polygon, quantityKind: geometry, planningUse: [geospatial], missingValuePolicy: accept-optional}
+  - {sourceField: restricted_operations, binding: location.restrictedOperations, semanticTerm: urn:xopt:restriction:prohibited-operations, quantityKind: categorical-set, planningUse: [restriction], missingValuePolicy: accept-optional}
+  - {sourceField: restriction_windows, binding: location.restrictionWindows, semanticTerm: urn:xopt:restriction:restricted-windows, quantityKind: interval-set, planningUse: [restriction], missingValuePolicy: accept-optional}

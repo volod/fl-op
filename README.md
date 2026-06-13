@@ -1,15 +1,17 @@
 # fl-op
 
 Fleet optimization CLI -- a decision support system for assigning
-means-implement pairs to orders at production scale, with a declarative
+multi-resource bundles to orders at production scale, with a declarative
 data-contract layer that runs the same canonical state in both batch and stream
 mode.
 
 **Problem class**: Heterogeneous Fleet VRP with Time Windows (HFVRPTW) +
 Multi-resource Scheduling + Profit-Maximizing Order Selection.
 
-**Default scale**: 100 vehicles, 400 implements, 250 concurrent orders,
-50 depots (overridable via CLI flags, environment variables, or Makefile).
+**Default domain and scale**: drone logistics (`drone_logistics`) with
+100 vehicles, 400 payload modules, 250 concurrent deliveries, and 50 hubs
+(overridable via CLI flags, environment variables, or Makefile). Other
+registered domains remain selectable explicitly.
 Production-scale runs (3000+ vehicles) require explicit overrides.
 
 **Stack**: Python 3.10+, OR-Tools routing library, NumPy, scikit-learn,
@@ -34,10 +36,11 @@ make demo
 make quickstart FORMAT=parquet
 ```
 
-`make demo` generates a dataset and then runs the end-to-end story: validate the
-ODCS data contracts, build an immutable planning snapshot, produce a periodic
-(batch) plan, synthesize an execution-event stream, and produce rolling (stream)
-dispatch revisions. Artifacts land under `$DATA_DIR` (default: `.data/`).
+`make demo` generates a drone logistics dataset and then runs the end-to-end
+story: validate the ODCS data contracts, build an immutable planning snapshot,
+produce a periodic (batch) mixed UGV/UAV plan, synthesize an execution-event
+stream, and produce rolling (stream) dispatch revisions. Artifacts land under
+`$DATA_DIR` (default: `.data/`).
 
 ---
 
@@ -87,9 +90,9 @@ example inputs and outputs.
   -- the three-layer architecture and the domain-neutral entity / capability /
   semantic-term contract the engine consumes.
 - **Domain mapping packs**: [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md)
-  -- how physical domains (agricultural, construction, roadside) project onto the
-  canonical model, extra (analytical) fields, shared-fleet selection, and how to
-  add a new domain.
+  -- how physical domains (drone logistics, agricultural, construction,
+  roadside) project onto the canonical model, extra (analytical) fields,
+  shared-fleet selection, and how to add a new domain.
 - **Algorithms**: [`docs/algorithms/`](docs/algorithms/)
   -- problem formulation, solver pipeline, and a learning path for the math.
 - **Future improvements**: [`docs/future-improvements.md`](docs/future-improvements.md)
@@ -108,6 +111,7 @@ make check-gen     # validate ODCS generation hints for all formats
 make contracts-gen # generate Avro, Protobuf, ES, and Parquet schemas from ODCS
 make contracts     # validate the full suite (canonical model + per-domain mappings)
 make canonical-validate    # validate only the canonical optimization model
+make validate-drone-logistics # validate the default drone logistics pack
 make validate-construction # prove the construction pack maps onto the canonical model
 make validate-roadside     # validate the roadside-infrastructure runnable pack
 make data          # default benchmark (manual, ~10 min)
@@ -119,6 +123,7 @@ runs the full generate-data -> solve -> analyse -> reschedule -> query-contract
 pipeline at minimum scale. The session fixture in `tests/conftest.py` generates a
 50v/200i/20o/5d dataset shared across all unit tests.
 
-Domain selection is registry-driven. Use `ACTIVE_DOMAIN=<domain>` for a single
-pack or `ACTIVE_DOMAINS=agricultural,construction` for a staged shared-fleet
-snapshot; the solver still consumes the same canonical row vocabulary.
+Domain selection is registry-driven. The default active pack is
+`drone_logistics`; use `ACTIVE_DOMAIN=<domain>` for another single pack or
+`ACTIVE_DOMAINS=agricultural,construction` for a staged shared-fleet snapshot.
+The solver still consumes the same canonical row vocabulary.

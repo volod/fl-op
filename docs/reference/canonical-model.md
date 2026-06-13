@@ -2,8 +2,8 @@
 
 The canonical model is the **single source of truth for what the optimization
 engine consumes**. It is domain-agnostic: the solver never reads a physical
-domain schema (agricultural, construction, ...) directly - it only sees canonical
-entities built according to the contracts described here.
+domain schema (drone logistics, agricultural, construction, roadside) directly -
+it only sees canonical entities built according to the contracts described here.
 
 ## Three-layer architecture
 
@@ -18,7 +18,7 @@ entities built according to the contracts described here.
             ^
             | reads / generated from
             |
-  Physical source data                vehicles.csv, machines.csv, ...
+  Physical source data                ugvs.csv, delivery-orders.csv, vehicles.csv, ...
 ```
 
 1. **Canonical model** (`contracts/canonical/`) declares the entities, fields,
@@ -69,12 +69,12 @@ flattens these into a `CanonicalModel` exposing `allowed_bindings(entity)`,
 |---|---|---|
 | `asset` | `asset.assetId` | Prime movers, related equipment, operators, and stationary equipment are one entity with distinct roles. `asset.mobility` separates movable resources from stationary ones (sensors, fixed road/field equipment); `asset.state.*` carries maintenance master data (last service, service interval). Dynamic condition (battery, health) comes exclusively from observations. |
 | `location` | `location.locationId`, `location.lat`, `location.lon` | Work sites and depots; depot inventory is canonical `location.inventory.*`. |
-| `task` | `task.taskId`, `task.locationRef`, `task.operationType` | Units of work; revenue/penalty are domain-neutral EUR money. |
+| `task` | `task.taskId`, `task.locationRef`, `task.operationType` | Units of work; revenue/penalty are domain-neutral EUR money. `alternativeGroupRef` links mutually exclusive variants of one real-world demand, for example UGV and UAV delivery options for the same order. |
 | `forecast` | `forecast.forecastId` | Environmental forecast windows. |
 | `observation` | `observation.observationId`, `observation.entityRef`, `observation.metric`, `observation.observedAt` | A measured value about an entity: sensor reading, telemetry sample, inspection result. One shape covers historical batches and realtime streamed readings; numeric readings bind `observation.value`, categorical readings bind `observation.stateValue`. The `metric` column carries canonical metric codes (`battery-level`, `health-status`, ...). |
 | `commitment` | `commitment.commitmentId` | Contractual obligations (deadline, lateness penalty, hardness) for domains that keep them separate from order rows. |
 | `execution-event` | `event.eventId`, `event.eventType`, `event.observedAt`, `event.entityRef` | Rolling-dispatch replanning triggers, including `task.progress` (partial completion), `task.completed`, `inventory.adjusted`, `observation.recorded` for streamed readings and telemetry-derived progress, and `entity.corrected` for corrected source rows. |
-| `travel-link` | `travelLink.linkId`, `travelLink.fromLocationRef`, `travelLink.toLocationRef`, `travelLink.travelTimeS` | Directed travel-network edges (distance-matrix entries / road-graph arcs); pairs without a link fall back to haversine estimates. |
+| `travel-link` | `travelLink.linkId`, `travelLink.fromLocationRef`, `travelLink.toLocationRef`, `travelLink.travelTimeS` | Directed travel-network edges (distance-matrix entries / road-graph arcs). `networkMode` separates road, air, and other modal graphs; pairs without a matching link fall back to haversine estimates. |
 | `cost-rate` | `costRate.costRateId`, `costRate.rateType`, `costRate.unitPrice`, `costRate.perUnit` | Priced resource rates (fuel, materials) with optional validity windows; engine cost constants are the fallback. |
 | `plan` (output) | `plan.planId`, `plan.revisionId`, `plan.snapshotRef`, ... | The plan output contract, mirroring the input contracts; produced plans are validated against it at publication (`fl_op/contracts/plan_contract.py`). |
 
@@ -115,6 +115,6 @@ in `fl_op/core/constants.py`.
 the canonical model in isolation.
 
 See [domain-mapping.md](domain-mapping.md) for how a physical domain projects onto
-this model, using the agricultural and construction packs as worked examples, and
-[optimization-ontology.md](optimization-ontology.md) for the full entity
-ontology, use-case coverage, and further reading.
+this model, using the drone logistics, agricultural, construction, and roadside
+packs as worked examples, and [optimization-ontology.md](optimization-ontology.md)
+for the full entity ontology, use-case coverage, and further reading.

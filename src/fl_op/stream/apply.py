@@ -79,11 +79,8 @@ class EventApplicator:
         # (task id, completion time, deadline); the driver drains them into
         # the lead-time log after each batch.
         self.completions: list[dict[str, Any]] = []
-        active = self.registry.active_domain
         for cid in self.registry.list_contracts():
             entry = self.registry.get_entry(cid)
-            if active and entry.domain != active:
-                continue
             if not entry.mapping_ref:
                 continue
             table = load_binding_table(self.registry, cid)

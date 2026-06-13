@@ -24,8 +24,9 @@ never overwrites a previous run.
     --seed 42
 ```
 
-Those are the CLI defaults (set via environment variables or `.env`), so the
-same run can be started with:
+Those are the CLI defaults (set via environment variables or `.env`). The
+registry active domain is `drone_logistics`, so the same run can be started
+with:
 
 ```bash
 .venv/bin/fl-op generate-data --seed 42
@@ -37,14 +38,15 @@ For large-scale runs, pass the desired counts explicitly:
 .venv/bin/fl-op generate-data --vehicles 3000 --implements 20000 --orders 2500 --depots 50 --seed 42
 ```
 
-Output written to `.data/generate-data/<timestamp>/`:
+Default drone logistics output written to `.data/generate-data/<timestamp>/`:
 
 ```
-depots.avro        implements.avro   operators.avro
-fields.avro        orders.avro       vehicles.avro
-sensors.avro       routes.avro       prices.avro
-sensor-readings.jsonl
-contracts.json     weather.json      metadata.json
+ugvs.avro                uavs.avro
+payload-modules.avro     drone-operators.avro
+logistics-hubs.avro      delivery-locations.avro
+restricted-zones.avro    delivery-orders.avro
+travel-links.avro        prices.avro
+weather.json             metadata.json
 ```
 
 The default format is avro. Pass `--format csv` or `--format parquet` to
@@ -63,12 +65,20 @@ Real CSVs take priority; missing fields fill from synthetic distributions.
 
 To generate and plan another registered domain pack, select the domain at
 generation time and activate it for planning with the `ACTIVE_DOMAIN` override.
-Counts map onto each domain's entities: construction uses
-vehicles=machines, implements=attachments, orders=jobs, depots=yards;
-roadside uses vehicles=service vehicles, implements=service kits,
-orders=signage assets, depots=service depots.
+Counts map onto each domain's entities: drone logistics uses
+vehicles=UGV/UAV fleet, implements=payload modules, orders=deliveries,
+depots=logistics hubs; construction uses vehicles=machines,
+implements=attachments, orders=jobs, depots=yards; roadside uses
+vehicles=service vehicles, implements=service kits, orders=signage assets,
+depots=service depots.
 
 ```bash
+.venv/bin/fl-op generate-data --seed 42
+.venv/bin/fl-op plan periodic --data latest
+
+.venv/bin/fl-op generate-data --domain agricultural --seed 42
+ACTIVE_DOMAIN=agricultural .venv/bin/fl-op plan periodic --data latest
+
 .venv/bin/fl-op generate-data --domain construction --seed 42
 ACTIVE_DOMAIN=construction .venv/bin/fl-op plan periodic --data latest
 

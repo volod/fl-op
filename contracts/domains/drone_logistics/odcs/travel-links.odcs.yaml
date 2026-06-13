@@ -1,0 +1,29 @@
+apiVersion: v3.0.0
+kind: DataContract
+id: travel-links
+version: 1.0.0
+status: active
+name: Drone Logistics Travel Links
+domain: drone-logistics
+tenant: logistics-ops
+description:
+  purpose: Road and air travel edges between hubs and delivery locations.
+  usage: Mode-aware routing times for UGV and UAV fleets.
+servers: [{server: batch, type: local, format: csv, path: travel-links.csv}]
+schema:
+  - name: travelLinks
+    logicalType: object
+    physicalType: csv
+    customProperties:
+      - property: schemaGeneration
+        value:
+          avro: {namespace: org.example.drone.routing, recordName: TravelLink, recordDoc: "Mode-aware travel link mapped to canonical TravelLink."}
+          proto: {package: org.example.drone.routing, messageName: TravelLink, syntax: proto3}
+          es: {indexName: drone-travel-links, dynamic: strict}
+    properties:
+      - {name: link_id, logicalType: string, physicalType: string, required: true, description: Stable link id., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 1}}}]}
+      - {name: from_id, logicalType: string, physicalType: string, required: true, description: Origin location., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 2}}}]}
+      - {name: to_id, logicalType: string, physicalType: string, required: true, description: Destination location., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 3}}}]}
+      - {name: travel_time_s, logicalType: number, physicalType: double, required: true, description: Travel time., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 4}}}]}
+      - {name: distance_km, logicalType: number, physicalType: double, required: false, description: Link distance., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 5}}}]}
+      - {name: network_mode, logicalType: string, physicalType: string, required: true, description: road, air, or any., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 6}}}]}

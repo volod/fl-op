@@ -14,6 +14,22 @@ def _link(from_ref: str, to_ref: str, seconds: float, link_id: str = "l0") -> Tr
     })
 
 
+def _mode_link(
+    from_ref: str,
+    to_ref: str,
+    seconds: float,
+    mode: str,
+    link_id: str = "l0",
+) -> TravelLinkRow:
+    return TravelLinkRow.from_canonical_dict({
+        "link_id": link_id,
+        "from_location_ref": from_ref,
+        "to_location_ref": to_ref,
+        "travel_time_s": seconds,
+        "network_mode": mode,
+    })
+
+
 class TestTravelLookup:
     def test_lookup_indexes_directed_pairs(self):
         lookup = build_travel_lookup([_link("d0", "f0", 1234.0)])
@@ -39,6 +55,22 @@ class TestTravelLookup:
     def test_no_lookup_is_pure_haversine(self):
         expected = _haversine_s(48.5, 32.0, 48.9, 32.4)
         assert travel_seconds("d0", "f0", 48.5, 32.0, 48.9, 32.4, None) == expected
+
+    def test_mode_specific_links_do_not_leak_between_road_and_air(self):
+        lookup = build_travel_lookup(
+            [
+                _mode_link("hub", "drop", 900.0, "road", "road_1"),
+                _mode_link("hub", "drop", 120.0, "air", "air_1"),
+            ]
+        )
+        assert travel_seconds("hub", "drop", 0, 0, 1, 1, lookup, "road") == 900
+        assert travel_seconds("hub", "drop", 0, 0, 1, 1, lookup, "air") == 120
+        assert lookup[("hub", "drop")] == 120
+
+    def test_any_links_are_available_to_specific_modes(self):
+        lookup = build_travel_lookup([_mode_link("hub", "drop", 300.0, "any")])
+        assert travel_seconds("hub", "drop", 0, 0, 1, 1, lookup, "road") == 300
+        assert travel_seconds("hub", "drop", 0, 0, 1, 1, lookup, "air") == 300
 
 
 class TestShortestPathComposition:

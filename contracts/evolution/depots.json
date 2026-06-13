@@ -32,6 +32,90 @@
       "required": false
     }
   },
+  "fingerprints": {
+    "avroParsingFingerprint": "fd656c426f3fbeadf7248d27dad6e804b24546783c3054bceeaeedb21c30b9b4",
+    "optimizationMetadataHash": "c0f07721a356ca33b3c93bc0fcc0cbc68330657732f950aa058562f94bb633e0"
+  },
+  "history": [
+    {
+      "contractId": "depots",
+      "fields": {
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "fertilizer_available_kg": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "fuel_available_l": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "odcsId": "depots",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "depots",
+      "fields": {
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "fertilizer_available_kg": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "fuel_available_l": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "fd656c426f3fbeadf7248d27dad6e804b24546783c3054bceeaeedb21c30b9b4",
+        "optimizationMetadataHash": "c0f07721a356ca33b3c93bc0fcc0cbc68330657732f950aa058562f94bb633e0"
+      },
+      "odcsId": "depots",
+      "version": "1.0.0"
+    }
+  ],
   "odcsId": "depots",
   "version": "1.0.0"
 }

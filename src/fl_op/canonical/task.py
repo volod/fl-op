@@ -35,6 +35,9 @@ class Task(BaseModel):
 
     task_id: str
     order_id: str
+    # Mutually-exclusive alternatives for the same real-world task share this
+    # key; the solver may serve at most one task in a group.
+    alternative_group_ref: str = ""
     operation_type: str
     location_ref: str
     area_ha: Optional[float] = None

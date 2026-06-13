@@ -155,6 +155,9 @@ semanticTerms:
   # -- relationships ---------------------------------------------------------
   urn:xopt:relationship:home-depot: {valueType: string, quantityKind: identifier}
   urn:xopt:relationship:contract: {valueType: string, quantityKind: identifier}
+  # Mutually-exclusive task alternatives for the same real-world order share
+  # this key; the solver may serve at most one member of the group.
+  urn:xopt:relationship:alternative-group: {valueType: string, quantityKind: identifier}
   urn:xopt:relationship:location: {valueType: string, quantityKind: identifier}
   urn:xopt:relationship:entity-ref: {valueType: string, quantityKind: identifier}
   # Predecessor task that must be served before this one (multi-stage work
@@ -175,6 +178,7 @@ semanticTerms:
   # -- travel network ----------------------------------------------------------
   urn:xopt:travel:travel-time: {valueType: number, quantityKind: duration, canonicalUnit: s}
   urn:xopt:travel:distance: {valueType: number, quantityKind: length, canonicalUnit: km}
+  urn:xopt:travel:network-mode: {valueType: string, quantityKind: categorical}
   # -- cost rates --------------------------------------------------------------
   # rate-type uses canonical resource codes the engine interprets ("fuel",
   # "fertilizer"); per-unit declares what one unit-price buys (L, kg, ...).

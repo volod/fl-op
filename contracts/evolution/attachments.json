@@ -47,6 +47,120 @@
       "required": true
     }
   },
+  "fingerprints": {
+    "avroParsingFingerprint": "3e38f5c560e92a1b212e5acf811b67a66c80ebcefcc50e62c49e5e418c9e3fab",
+    "optimizationMetadataHash": "8619730cad06d219d88c2db4227e80f3fe1204a2f6e9b4ecdf273b4004b1620e"
+  },
+  "history": [
+    {
+      "contractId": "attachments",
+      "fields": {
+        "attachment_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "attachment_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "cut_width_m": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "draw_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "max_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "min_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "supported_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "work_rates": {
+          "logicalType": "object",
+          "physicalType": "string",
+          "required": false
+        },
+        "yard_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "odcsId": "attachments",
+      "version": "1.1.0"
+    },
+    {
+      "contractId": "attachments",
+      "fields": {
+        "attachment_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "attachment_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "cut_width_m": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "draw_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "max_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "min_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "supported_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "work_rates": {
+          "logicalType": "object",
+          "physicalType": "string",
+          "required": false
+        },
+        "yard_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "3e38f5c560e92a1b212e5acf811b67a66c80ebcefcc50e62c49e5e418c9e3fab",
+        "optimizationMetadataHash": "8619730cad06d219d88c2db4227e80f3fe1204a2f6e9b4ecdf273b4004b1620e"
+      },
+      "odcsId": "attachments",
+      "version": "1.1.0"
+    }
+  ],
   "odcsId": "attachments",
   "version": "1.1.0"
 }

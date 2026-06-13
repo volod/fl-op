@@ -1,0 +1,182 @@
+{
+  "contractId": "drone-delivery-orders",
+  "fields": {
+    "customer_class": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "deadline": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "delivery_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "dropoff_location_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "estimated_revenue_eur": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "operation_type": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "payload_kg": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": true
+    },
+    "payload_material": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "penalty_per_day_eur": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "pickup_location_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "priority": {
+      "logicalType": "integer",
+      "physicalType": "int",
+      "required": false
+    },
+    "service_duration_minutes": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "status": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
+    "task_id": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": true
+    },
+    "work_quantity": {
+      "logicalType": "number",
+      "physicalType": "double",
+      "required": false
+    },
+    "work_quantity_unit": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    }
+  },
+  "fingerprints": {
+    "optimizationMetadataHash": "410536a193c57d654b0ef73a72139592c36e3c777478d5421bf2d3e692dc9a0f"
+  },
+  "history": [
+    {
+      "contractId": "drone-delivery-orders",
+      "fields": {
+        "customer_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "deadline": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "delivery_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "dropoff_location_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "estimated_revenue_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "operation_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "payload_kg": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "payload_material": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "penalty_per_day_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "pickup_location_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "priority": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": false
+        },
+        "service_duration_minutes": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "status": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "task_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "work_quantity": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "work_quantity_unit": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "410536a193c57d654b0ef73a72139592c36e3c777478d5421bf2d3e692dc9a0f"
+      },
+      "odcsId": "delivery-orders",
+      "version": "1.0.0"
+    }
+  ],
+  "odcsId": "delivery-orders",
+  "version": "1.0.0"
+}

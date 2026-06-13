@@ -47,6 +47,120 @@
       "required": true
     }
   },
+  "fingerprints": {
+    "avroParsingFingerprint": "5f840a05b595ceed0345e14af4cef069285961bc0f532143aeb44f70cd1e4efc",
+    "optimizationMetadataHash": "6bea53d361bcfd91b73606db9c6aa4a39c46f73063d3e348937aed73d1a11596"
+  },
+  "history": [
+    {
+      "contractId": "implements",
+      "fields": {
+        "compatible_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "fertilizer_capacity_kg": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "implement_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "implement_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "max_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "min_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "required_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "working_width_m": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        }
+      },
+      "odcsId": "implements",
+      "version": "1.0.0"
+    },
+    {
+      "contractId": "implements",
+      "fields": {
+        "compatible_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "fertilizer_capacity_kg": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "implement_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "implement_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "max_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "min_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "required_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "working_width_m": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "5f840a05b595ceed0345e14af4cef069285961bc0f532143aeb44f70cd1e4efc",
+        "optimizationMetadataHash": "6bea53d361bcfd91b73606db9c6aa4a39c46f73063d3e348937aed73d1a11596"
+      },
+      "odcsId": "implements",
+      "version": "1.0.0"
+    }
+  ],
   "odcsId": "implements",
   "version": "1.0.0"
 }

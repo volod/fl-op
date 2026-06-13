@@ -11,6 +11,7 @@ from fl_op.solver.travel_time import (
     TravelLookup,
     _estimate_operation_seconds,
     travel_seconds,
+    travel_mode_for_vehicle,
 )
 
 # Routing node kinds. The depot is always node 0; each order contributes its
@@ -88,6 +89,7 @@ def pickup_node_indices(nodes: list[RoutingNode]) -> dict[int, int]:
 def build_time_matrix(
     nodes: list[RoutingNode],
     travel_lookup: Optional[TravelLookup] = None,
+    travel_mode: Optional[str] = None,
 ) -> list[list[int]]:
     """Pairwise arc times: network shortest path where one exists, haversine
     otherwise."""
@@ -95,11 +97,27 @@ def build_time_matrix(
         [
             travel_seconds(
                 a.location_ref, b.location_ref, a.lat, a.lon, b.lat, b.lon,
-                travel_lookup,
+                travel_lookup, travel_mode,
             )
             for b in nodes
         ]
         for a in nodes
+    ]
+
+
+def build_vehicle_time_matrices(
+    nodes: list[RoutingNode],
+    routing_vehicles: list[dict[str, Any]],
+    travel_lookup: Optional[TravelLookup] = None,
+) -> list[list[list[int]]]:
+    """Pairwise arc times per routing vehicle mode."""
+    return [
+        build_time_matrix(
+            nodes,
+            travel_lookup,
+            travel_mode_for_vehicle(rv["prime"]),
+        )
+        for rv in routing_vehicles
     ]
 
 
@@ -149,7 +167,7 @@ def _extract_dispatch_packages(
     depot_id: str,
     cluster_dict: dict[str, Any],
     now_epoch: int,
-    time_matrix: Optional[list[list[int]]] = None,
+    time_matrix: Optional[list[list[int]] | list[list[list[int]]]] = None,
     resource_prices: Optional[ResourcePrices] = None,
 ) -> tuple[list[dict[str, Any]], set[str]]:
     """Read the OR-Tools solution and build dispatch package dicts.
@@ -175,7 +193,7 @@ def _extract_dispatch_packages(
             node_idx = manager.IndexToNode(index)
             node = nodes[node_idx]
             if time_matrix is not None and node_idx != prev_node:
-                travel_s_in += time_matrix[prev_node][node_idx]
+                travel_s_in += _matrix_seconds(time_matrix, rv_idx, prev_node, node_idx)
             prev_node = node_idx
             if node.kind != NODE_TASK:
                 index = solution.Value(routing.NextVar(index))
@@ -227,3 +245,17 @@ def _extract_dispatch_packages(
             index = solution.Value(routing.NextVar(index))
 
     return dispatch_packages, served_task_ids
+
+
+def _matrix_seconds(
+    time_matrix: list[list[int]] | list[list[list[int]]],
+    vehicle_idx: int,
+    from_node: int,
+    to_node: int,
+) -> int:
+    if not time_matrix:
+        return 0
+    first = time_matrix[0]
+    if first and isinstance(first[0], list):
+        return int(time_matrix[vehicle_idx][from_node][to_node])  # type: ignore[index]
+    return int(time_matrix[from_node][to_node])  # type: ignore[index]

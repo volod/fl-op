@@ -70,6 +70,8 @@ def solve_cluster_inner(
         now_epoch,
         resource_prices,
     )
+    infeasible_orders = [*context.pre_infeasible, *infeasible_orders]
+    telemetry["n_unserved"] = len(infeasible_orders)
     logger.debug(
         "Cluster %s: %d dispatched, %d infeasible",
         context.cluster_id,

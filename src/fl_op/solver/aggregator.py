@@ -11,7 +11,12 @@ from fl_op.core.constants import (
     RELATED_MATERIAL_FILL_RATIO,
 )
 from fl_op.solver.greedy import _estimate_repositioning_cost
-from fl_op.solver.travel_time import TravelLookup, _estimate_operation_seconds
+from fl_op.solver.travel_time import (
+    TravelLookup,
+    _estimate_operation_seconds,
+    network_seconds,
+    travel_mode_for_vehicle,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -142,8 +147,11 @@ def _greedy_repositioning_cost(
     home_ref = str(getattr(vehicle, "home_depot_ref", "") or "")
     location_ref = str(getattr(order, "location_ref", "") or "")
     if travel_lookup and home_ref and location_ref and home_ref != location_ref:
-        seconds = travel_lookup.get((home_ref, location_ref)) or travel_lookup.get(
-            (location_ref, home_ref)
+        mode = travel_mode_for_vehicle(vehicle)
+        seconds = network_seconds(
+            travel_lookup, home_ref, location_ref, mode
+        ) or network_seconds(
+            travel_lookup, location_ref, home_ref, mode
         )
         if seconds:
             return (
