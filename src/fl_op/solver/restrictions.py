@@ -1,10 +1,14 @@
 """Location restriction semantics: restricted zones and time-restricted areas.
 
 Two structural restrictions a location may declare (canonical bindings
-``location.restrictedOperations`` and ``location.restrictionWindows``):
+``location.restrictedOperations``, ``location.restrictionWindows`` and
+``location.polygon``):
 
 - A restricted zone prohibits specific operation types at the location; a
   task demanding a prohibited operation there can never be served.
+- A geometric restricted area is any other location with a polygon and
+  prohibited operation set; tasks whose site geometry intersects the area are
+  blocked even when the task's location id is different from the area id.
 - A time-restricted area prohibits *starting* execution during declared
   intervals (curfew, protection period). The routing model removes those
   intervals from the task's allowed start range; this module pre-filters the
@@ -15,6 +19,7 @@ projected rows carry values; ``enforcement.py`` stays profile-driven.
 """
 
 import logging
+import ast
 from datetime import datetime
 from typing import Any, Optional
 
@@ -27,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 # Closed integer interval [start, end] in epoch seconds or horizon offsets.
 Interval = tuple[int, int]
+Point = tuple[float, float]
 
 
 def merge_intervals(intervals: list[Interval]) -> list[Interval]:
@@ -55,6 +61,122 @@ def subtract_intervals(allowed: list[Interval], blocked: list[Interval]) -> list
                 next_result.append((b_end + 1, a_end))
         result = next_result
     return result
+
+
+def parse_polygon(raw: Any) -> list[Point]:
+    """Parse a polygon represented as [[lat, lon], ...] or a stringified list."""
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            logger.warning("Skipping unparseable polygon %r", raw)
+            return []
+    if isinstance(raw, dict) and raw.get("type") == "Polygon":
+        coords = (raw.get("coordinates") or [[]])[0]
+        # GeoJSON uses [lon, lat]; normalize to the internal (x=lon, y=lat).
+        return [
+            (float(pair[0]), float(pair[1]))
+            for pair in coords
+            if isinstance(pair, (list, tuple)) and len(pair) >= 2
+        ]
+    points: list[Point] = []
+    if not isinstance(raw, (list, tuple)):
+        return []
+    for pair in raw:
+        if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+            continue
+        # Canonical location polygons are [lat, lon] pairs. Geometry math uses
+        # x=lon, y=lat, so the coordinate order is flipped here.
+        points.append((float(pair[1]), float(pair[0])))
+    if len(points) >= 2 and points[0] == points[-1]:
+        points.pop()
+    return points if len(points) >= 3 else []
+
+
+def _bbox(poly: list[Point]) -> tuple[float, float, float, float]:
+    xs = [p[0] for p in poly]
+    ys = [p[1] for p in poly]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _bbox_intersects(a: list[Point], b: list[Point]) -> bool:
+    amin_x, amin_y, amax_x, amax_y = _bbox(a)
+    bmin_x, bmin_y, bmax_x, bmax_y = _bbox(b)
+    return not (
+        amax_x < bmin_x
+        or bmax_x < amin_x
+        or amax_y < bmin_y
+        or bmax_y < amin_y
+    )
+
+
+def point_in_polygon(point: Point, polygon: list[Point]) -> bool:
+    """Ray-casting point-in-polygon check, boundary inclusive."""
+    if len(polygon) < 3:
+        return False
+    x, y = point
+    inside = False
+    prev = polygon[-1]
+    for cur in polygon:
+        if _point_on_segment(point, prev, cur):
+            return True
+        xi, yi = cur
+        xj, yj = prev
+        if (yi > y) != (yj > y):
+            x_at_y = (xj - xi) * (y - yi) / ((yj - yi) or 1e-12) + xi
+            if x <= x_at_y:
+                inside = not inside
+        prev = cur
+    return inside
+
+
+def polygons_intersect(a: list[Point], b: list[Point]) -> bool:
+    """Return True when two polygons overlap, touch, or one contains the other."""
+    if len(a) < 3 or len(b) < 3:
+        return False
+    if not _bbox_intersects(a, b):
+        return False
+    for pa1, pa2 in _edges(a):
+        for pb1, pb2 in _edges(b):
+            if _segments_intersect(pa1, pa2, pb1, pb2):
+                return True
+    return point_in_polygon(a[0], b) or point_in_polygon(b[0], a)
+
+
+def _edges(poly: list[Point]) -> list[tuple[Point, Point]]:
+    return list(zip(poly, [*poly[1:], poly[0]]))
+
+
+def _orientation(a: Point, b: Point, c: Point) -> float:
+    return (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1])
+
+
+def _point_on_segment(p: Point, a: Point, b: Point) -> bool:
+    eps = 1e-12
+    cross = (p[1] - a[1]) * (b[0] - a[0]) - (p[0] - a[0]) * (b[1] - a[1])
+    if abs(cross) > eps:
+        return False
+    return (
+        min(a[0], b[0]) - eps <= p[0] <= max(a[0], b[0]) + eps
+        and min(a[1], b[1]) - eps <= p[1] <= max(a[1], b[1]) + eps
+    )
+
+
+def _segments_intersect(p1: Point, q1: Point, p2: Point, q2: Point) -> bool:
+    o1 = _orientation(p1, q1, p2)
+    o2 = _orientation(p1, q1, q2)
+    o3 = _orientation(p2, q2, p1)
+    o4 = _orientation(p2, q2, q1)
+    if (o1 > 0) != (o2 > 0) and (o3 > 0) != (o4 > 0):
+        return True
+    return (
+        _point_on_segment(p2, p1, q1)
+        or _point_on_segment(q2, p1, q1)
+        or _point_on_segment(p1, p2, q2)
+        or _point_on_segment(q1, p2, q2)
+    )
 
 
 def _epoch_intervals(
@@ -103,6 +225,31 @@ def _deadline_epoch(order: Any, now_epoch: int) -> int:
         return now_epoch + ROUTING_HORIZON_S
 
 
+def _intersecting_restricted_area(
+    order: Any,
+    site: Any,
+    sites: list[Any],
+) -> Optional[Any]:
+    """Return the first geometric restricted area blocking ``order``."""
+    if site is None:
+        return None
+    site_polygon = parse_polygon(site.polygon)
+    site_point = (float(site.lon), float(site.lat))
+    for area in sites:
+        if area.location_id == site.location_id:
+            continue
+        if order.operation_type not in ops_set(area.restricted_operations):
+            continue
+        area_polygon = parse_polygon(area.polygon)
+        if not area_polygon:
+            continue
+        if site_polygon and polygons_intersect(site_polygon, area_polygon):
+            return area
+        if not site_polygon and point_in_polygon(site_point, area_polygon):
+            return area
+    return None
+
+
 def apply_location_restrictions(
     orders: list[Any],
     sites: list[Any],
@@ -111,8 +258,9 @@ def apply_location_restrictions(
     """Split off tasks blocked by their location's declared restrictions.
 
     A task is excluded when its operation type is prohibited at its location
-    (restricted zone), or when the location's restriction windows block every
-    admissible start in [now, deadline] (time-restricted area).
+    (restricted zone), when its geometry intersects another restricted polygon
+    prohibiting that operation, or when the location's restriction windows
+    block every admissible start in [now, deadline] (time-restricted area).
     """
     site_map = {s.location_id: s for s in sites}
     now_epoch = int(now.timestamp())
@@ -133,6 +281,20 @@ def apply_location_restrictions(
                     "detail": (
                         f"operation {order.operation_type} prohibited at "
                         f"{order.location_ref}"
+                    ),
+                }
+            )
+            continue
+        area = _intersecting_restricted_area(order, site, sites)
+        if area is not None:
+            infeasible.append(
+                {
+                    "task_id": order.task_id,
+                    "cluster_id": "",
+                    "reason_code": ReasonCode.RESTRICTED_ZONE.value,
+                    "detail": (
+                        f"operation {order.operation_type} at {order.location_ref} "
+                        f"intersects restricted area {area.location_id}"
                     ),
                 }
             )

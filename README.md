@@ -52,9 +52,9 @@ dispatch revisions. Artifacts land under `$DATA_DIR` (default: `.data/`).
 | `fl-op query-contract` | Fast feasibility + margin estimate for a new order (no solver). |
 | `fl-op contracts check-generation` | Validate ODCS contracts have complete generation hints (`--format avro\|proto\|es\|parquet`). |
 | `fl-op contracts generate` | Generate physical schemas from ODCS contracts (`--format avro\|proto\|es\|parquet`). |
-| `fl-op contracts validate` | Validate ODCS contracts: dual fingerprints and generation-ready check. |
-| `fl-op contracts evolution-check` | Check ODCS contracts against committed schema baselines (version-bump policy). |
-| `fl-op contracts evolution-freeze` | Record reviewed schema baselines for all ODCS contracts. |
+| `fl-op contracts validate` | Validate contracts: generated schemas, canonical mappings, fingerprints, profiles. |
+| `fl-op contracts evolution-check` | Check ODCS contracts against reviewed migration history and metadata-hash gates. |
+| `fl-op contracts evolution-freeze` | Record reviewed schema + metadata snapshots for all ODCS contracts. |
 | `fl-op snapshot build` | Map source data into canonical objects and build a reproducible snapshot. |
 | `fl-op plan periodic` | Periodic (batch) OR-Tools plan from an immutable snapshot. |
 | `fl-op plan rolling` | Rolling (stream) dispatch producing immutable plan revisions. |
@@ -74,7 +74,8 @@ example inputs and outputs.
   -- command-by-command walkthrough, sample inputs/outputs, benchmarks, and the
   `$DATA_DIR/` output layout.
 - **Current implementation**: [`docs/current-implementation.md`](docs/current-implementation.md)
-  -- contracts, snapshots, solver chain, rolling dispatch, and run-log analysis.
+  -- contracts, snapshots, solver chain, rolling dispatch, multi-domain projection,
+  schema evolution, serving, and run-log analysis.
 - **Optimization ontology**: [`docs/reference/optimization-ontology.md`](docs/reference/optimization-ontology.md)
   -- the domain-neutral entity ontology, semantic-term vocabulary, covered
   optimization use cases and domains, algorithms, and further reading.
@@ -86,13 +87,14 @@ example inputs and outputs.
   -- the three-layer architecture and the domain-neutral entity / capability /
   semantic-term contract the engine consumes.
 - **Domain mapping packs**: [`docs/reference/domain-mapping.md`](docs/reference/domain-mapping.md)
-  -- how a physical domain (agricultural, construction) projects onto the canonical
-  model, extra (analytical) fields, and how to add a new domain.
+  -- how physical domains (agricultural, construction, roadside) project onto the
+  canonical model, extra (analytical) fields, shared-fleet selection, and how to
+  add a new domain.
 - **Algorithms**: [`docs/algorithms/`](docs/algorithms/)
   -- problem formulation, solver pipeline, and a learning path for the math.
 - **Future improvements**: [`docs/future-improvements.md`](docs/future-improvements.md)
-  -- the open improvement backlog per subsystem (solver, ontology, contracts,
-  monitoring, distribution, tuning, serving, performance).
+  -- the open improvement backlog only; implemented design details live in the
+  current implementation guide.
 
 ---
 
@@ -116,3 +118,7 @@ Tests require no external services. The smoke test (`tests/test_smoke.py`)
 runs the full generate-data -> solve -> analyse -> reschedule -> query-contract
 pipeline at minimum scale. The session fixture in `tests/conftest.py` generates a
 50v/200i/20o/5d dataset shared across all unit tests.
+
+Domain selection is registry-driven. Use `ACTIVE_DOMAIN=<domain>` for a single
+pack or `ACTIVE_DOMAINS=agricultural,construction` for a staged shared-fleet
+snapshot; the solver still consumes the same canonical row vocabulary.

@@ -58,6 +58,59 @@ def _trigger_text(trigger: dict[str, Any]) -> str:
     return f"{label}:{entity}" if entity else label
 
 
+def _attribution(plan: dict[str, Any], task_id: str, assigned: bool) -> dict[str, Any]:
+    score = plan.get("score") or {}
+    key = "assignment_attribution" if assigned else "unassigned_attribution"
+    value = (score.get(key) or {}).get(task_id)
+    return value if isinstance(value, dict) else {}
+
+
+def _solver_explanation(
+    task_id: str,
+    new: dict[str, Any],
+    old: Optional[dict[str, Any]],
+    new_attr: dict[str, Any],
+    old_attr: dict[str, Any],
+    cause: str,
+) -> str:
+    parts = [
+        f"re-solved after {cause}",
+        "optimization tradeoff",
+    ]
+    cluster_id = new_attr.get("cluster_id") or old_attr.get("cluster_id")
+    if cluster_id:
+        parts.append(f"cluster {cluster_id}")
+    routing_status = new_attr.get("routing_status") or new_attr.get("solver_status")
+    if routing_status:
+        parts.append(f"solver status {routing_status}")
+    objective = new_attr.get("objective_value")
+    if objective is not None:
+        parts.append(f"objective {objective}")
+    first = new_attr.get("first_solution_objective")
+    if first is not None and objective is not None and first != objective:
+        parts.append(f"first solution objective {first}")
+    lns_delta = int(new_attr.get("lns_objective_delta") or 0)
+    if lns_delta:
+        parts.append(f"LNS delta {lns_delta}")
+    if new_attr.get("hit_time_limit"):
+        parts.append("cluster hit the time limit")
+    change_penalty = new.get("change_penalty") or 0
+    if change_penalty:
+        parts.append(f"change penalty {change_penalty}")
+    conflicts = [
+        f"{c.get('task_id')}:{c.get('reason_code')}"
+        for c in (new_attr.get("conflicts") or [])
+        if c.get("task_id")
+    ]
+    if conflicts:
+        parts.append("same-cluster conflicts " + ", ".join(conflicts))
+    if old is not None and old_attr and old_attr.get("objective_value") is not None:
+        parts.append(f"previous objective {old_attr.get('objective_value')}")
+    if len(parts) == 2:
+        parts.append(f"resources were reallocated for {task_id}")
+    return "; ".join(parts)
+
+
 def diff_revision_pair(
     prev: dict[str, Any],
     new: dict[str, Any],
@@ -89,6 +142,8 @@ def diff_revision_pair(
         old = prev_by_task.get(task_id)
         cur = new_by_task.get(task_id)
         action = corrective.get(task_id)
+        cur_attr = _attribution(new, task_id, assigned=cur is not None)
+        old_attr = _attribution(prev, task_id, assigned=old is not None)
 
         if old is not None and cur is not None:
             if cur.get("bundle_id") == old.get("bundle_id") and cur.get(
@@ -100,14 +155,16 @@ def diff_revision_pair(
             elif cur.get("is_frozen"):
                 explanation = "frozen (started or inside freeze window); start shifted only"
             else:
-                explanation = (
-                    f"re-solved after {cause}; resources were reallocated "
-                    "(optimization tradeoff, change penalty applied)"
+                explanation = _solver_explanation(
+                    task_id, cur, old, cur_attr, old_attr, cause
                 )
             record(task_id, "reassigned", explanation, old, cur)
         elif old is None and cur is not None:
             if task_id in prev_unassigned:
-                explanation = f"previously unassigned; became feasible after {cause}"
+                explanation = (
+                    f"previously unassigned; became feasible after {cause}; "
+                    + _solver_explanation(task_id, cur, None, cur_attr, {}, cause)
+                )
             elif task_id not in _task_universe(prev):
                 origin = (
                     "monitoring-derived service task"
@@ -116,12 +173,20 @@ def diff_revision_pair(
                 )
                 explanation = f"new task: {origin}"
             else:
-                explanation = f"assigned after {cause}"
+                explanation = _solver_explanation(
+                    task_id, cur, None, cur_attr, {}, cause
+                )
             record(task_id, "assigned", explanation, None, cur)
         elif old is not None and cur is None:
             if task_id in new_unassigned:
                 reason = new_unassigned[task_id].get("reason_code", "UNKNOWN")
-                explanation = f"became unassignable after {cause}: {reason}"
+                unassigned_attr = _attribution(new, task_id, assigned=False)
+                detail = unassigned_attr.get("detail") or reason
+                cluster_id = unassigned_attr.get("cluster_id")
+                suffix = f" in cluster {cluster_id}" if cluster_id else ""
+                explanation = (
+                    f"became unassignable after {cause}: {reason}{suffix}; {detail}"
+                )
                 record(task_id, "unassigned", explanation, old, None)
             elif action is not None:
                 record(task_id, "removed", f"{action['action']}: {action['detail']}", old, None)

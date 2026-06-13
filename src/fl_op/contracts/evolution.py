@@ -3,8 +3,11 @@
 Every ODCS contract (registered domain contracts plus the canonical entity and
 plan contracts) has a committed baseline snapshot under
 ``contracts/evolution/<contract_id>.json`` recording its version and physical
-field schema. The evolution check classifies the current contract against its
-baseline and enforces the version-bump policy:
+field schema. New snapshots also carry semantic fingerprints and a migration
+``history``. The evolution check validates every adjacent history pair plus the
+current contract, so consumers more than one version behind get an upgrade path
+instead of a single last-reviewed comparison. The current contract is classified
+against the latest reviewed snapshot and the version-bump policy is enforced:
 
 - identical schema: the version may stay or move forward (doc-only edits are
   patch-level by construction: descriptions are not part of the snapshot);
@@ -13,10 +16,12 @@ baseline and enforces the version-bump policy:
 - breaking change (removed fields, type changes, requiredness changes, added
   required fields): a major version bump over the baseline is required.
 
-A schema change without any version bump always fails. A contract without a
-committed baseline fails too, so CI cannot silently start covering a new
-contract without a reviewed baseline; ``fl-op contracts evolution-freeze``
-records baselines after review.
+A schema change without any version bump always fails. Registered contract
+metadata drift (``optimizationMetadataHash``) is checked in the same review
+flow: a mapping-semantic change fails until the reviewed snapshot/fingerprints
+are refreshed. A contract without a committed baseline fails too, so CI cannot
+silently start covering a new contract without a reviewed baseline;
+``fl-op contracts evolution-freeze`` records baselines after review.
 """
 
 import json
@@ -25,6 +30,8 @@ import pathlib
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from fl_op.contracts.fingerprint import mapping_metadata_hash
+from fl_op.contracts.mapping_loader import mapping_metadata_blocks
 from fl_op.contracts.odcs_loader import OdcsContract, load_odcs_contract
 from fl_op.contracts.registry import FileRegistry
 
@@ -59,6 +66,8 @@ class ContractEvolution:
     change_class: str
     details: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    history_versions: list[str] = field(default_factory=list)
+    optimization_metadata_hash: str = ""
 
     @property
     def ok(self) -> bool:
@@ -76,7 +85,9 @@ class EvolutionReport:
 
 
 def schema_snapshot(
-    odcs: OdcsContract, contract_id: Optional[str] = None
+    odcs: OdcsContract,
+    contract_id: Optional[str] = None,
+    fingerprints: Optional[dict[str, str]] = None,
 ) -> dict[str, Any]:
     """Extract the version-relevant physical schema of an ODCS contract.
 
@@ -98,12 +109,17 @@ def schema_snapshot(
                 "physicalType": prop.get("physicalType", ""),
                 "required": bool(prop.get("required", False)),
             }
-    return {
+    snapshot = {
         "contractId": contract_id or odcs.id,
         "odcsId": odcs.id,
         "version": odcs.version,
         "fields": fields,
     }
+    if fingerprints:
+        snapshot["fingerprints"] = {
+            k: v for k, v in sorted(fingerprints.items()) if v
+        }
+    return snapshot
 
 
 def classify_change(
@@ -248,6 +264,109 @@ def load_baseline(
     return json.loads(path.read_text())
 
 
+def _snapshot_fingerprints(snapshot: dict[str, Any]) -> dict[str, str]:
+    fps = snapshot.get("fingerprints")
+    return fps if isinstance(fps, dict) else {}
+
+
+def baseline_history(document: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return reviewed snapshots from a baseline document.
+
+    Flat pre-history baselines are treated as a one-snapshot history; freeze
+    writes the latest snapshot at the top level plus the full ``history`` list
+    for compatibility with older readers.
+    """
+    raw = document.get("history")
+    if isinstance(raw, list):
+        return [item for item in raw if isinstance(item, dict)]
+    return [document] if document else []
+
+
+def _current_snapshot(
+    registry: FileRegistry,
+    contract_id: str,
+    odcs: OdcsContract,
+) -> dict[str, Any]:
+    fingerprints: dict[str, str] = {}
+    if contract_id in registry.entries:
+        fingerprints = _evolution_fingerprints(registry, contract_id)
+    return schema_snapshot(odcs, contract_id, fingerprints=fingerprints)
+
+
+def _evolution_fingerprints(
+    registry: FileRegistry,
+    contract_id: str,
+) -> dict[str, str]:
+    """Fingerprints needed by evolution checks, tolerant of missing generated Avro.
+
+    Schema evolution compares ODCS fields directly, so generated Avro artifacts
+    are optional here. Temp contract-tree tests intentionally omit them.
+    """
+    entry = registry.get_entry(contract_id)
+    fps: dict[str, str] = {}
+    if entry.avro_ref and (registry.root / entry.avro_ref).exists():
+        fps["avroParsingFingerprint"] = registry.get_avro(
+            contract_id
+        ).avro_parsing_fingerprint
+    if entry.mapping_ref:
+        mapping_doc = mapping_metadata_blocks(registry.root / entry.mapping_ref)
+        fps["optimizationMetadataHash"] = mapping_metadata_hash(mapping_doc)
+    return fps
+
+
+def _metadata_drift_errors(
+    contract_id: str,
+    reviewed: dict[str, Any],
+    current: dict[str, Any],
+) -> list[str]:
+    reviewed_hash = _snapshot_fingerprints(reviewed).get("optimizationMetadataHash")
+    current_hash = _snapshot_fingerprints(current).get("optimizationMetadataHash")
+    if reviewed_hash and current_hash and reviewed_hash != current_hash:
+        return [
+            f"{contract_id}: optimization metadata changed "
+            f"({reviewed_hash} -> {current_hash}); review the mapping semantics "
+            "and record a new evolution snapshot"
+        ]
+    return []
+
+
+def _pairwise_history_errors(contract_id: str, history: list[dict[str, Any]]) -> list[str]:
+    """Validate every adjacent reviewed migration step in history."""
+    errors: list[str] = []
+    for prev, nxt in zip(history, history[1:]):
+        change = classify_change(prev.get("fields") or {}, nxt.get("fields") or {})
+        errors.extend(
+            version_policy_errors(
+                contract_id,
+                prev.get("version", ""),
+                nxt.get("version", ""),
+                change,
+            )
+        )
+        errors.extend(_metadata_drift_errors(contract_id, prev, nxt))
+    return errors
+
+
+def _merge_history(
+    existing: Optional[dict[str, Any]],
+    snapshot: dict[str, Any],
+) -> list[dict[str, Any]]:
+    history = baseline_history(existing or {})
+    comparable = {
+        key: snapshot.get(key)
+        for key in ("version", "fields", "fingerprints", "contractId", "odcsId")
+    }
+    if history:
+        latest = history[-1]
+        latest_comparable = {
+            key: latest.get(key)
+            for key in ("version", "fields", "fingerprints", "contractId", "odcsId")
+        }
+        if latest_comparable == comparable:
+            return history
+    return [*history, snapshot]
+
+
 def check_evolution(registry: Optional[FileRegistry] = None) -> EvolutionReport:
     """Check every contract against its committed baseline snapshot."""
     registry = registry or FileRegistry()
@@ -255,7 +374,7 @@ def check_evolution(registry: Optional[FileRegistry] = None) -> EvolutionReport:
     seen: set[str] = set()
 
     for contract_id, odcs in _iter_contracts(registry):
-        current = schema_snapshot(odcs, contract_id)
+        current = _current_snapshot(registry, contract_id, odcs)
         seen.add(contract_id)
         baseline = load_baseline(registry, contract_id)
         if baseline is None:
@@ -273,18 +392,53 @@ def check_evolution(registry: Optional[FileRegistry] = None) -> EvolutionReport:
                 )
             )
             continue
-        change = classify_change(baseline.get("fields") or {}, current["fields"])
+        history = baseline_history(baseline)
+        if not history:
+            report.contracts.append(
+                ContractEvolution(
+                    contract_id=contract_id,
+                    baseline_version=None,
+                    current_version=current["version"],
+                    change_class=CHANGE_BREAKING,
+                    errors=[
+                        f"{contract_id}: committed schema baseline has no history "
+                        "entries; rerun 'fl-op contracts evolution-freeze'"
+                    ],
+                )
+            )
+            continue
+        latest = history[-1]
+        change = classify_change(latest.get("fields") or {}, current["fields"])
         errors = version_policy_errors(
-            contract_id, baseline.get("version", ""), current["version"], change
+            contract_id, latest.get("version", ""), current["version"], change
         )
+        errors.extend(_metadata_drift_errors(contract_id, latest, current))
+        errors.extend(_pairwise_history_errors(contract_id, history))
+        if contract_id in registry.entries:
+            stored_hash = registry.get_entry(contract_id).stored_fingerprints.get(
+                "optimizationMetadataHash"
+            )
+            current_hash = _snapshot_fingerprints(current).get(
+                "optimizationMetadataHash"
+            )
+            if stored_hash and current_hash and stored_hash != current_hash:
+                errors.append(
+                    f"{contract_id}: optimizationMetadataHash changed from "
+                    f"{stored_hash} to {current_hash}; rerun validation with "
+                    "--write after reviewing the change"
+                )
         report.contracts.append(
             ContractEvolution(
                 contract_id=contract_id,
-                baseline_version=baseline.get("version", ""),
+                baseline_version=latest.get("version", ""),
                 current_version=current["version"],
                 change_class=change.change_class,
                 details=change.details,
                 errors=errors,
+                history_versions=[str(item.get("version", "")) for item in history],
+                optimization_metadata_hash=_snapshot_fingerprints(current).get(
+                    "optimizationMetadataHash", ""
+                ),
             )
         )
 
@@ -312,10 +466,13 @@ def freeze_baselines(registry: Optional[FileRegistry] = None) -> list[pathlib.Pa
     written: list[pathlib.Path] = []
     seen: set[str] = set()
     for contract_id, odcs in _iter_contracts(registry):
-        snapshot = schema_snapshot(odcs, contract_id)
+        snapshot = _current_snapshot(registry, contract_id, odcs)
         seen.add(contract_id)
         path = baseline_path(registry, contract_id)
-        path.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
+        existing = load_baseline(registry, contract_id)
+        history = _merge_history(existing, snapshot)
+        payload = {**snapshot, "history": history}
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
         written.append(path)
 
     for path in sorted(baselines.glob("*.json")):

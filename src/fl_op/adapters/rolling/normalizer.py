@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from fl_op.adapters.base import (
+    build_solver_attribution,
     dispatch_to_assignment,
     infeasible_to_unassigned,
     link_reservation_refs,
@@ -144,4 +145,19 @@ def _build_score(
         "solve_telemetry": summarize_cluster_telemetry(
             chain.cluster_telemetry if chain is not None else []
         ),
+        **_solver_attribution_score(chain),
     }
+
+
+def _solver_attribution_score(chain: Any) -> dict[str, Any]:
+    if chain is None:
+        return {}
+    assignment_attr, unassigned_attr = build_solver_attribution(
+        chain.dispatch, chain.infeasible, chain.cluster_telemetry
+    )
+    score: dict[str, Any] = {}
+    if assignment_attr:
+        score["assignment_attribution"] = assignment_attr
+    if unassigned_attr:
+        score["unassigned_attribution"] = unassigned_attr
+    return score

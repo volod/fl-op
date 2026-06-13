@@ -80,6 +80,17 @@ Available generator domains come from `contracts/registry.yaml` domain entries;
 each entry declares the Python generator callable used by the `generate-data`
 command's `--domain` option.
 
+Shared-fleet planning can project several selected domain packs into one
+canonical snapshot/solve when the source directory has been staged with the
+needed datasets. Select the set with `ACTIVE_DOMAINS` (or adapter config
+`domains` in Python). Policy merging is not automatic; the plan call still uses
+one optimization profile.
+
+```bash
+ACTIVE_DOMAINS=agricultural,construction .venv/bin/fl-op snapshot build --data mixed-data --mode periodic
+ACTIVE_DOMAINS=agricultural,construction .venv/bin/fl-op plan periodic --data mixed-data
+```
+
 ---
 
 ### Step 2 - Solve
@@ -270,16 +281,18 @@ See [`docs/current-implementation.md`](current-implementation.md).
 .venv/bin/fl-op contracts generate --format avro            # or proto, es, parquet
 # or: make contracts-gen   (generates all four formats)
 
-# Validate the contract suite: dual fingerprints, generation-ready check.
+# Validate the contract suite: generated schemas, canonical mappings,
+# fingerprints, profiles, and metadata-loss guards.
 .venv/bin/fl-op contracts validate
 # or: make contracts
 
-# Schema evolution: check every ODCS contract against its committed baseline
-# (contracts/evolution/), enforcing the version-bump policy: added optional
-# fields need a minor bump, anything breaking needs a major bump.
+# Schema evolution: check every ODCS contract against its committed reviewed
+# history (contracts/evolution/), enforcing pairwise version-bump policy:
+# added optional fields need a minor bump, anything breaking needs a major
+# bump, and mapping-semantic hash drift must be reviewed in the same gate.
 .venv/bin/fl-op contracts evolution-check     # or: make evolution-check
-# After a reviewed contract change (with the policy-required version bump),
-# record the new baselines:
+# After a reviewed contract/mapping change (with the policy-required version
+# bump where structural schema changed), record the new history snapshot:
 .venv/bin/fl-op contracts evolution-freeze    # or: make evolution-freeze
 
 # Build an immutable, reproducibly-hashed planning snapshot from source data.
@@ -292,7 +305,8 @@ See [`docs/current-implementation.md`](current-implementation.md).
 # freeze window protecting started/imminent tasks and a plan-instability penalty.
 .venv/bin/fl-op plan rolling --data latest --events events.jsonl
 
-# Explain why every changed assignment moved between rolling revisions.
+# Explain why every changed assignment moved between rolling revisions. Plain
+# re-solve changes include solver attribution from plan scores when available.
 .venv/bin/fl-op plan diff-revisions --plan latest
 
 # Full story end to end (contracts -> snapshot -> batch -> stream).

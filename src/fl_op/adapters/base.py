@@ -101,6 +101,75 @@ def infeasible_to_unassigned(inf: dict[str, Any]) -> UnassignedTask:
     )
 
 
+def build_solver_attribution(
+    dispatch: list[dict[str, Any]],
+    infeasible: list[dict[str, Any]],
+    cluster_telemetry: list[dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Build compact per-task attribution from solver outputs.
+
+    OR-Tools routing does not expose LP duals for the CP routing model, so the
+    actionable attribution comes from the solver's conflict surface: cluster
+    status, routing objective, LNS delta, time-limit state, and tasks dropped in
+    the same cluster. Revision-diff reporting consumes this map to explain why
+    a changed assignment moved without scraping logs.
+    """
+    telemetry_by_cluster = {
+        str(record.get("cluster_id", "")): record for record in cluster_telemetry
+    }
+    unserved_by_cluster: dict[str, list[dict[str, Any]]] = {}
+    for record in infeasible:
+        unserved_by_cluster.setdefault(str(record.get("cluster_id", "")), []).append(
+            {
+                "task_id": record.get("task_id", ""),
+                "reason_code": record.get("reason_code", ""),
+                "detail": record.get("detail", ""),
+            }
+        )
+
+    assignments: dict[str, dict[str, Any]] = {}
+    for record in dispatch:
+        task_id = str(record.get("task_id", ""))
+        cluster_id = str(record.get("cluster_id", ""))
+        telemetry = telemetry_by_cluster.get(cluster_id, {})
+        conflicts = [
+            item
+            for item in unserved_by_cluster.get(cluster_id, [])
+            if item.get("task_id") != task_id
+        ][:5]
+        assignments[task_id] = {
+            "source": "ortools-routing",
+            "cluster_id": cluster_id,
+            "solver_status": telemetry.get("status", ""),
+            "routing_status": telemetry.get("routing_status", ""),
+            "objective_value": telemetry.get("objective_value"),
+            "first_solution_objective": telemetry.get("first_solution_objective"),
+            "lns_objective_delta": telemetry.get("lns_objective_delta", 0),
+            "hit_time_limit": bool(telemetry.get("hit_time_limit", False)),
+            "n_cluster_tasks": telemetry.get("n_tasks", 0),
+            "n_unserved_in_cluster": telemetry.get("n_unserved", 0),
+            "estimated_margin_eur": record.get("estimated_margin_eur", 0.0),
+            "conflicts": conflicts,
+        }
+
+    unassigned: dict[str, dict[str, Any]] = {}
+    for record in infeasible:
+        task_id = str(record.get("task_id", ""))
+        cluster_id = str(record.get("cluster_id", ""))
+        telemetry = telemetry_by_cluster.get(cluster_id, {})
+        unassigned[task_id] = {
+            "source": "ortools-routing",
+            "cluster_id": cluster_id,
+            "solver_status": telemetry.get("status", ""),
+            "routing_status": telemetry.get("routing_status", ""),
+            "objective_value": telemetry.get("objective_value"),
+            "hit_time_limit": bool(telemetry.get("hit_time_limit", False)),
+            "reason_code": record.get("reason_code", ""),
+            "detail": record.get("detail", ""),
+        }
+    return assignments, unassigned
+
+
 def validate_profile_against_features(
     profile: "OptimizationProfile",
     supported_constraints: set[str],

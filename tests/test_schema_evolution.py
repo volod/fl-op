@@ -1,5 +1,7 @@
 """Schema-evolution policy: change classification, bump policy, baselines."""
 
+import copy
+import json
 import pathlib
 import shutil
 
@@ -11,6 +13,7 @@ from fl_op.contracts.evolution import (
     CHANGE_BREAKING,
     CHANGE_IDENTICAL,
     ChangeReport,
+    baseline_history,
     check_evolution,
     classify_change,
     freeze_baselines,
@@ -164,3 +167,51 @@ def test_check_flags_missing_and_stale_baselines(contracts_copy) -> None:
     assert vehicles.baseline_version is None
     assert vehicles.errors
     assert report.stale_baselines
+
+
+def test_freeze_records_history_and_metadata_fingerprints(contracts_copy) -> None:
+    registry = FileRegistry(root=contracts_copy)
+    freeze_baselines(registry)
+
+    payload = json.loads((contracts_copy / "evolution" / "vehicles.json").read_text())
+    history = baseline_history(payload)
+
+    assert history
+    assert history[-1]["version"] == payload["version"]
+    assert "optimizationMetadataHash" in history[-1]["fingerprints"]
+
+
+def test_check_validates_pairwise_migration_history(contracts_copy) -> None:
+    registry = FileRegistry(root=contracts_copy)
+    freeze_baselines(registry)
+    path = contracts_copy / "evolution" / "vehicles.json"
+    payload = json.loads(path.read_text())
+    first = baseline_history(payload)[-1]
+    broken = copy.deepcopy(first)
+    broken["version"] = "1.1.0"
+    broken["fields"].pop("vehicle_id")
+    payload["history"] = [first, broken]
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+    report = check_evolution(FileRegistry(root=contracts_copy))
+    vehicles = next(c for c in report.contracts if c.contract_id == "vehicles")
+
+    assert not report.ok
+    assert any("major version" in err for err in vehicles.errors)
+
+
+def test_check_unifies_metadata_hash_drift_with_evolution_gate(
+    contracts_copy,
+) -> None:
+    registry = FileRegistry(root=contracts_copy)
+    freeze_baselines(registry)
+    mapping_path = contracts_copy / "domains/agricultural/mappings/vehicles.mapping.yaml"
+    mapping_path.write_text(
+        mapping_path.read_text().replace("canonicalUnit: kW", "canonicalUnit: W", 1)
+    )
+
+    report = check_evolution(FileRegistry(root=contracts_copy))
+    vehicles = next(c for c in report.contracts if c.contract_id == "vehicles")
+
+    assert not report.ok
+    assert any("optimization metadata" in err for err in vehicles.errors)

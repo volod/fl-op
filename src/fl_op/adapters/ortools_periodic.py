@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from fl_op.adapters.base import (
+    build_solver_attribution,
     dispatch_to_assignment,
     infeasible_to_unassigned,
     link_reservation_refs,
@@ -83,7 +84,7 @@ class OrToolsPeriodicAdapter:
         # Project the canonical snapshot into the solver's working rows.
         from fl_op.solver.inputs import build_solver_inputs
 
-        return build_solver_inputs(snapshot)
+        return build_solver_inputs(snapshot, domains=config.get("domains"))
 
     def solve(self, solver_input: dict[str, Any], config: dict[str, Any]) -> SolverChainResult:
         return run_solver_chain(
@@ -195,6 +196,13 @@ def _build_plan(
         # in the solve_telemetry.json artifact of batch runs).
         "solve_telemetry": summarize_cluster_telemetry(raw.cluster_telemetry),
     }
+    assignment_attr, unassigned_attr = build_solver_attribution(
+        raw.dispatch, raw.infeasible, raw.cluster_telemetry
+    )
+    if assignment_attr:
+        score["assignment_attribution"] = assignment_attr
+    if unassigned_attr:
+        score["unassigned_attribution"] = unassigned_attr
     risk = RiskSummary(
         n_contract_deadlines_at_risk=len(unassigned),
         total_penalty_exposure_eur=sum(

@@ -29,14 +29,19 @@ signage and sensor assets along road segments.
 The construction pack is earthworks-native: volume-shaped jobs (excavation,
 trenching, hauling) carry m3 quantities and volume-moving attachments declare
 m3-per-hour work rates, so durations come from the rate, not an area proxy.
-One domain is active per run: registry.yaml `activeDomain`, overridable with
-`ACTIVE_DOMAIN=construction` or `ACTIVE_DOMAIN=roadside`. The `generate-data`
-command's `--domain` option resolves the generator callable declared by that
-domain's registry entry, and profile input contract refs resolve inside the
-active domain (`operators` can mean construction operators in the
-construction profile).
+By default one domain is active per run: registry.yaml `activeDomain`,
+overridable with `ACTIVE_DOMAIN=construction` or `ACTIVE_DOMAIN=roadside`.
+Shared-fleet runs can select several packs with
+`ACTIVE_DOMAINS=agricultural,construction` or by passing adapter config
+`domains=[...]`; the snapshot and solver projection then use the union of the
+selected domains' canonical bindings. The `generate-data` command's `--domain`
+option resolves the generator callable declared by that domain's registry
+entry, and profile input contract refs resolve inside the active domain
+(`operators` can mean construction operators in the construction profile).
 Solver inputs resolve their binding tables by canonical entity and asset role,
-never by contract id, so switching domains needs no engine change.
+never by contract id, so switching domains or unioning selected domains needs
+no solver change. Multi-domain policy merging is not automatic: the caller
+still supplies one optimization profile.
 
 ## Data and contracts
 
@@ -65,8 +70,8 @@ contract's optimization-mapped vs extra (analytical) physical fields.
 1. Validate contracts (`fl-op contracts validate`).
 2. Map source rows into canonical assets, locations, tasks, forecasts,
    observations, commitments, travel links, cost rates, and operational
-   bundles. Which datasets are mapped is derived from the registry (active
-   domain + mapping entity); domain-local contract aliases are resolved by
+   bundles. Which datasets are mapped is derived from the registry (selected
+   domains + mapping entity); domain-local contract aliases are resolved by
    the registry, and entity dispatch is a registered emitter table
    (`mapping/builders.py:ENTITY_EMITTERS`), so new datasets and entities plug
    in without engine changes.
@@ -109,7 +114,10 @@ contract's optimization-mapped vs extra (analytical) physical fields.
 5. Build an immutable, reproducibly-hashed `PlanningSnapshot` (purely canonical).
 6. An adapter projects the snapshot into canonical solver rows
    (`solver/inputs.py`) and runs the OR-Tools solver chain; derived service
-   tasks are dispatched alongside ordered work.
+   tasks are dispatched alongside ordered work. Projection is demand-driven
+   over the selected domain set: each section unions binding tables by
+   canonical entity and asset role, skips missing optional values so solver
+   row defaults survive, and still emits the same domain-neutral row types.
 7. Validate every published plan against the canonical plan output contract
    (`contracts/canonical/odcs/plan.odcs.yaml`, enforced by
    `contracts/plan_contract.py`): a plan whose required bindings do not
@@ -132,12 +140,16 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    Structural data semantics are filtered alongside: tasks none of whose
    workable windows can still be met (`CONTRACT_WINDOW_INFEASIBLE`,
    `solver/task_relations.py`), tasks blocked by their location's declared
-   restrictions -- prohibited operation types or restriction windows covering
-   every admissible start (`RESTRICTED_ZONE`, `solver/restrictions.py`) --
-   and, transitively, dependents of any excluded predecessor
+   restrictions -- prohibited operation types, geometric restricted-area
+   intersections, or restriction windows covering every admissible start
+   (`RESTRICTED_ZONE`, `solver/restrictions.py`) -- and, transitively,
+   dependents of any excluded predecessor
    (`PREDECESSOR_UNSERVED`). Fuel and material prices are resolved from the
    snapshot's cost-rate entities (`solver/cost_rates.py`), falling back to
    the engine cost constants for unpriced resources.
+   Geometric restrictions are a pre-solve exclusion: a task's site polygon
+   (or centroid when the site has no polygon) is tested against other
+   locations whose polygon declares the task's operation as prohibited.
 2. Build a prime-mover / related-equipment compatibility matrix from power
    capabilities (`solver/feasibility.py`). Matrices are cached by dataset
    hash (a content hash of the power capabilities and margin), so a repeated
@@ -245,13 +257,19 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    covers the operation plus the inbound travel leg, and its
    `estimated_margin_eur` is the order revenue net of fuel and material at
    the resolved prices (`ResourcePrices`), so per-dispatch margins and KPI
-   aggregates are priced from the same cost-rate data. A task whose predecessor went unserved
-   in the solve is withdrawn post-solve (`PREDECESSOR_UNSERVED`), so no plan
-   dispatches work whose precondition was dropped. Every cluster solve yields
-   a machine-readable telemetry record (`solver/solve_telemetry.py`: status,
-   wall time, OR-Tools search status, time-limit flag, objective values, LNS
-   budget/delta, worker RSS); batch runs write `solve_telemetry.json` and
-   plan scores carry the summary.
+   aggregates are priced from the same cost-rate data. A task whose predecessor
+   went unserved in the solve is withdrawn post-solve
+   (`PREDECESSOR_UNSERVED`), so no plan dispatches work whose precondition was
+   dropped. Every cluster solve yields a machine-readable telemetry record
+   (`solver/solve_telemetry.py`: status, wall time, OR-Tools search status,
+   time-limit flag, objective values, LNS budget/delta, worker RSS); batch
+   runs write `solve_telemetry.json` and plan scores carry the summary.
+   Adapter-normalized plans also carry per-task attribution maps in
+   `plan.score`: assigned tasks record their cluster status/objectives,
+   LNS delta, time-limit state, estimated margin, and same-cluster unserved
+   conflicts; unassigned tasks record their cluster status and normalized
+   infeasibility detail. Rolling revision diffs consume these maps for
+   post-hoc explanations.
 
 Enforcement activates only through the adapters (an `EnforcementPolicy` built
 from the profile's enforced constraints); the raw batch `solve` pipeline is
@@ -267,7 +285,7 @@ times; wall-clock now is only the fallback for the raw batch pipeline.
 ## Rolling dispatch
 
 Event application is binding-driven (`stream/apply.py`): the target source
-collection and its key column are resolved from the active domain's mapping
+collection and its key column are resolved from the selected domain mapping
 documents (canonical entity + identity binding), so the driver knows no
 domain-specific column names. Supported triggers:
 
@@ -321,7 +339,10 @@ Reuses the solver chain on a filtered canonical payload:
   metrics.
 - `fl-op plan diff-revisions` compares consecutive revisions of a rolling run
   and explains why every changed assignment moved (corrective action, trigger,
-  freeze, feasibility change, or optimization tradeoff), writing
+  freeze, feasibility change, or optimization tradeoff). For plain re-solves it
+  prefers the per-task solver attribution carried in plan scores: cluster id,
+  routing status/objective, first-solution objective, LNS delta, time-limit
+  state, change penalty, and same-cluster conflicts. Reports are written as
   `revision_diff.json`/`.txt` under `.data/revision-diff/<ts>/`.
 
 ### Corrective rescheduling
@@ -436,13 +457,17 @@ a rolling replan. Each check writes a `freshness.json` artifact under
 ## Schema evolution and CI
 
 - Every ODCS contract (registered domain contracts plus the canonical entity
-  and plan contracts) has a committed baseline snapshot of its field schema
-  under `contracts/evolution/` (`contracts/evolution.py`). The
-  `evolution-check` gate classifies the current schema against the baseline
-  and enforces the version-bump policy: added optional fields require at
-  least a minor bump; removals, type changes, requiredness changes, and
-  added required fields require a major bump; any change without a bump
-  fails. `evolution-freeze` records reviewed baselines.
+  and plan contracts) has a committed reviewed snapshot under
+  `contracts/evolution/` (`contracts/evolution.py`). New freezes write the
+  latest schema at the top level and retain a `history` array, so
+  `evolution-check` validates every adjacent reviewed migration pair plus the
+  current contract. The version-bump policy is unchanged: added optional
+  fields require at least a minor bump; removals, type changes, requiredness
+  changes, and added required fields require a major bump; any change without a
+  bump fails. Registered domain snapshots also carry the reviewed
+  `optimizationMetadataHash`, so mapping-semantic drift is gated in the same
+  review flow as structural schema evolution. Flat pre-history baseline files
+  remain readable as a one-entry history.
 - CI (`.github/workflows/ci.yml`, `make ci`) regenerates all physical
   schemas from ODCS before any validation, then runs the suite validation,
   domain validations, the evolution gate, and the tests.

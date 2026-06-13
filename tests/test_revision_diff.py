@@ -24,6 +24,16 @@ def _plan(assignments: list[dict], unassigned: list[dict] = None, corrective: li
     }
 
 
+def _plan_with_score(
+    assignments: list[dict],
+    score: dict[str, Any],
+    unassigned: list[dict] = None,
+) -> dict[str, Any]:
+    plan = _plan(assignments, unassigned=unassigned)
+    plan["score"] = score
+    return plan
+
+
 _TRIGGER = {
     "revision": 2,
     "trigger": "asset.unavailable",
@@ -102,3 +112,43 @@ def test_plain_resolve_change_is_marked_optimization_tradeoff() -> None:
     new = _plan([_assignment("order_1", "bundle-b", change_penalty=1000)])
     diff = diff_revision_pair(prev, new, _TRIGGER)
     assert "optimization tradeoff" in diff["changes"][0]["explanation"]
+
+
+def test_solver_attribution_explains_plain_reassignment() -> None:
+    prev = _plan_with_score(
+        [_assignment("order_1", "bundle-a")],
+        {
+            "assignment_attribution": {
+                "order_1": {
+                    "cluster_id": "cl-old",
+                    "objective_value": 5000,
+                }
+            }
+        },
+    )
+    new = _plan_with_score(
+        [_assignment("order_1", "bundle-b", change_penalty=1000)],
+        {
+            "assignment_attribution": {
+                "order_1": {
+                    "cluster_id": "cl-new",
+                    "routing_status": "ROUTING_SUCCESS",
+                    "objective_value": 4200,
+                    "first_solution_objective": 4800,
+                    "lns_objective_delta": -600,
+                    "conflicts": [
+                        {
+                            "task_id": "order_2",
+                            "reason_code": "OPTIMIZATION_TRADEOFF",
+                        }
+                    ],
+                }
+            }
+        },
+    )
+
+    diff = diff_revision_pair(prev, new, _TRIGGER)
+    explanation = diff["changes"][0]["explanation"]
+    assert "cluster cl-new" in explanation
+    assert "objective 4200" in explanation
+    assert "same-cluster conflicts order_2:OPTIMIZATION_TRADEOFF" in explanation

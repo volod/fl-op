@@ -7,6 +7,7 @@ without touching the engine.
 """
 
 import logging
+import ast
 from typing import Any, Callable
 
 from fl_op.canonical.asset import Asset, GeoLocation
@@ -68,6 +69,7 @@ def build_location(
         name=str(acc.get("name", "")),
         area_ha=float(acc["areaHa"]) if "areaHa" in acc else None,
         soil_type=str(acc.get("soilType", "")),
+        polygon=parse_polygon(acc.get("polygon")),
         restricted_operations=[str(op) for op in acc.get("restrictedOperations") or []],
         restriction_windows=parse_time_intervals(acc.get("restrictionWindows")),
         source_ref=f"{table.contract_id}:{location_id}",
@@ -120,6 +122,31 @@ def parse_time_intervals(raw: Any) -> list[TimeInterval]:
         except Exception:
             logger.warning("Skipping malformed time window %r", item)
     return intervals
+
+
+def parse_polygon(raw: Any) -> list[list[float]]:
+    """Parse canonical [lat, lon] polygon vertices from list or stringified list."""
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            logger.warning("Skipping malformed polygon %r", raw)
+            return []
+    if not isinstance(raw, (list, tuple)):
+        return []
+    points: list[list[float]] = []
+    for pair in raw:
+        if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+            continue
+        try:
+            points.append([float(pair[0]), float(pair[1])])
+        except (TypeError, ValueError):
+            logger.warning("Skipping malformed polygon vertex %r", pair)
+    if len(points) >= 2 and points[0] == points[-1]:
+        points.pop()
+    return points if len(points) >= 3 else []
 
 
 def build_forecast(table: BindingTable, acc: dict[str, Any]) -> Forecast:

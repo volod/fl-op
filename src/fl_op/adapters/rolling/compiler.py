@@ -116,7 +116,7 @@ def compile_rolling_state(
     from fl_op.solver.inputs import build_solver_inputs
 
     chain_result = _resolve_tasks(
-        build_solver_inputs(snapshot),
+        build_solver_inputs(snapshot, domains=config.get("domains")),
         tasks_to_resolve,
         [*frozen_assignments, *carried_forward],
         enforcement=config.get("enforcement"),

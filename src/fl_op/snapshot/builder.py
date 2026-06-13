@@ -43,18 +43,22 @@ from fl_op.snapshot.quality_trend import degrading_sources, record_error_rates
 logger = logging.getLogger(__name__)
 
 
-def mapped_contract_ids(registry: FileRegistry) -> list[str]:
+def mapped_contract_ids(
+    registry: FileRegistry,
+    domains: Optional[list[str]] = None,
+) -> list[str]:
     """Contracts the snapshot builder maps, derived from the registry.
 
-    Every active-domain contract whose mapping targets a snapshot-input
-    canonical entity participates, in registry declaration order. Domains add
-    or drop datasets by editing the registry only; no engine change is needed.
+    Every selected-domain contract whose mapping targets a snapshot-input
+    canonical entity participates, in registry declaration order. With multiple
+    domains selected, one canonical snapshot can carry a shared fleet and demand
+    from several domain packs.
     """
-    active = registry.active_domain
+    active = set(domains if domains is not None else registry.active_domains)
     ids: list[str] = []
     for cid in registry.list_contracts():
         entry = registry.get_entry(cid)
-        if active and entry.domain != active:
+        if active and entry.domain not in active:
             continue
         if not entry.mapping_ref:
             continue
@@ -85,11 +89,20 @@ def _load_source(
 class SnapshotBuilder:
     """Builds immutable planning snapshots from a source data directory."""
 
-    def __init__(self, registry: Optional[FileRegistry] = None) -> None:
+    def __init__(
+        self,
+        registry: Optional[FileRegistry] = None,
+        domains: Optional[list[str]] = None,
+    ) -> None:
         self.registry = registry or FileRegistry()
         self.engine = MappingEngine(self.registry)
-        self.mapped_contracts = mapped_contract_ids(self.registry)
-        profile_id = self.registry.active_profile_id
+        self.domains = domains if domains is not None else self.registry.active_domains
+        self.mapped_contracts = mapped_contract_ids(self.registry, self.domains)
+        profile_id = (
+            self.registry.active_profile_id
+            if len(self.domains) <= 1
+            else None
+        )
         profile_policy = (
             self.registry.get_profile(profile_id).monitoring
             if profile_id

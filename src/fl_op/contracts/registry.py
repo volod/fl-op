@@ -194,6 +194,34 @@ class FileRegistry:
         return self.index.get("activeDomain")
 
     @property
+    def active_domains(self) -> list[str]:
+        """Active domain set for shared-fleet planning.
+
+        ``ACTIVE_DOMAINS=agricultural,construction`` maps and projects multiple
+        registered packs into one canonical snapshot. If unset, the legacy
+        single ``ACTIVE_DOMAIN`` / registry ``activeDomain`` behavior is used.
+        """
+        override = os.environ.get("ACTIVE_DOMAINS")
+        if override:
+            known = set(self.index.get("domains") or {})
+            requested = [
+                item.strip()
+                for item in override.split(",")
+                if item.strip()
+            ]
+            if requested in (["*"], ["all"]):
+                return sorted(known)
+            unknown = sorted(set(requested) - known)
+            if unknown:
+                raise KeyError(
+                    f"ACTIVE_DOMAINS contains unregistered domains {unknown}; "
+                    f"known: {sorted(known)}"
+                )
+            return requested
+        domain = self.active_domain
+        return [domain] if domain else []
+
+    @property
     def active_profile_id(self) -> Optional[str]:
         """Profile id declared by the active domain, if any."""
         domain = self.active_domain

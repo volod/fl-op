@@ -69,16 +69,19 @@ metadata:
 ## Adaptive dataset discovery
 
 Which datasets feed a snapshot is derived from the registry, not hardcoded: the
-snapshot builder maps every active-domain contract whose mapping targets a
+snapshot builder maps every selected-domain contract whose mapping targets a
 snapshot-input canonical entity (`asset`, `location`, `task`, `forecast`,
 `observation`, `commitment`, `travel-link`, `cost-rate`), in registry
-declaration order. Adding a dataset to
-a domain therefore means adding the ODCS + mapping + registry entry; the engine
-picks it up automatically. The same holds in the stream layer: execution events
-resolve their target collection and key column from the mapping documents
-(canonical entity + identity binding), so `task.started`, `task.completed`,
-`asset.unavailable`, or `observation.recorded` work for any domain without
-column-name knowledge.
+declaration order. The default selection is the registry `activeDomain` or
+`ACTIVE_DOMAIN=<domain>`; shared-fleet runs can select several packs with
+`ACTIVE_DOMAINS=agricultural,construction` or adapter config `domains=[...]`.
+Adding a dataset to a domain therefore means adding the ODCS + mapping +
+registry entry; the engine picks it up automatically. The same holds in the
+stream layer: execution events resolve their target collection and key column
+from the mapping documents (canonical entity + identity binding), so
+`task.started`, `task.completed`, `asset.unavailable`, or
+`observation.recorded` work for any selected domain without column-name
+knowledge.
 
 ## Extra (analytical) fields
 
@@ -116,13 +119,23 @@ The metadata-loss guard (`FileRegistry.verify_no_metadata_loss`) fails the suite
 if a stored `optimizationMetadataHash` diverges from the recomputed one; re-stamp
 with `fl-op contracts validate --write`.
 
+The schema-evolution gate records the reviewed `optimizationMetadataHash` in
+`contracts/evolution/<contract>.json` history entries as well. That means a
+mapping-semantic change (unit switch, binding change, planning-use change) is
+reviewed in the same `contracts evolution-check` / `evolution-freeze` flow as
+physical field-schema changes, even though semantic drift is still a hash gate
+rather than a semver-classified structural delta.
+
 ## Adding a New Domain
 
 `contracts/domains/construction/` maps a different physical schema onto the
 **same** canonical model with no engine changes -- and is fully runnable:
 `fl-op generate-data --domain construction` produces a conforming dataset and
 `ACTIVE_DOMAIN=construction fl-op plan periodic --data latest` plans it
-through the identical pipeline:
+through the identical pipeline. A staged mixed source tree can also be projected
+with `ACTIVE_DOMAINS=agricultural,construction` so one canonical shared-fleet
+snapshot contains demand/resources from both packs; policy selection is still a
+caller decision, not an automatic profile merge.
 
 | Construction physical | Canonical entity / role | Reuses agricultural binding |
 |---|---|---|
@@ -151,9 +164,9 @@ To add a domain:
    Profiles can then reference local ids (`operators` in construction resolves
    to the `construction-operators` compatibility key). Register the profile
    under `profiles:`, provide source data or a generator, and select the
-   domain at run time with `ACTIVE_DOMAIN=<domain>`. The engine needs no
-   change: solver inputs resolve binding tables by canonical entity and asset
-   role.
+   domain at run time with `ACTIVE_DOMAIN=<domain>` or include it in
+   `ACTIVE_DOMAINS` for a shared-fleet run. The engine needs no change:
+   solver inputs resolve binding tables by canonical entity and asset role.
 
 `contracts/domains/roadside/` is the runnable monitoring-driven example:
 service vehicles, service kits, and technicians are dispatch resources;

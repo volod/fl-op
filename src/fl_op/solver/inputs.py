@@ -277,18 +277,30 @@ def _cost_rate_value(rate: "CostRate", binding: FieldBinding) -> Any:
     return mapping.get(key)
 
 
-def _tables_for_entity(registry: FileRegistry, entity: str) -> list:
+def _selected_domains(
+    registry: FileRegistry,
+    domains: Optional[list[str]] = None,
+) -> set[str]:
+    return set(domains if domains is not None else registry.active_domains)
+
+
+def _tables_for_entity(
+    registry: FileRegistry,
+    entity: str,
+    domains: Optional[list[str]] = None,
+) -> list:
     """Binding tables of the active-domain contracts mapping one entity.
 
-    Tables are resolved by canonical entity (and disambiguated by asset role
-    at the call site), never by contract id, so any registered domain pack
-    (agricultural, construction, ...) projects through the same code path.
+    Tables are resolved by canonical entity (and disambiguated by asset role at
+    the call site), never by contract id. With multiple domains selected the
+    tables are unioned so a shared-fleet snapshot can project every canonical
+    field demanded by any selected pack.
     """
-    active = registry.active_domain
+    active = _selected_domains(registry, domains)
     tables = []
     for cid in registry.list_contracts():
         entry = registry.get_entry(cid)
-        if active and entry.domain != active:
+        if active and entry.domain not in active:
             continue
         if not entry.mapping_ref:
             continue
@@ -298,9 +310,13 @@ def _tables_for_entity(registry: FileRegistry, entity: str) -> list:
     return tables
 
 
-def _table_for_entity(registry: FileRegistry, entity: str):
+def _table_for_entity(
+    registry: FileRegistry,
+    entity: str,
+    domains: Optional[list[str]] = None,
+):
     """Binding table of the first active-domain contract mapping one entity."""
-    tables = _tables_for_entity(registry, entity)
+    tables = _tables_for_entity(registry, entity, domains)
     return tables[0] if tables else None
 
 
@@ -347,31 +363,44 @@ def _project(bindings: list[FieldBinding], value_fn) -> dict[str, Any]:
         key = _canonical_key(binding)
         if key is None:
             continue
-        row[key] = value_fn(binding)
+        value = value_fn(binding)
+        if value is not None:
+            row[key] = value
+    return row
+
+
+def _project_many(tables: list[Any], value_fn) -> dict[str, Any]:
+    """Project with the union of several selected-domain binding tables."""
+    row: dict[str, Any] = {}
+    for table in tables:
+        row.update(_project(table.bindings, value_fn))
     return row
 
 
 def build_solver_inputs(
-    snapshot: "PlanningSnapshot", registry: Optional[FileRegistry] = None
+    snapshot: "PlanningSnapshot",
+    registry: Optional[FileRegistry] = None,
+    domains: Optional[list[str]] = None,
 ) -> dict[str, list[Any]]:
     """Reconstruct the typed canonical-row payload the solver chain consumes.
 
     Each section is projected binding-by-binding into a canonical dict (the
     declarative mapping stays the single source of projection) and then capped
     with its frozen row dataclass via from_canonical_dict. Binding tables are
-    resolved from the active domain by canonical entity and asset role, so
-    every registered domain pack projects without engine changes.
+    resolved from the selected domain set by canonical entity and asset role;
+    selecting several domains makes the projection demand-driven over the union
+    of their canonical bindings while the solver rows remain domain-neutral.
     """
     registry = registry or FileRegistry()
 
-    asset_tables = _tables_for_entity(registry, "asset")
-    location_tables = _tables_for_entity(registry, "location")
-    veh_t = _table_for_role(asset_tables, ROLE_PRIME_MOVER)
-    imp_t = _table_for_role(asset_tables, ROLE_RELATED)
-    ops_t = _table_for_role(asset_tables, ROLE_OPERATOR)
-    dep_t = _table_for_role(location_tables, ROLE_DEPOT)
-    fld_t = next((t for t in location_tables if t.asset_role != ROLE_DEPOT), None)
-    ord_t = _table_for_entity(registry, "task")
+    asset_tables = _tables_for_entity(registry, "asset", domains)
+    location_tables = _tables_for_entity(registry, "location", domains)
+    veh_ts = [t for t in asset_tables if t.asset_role == ROLE_PRIME_MOVER]
+    imp_ts = [t for t in asset_tables if t.asset_role == ROLE_RELATED]
+    ops_ts = [t for t in asset_tables if t.asset_role == ROLE_OPERATOR]
+    dep_ts = [t for t in location_tables if t.asset_role == ROLE_DEPOT]
+    fld_ts = [t for t in location_tables if t.asset_role != ROLE_DEPOT]
+    ord_ts = _tables_for_entity(registry, "task", domains)
 
     inv_lookup = {
         (p.inventory_location_ref, p.material_type): p.available_quantity
@@ -384,86 +413,86 @@ def build_solver_inputs(
     rows: dict[str, list[Any]] = {
         SECTION_PRIME_MOVERS: [
             PrimeMoverRow.from_canonical_dict(
-                _project(veh_t.bindings, lambda b, a=a: _asset_value(a, b))
+                _project_many(veh_ts, lambda b, a=a: _asset_value(a, b))
             )
             for a in assets_with_role(ROLE_PRIME_MOVER)
         ]
-        if veh_t is not None
+        if veh_ts
         else [],
         SECTION_RELATED: [
             RelatedRow.from_canonical_dict(
-                _project(imp_t.bindings, lambda b, a=a: _asset_value(a, b))
+                _project_many(imp_ts, lambda b, a=a: _asset_value(a, b))
             )
             for a in assets_with_role(ROLE_RELATED)
         ]
-        if imp_t is not None
+        if imp_ts
         else [],
         SECTION_OPERATORS: [
             OperatorRow.from_canonical_dict(
-                _project(ops_t.bindings, lambda b, a=a: _asset_value(a, b))
+                _project_many(ops_ts, lambda b, a=a: _asset_value(a, b))
             )
             for a in assets_with_role(ROLE_OPERATOR)
         ]
-        if ops_t is not None
+        if ops_ts
         else [],
         SECTION_SITES: [
             SiteRow.from_canonical_dict(
-                _project(fld_t.bindings, lambda b, l=l: _location_value(l, b, inv_lookup))
+                _project_many(fld_ts, lambda b, l=l: _location_value(l, b, inv_lookup))
             )
             for l in snapshot.locations
             if l.location_type == "field"
         ]
-        if fld_t is not None
+        if fld_ts
         else [],
         SECTION_DEPOTS: [
             DepotRow.from_canonical_dict(
-                _project(dep_t.bindings, lambda b, l=l: _location_value(l, b, inv_lookup))
+                _project_many(dep_ts, lambda b, l=l: _location_value(l, b, inv_lookup))
             )
             for l in snapshot.locations
             if l.location_type == "depot"
         ]
-        if dep_t is not None
+        if dep_ts
         else [],
         SECTION_TASKS: [
             TaskRow.from_canonical_dict(
-                _project(ord_t.bindings, lambda b, t=t: _task_value(t, b))
+                _project_many(ord_ts, lambda b, t=t: _task_value(t, b))
             )
             for t in snapshot.tasks
         ]
-        if ord_t is not None
+        if ord_ts
         else [],
     }
-    forecast_table = _table_for_entity(registry, "forecast")
+    forecast_tables = _tables_for_entity(registry, "forecast", domains)
     rows[SECTION_FORECASTS] = (
         [
             ForecastRow.from_canonical_dict(
-                _project(forecast_table.bindings, lambda b, f=f: _forecast_value(f, b))
+                _project_many(forecast_tables, lambda b, f=f: _forecast_value(f, b))
             )
             for f in snapshot.forecasts
         ]
-        if forecast_table is not None
+        if forecast_tables
         else []
     )
-    travel_table = _table_for_entity(registry, "travel-link")
+    travel_tables = _tables_for_entity(registry, "travel-link", domains)
     rows[SECTION_TRAVEL_LINKS] = (
         [
             TravelLinkRow.from_canonical_dict(
-                _project(travel_table.bindings, lambda b, l=l: _travel_link_value(l, b))
+                _project_many(travel_tables, lambda b, l=l: _travel_link_value(l, b))
             )
             for l in snapshot.travel_links
         ]
-        if travel_table is not None
+        if travel_tables
         else []
     )
-    rate_table = _table_for_entity(registry, "cost-rate")
+    rate_tables = _tables_for_entity(registry, "cost-rate", domains)
     rows[SECTION_COST_RATES] = (
         [
             CostRateRow.from_canonical_dict(
-                _project(rate_table.bindings, lambda b, r=r: _cost_rate_value(r, b))
+                _project_many(rate_tables, lambda b, r=r: _cost_rate_value(r, b))
             )
             for r in snapshot.cost_rates
         ]
-        if rate_table is not None
+        if rate_tables
         else []
     )
     logger.info(

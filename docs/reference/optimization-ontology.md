@@ -104,7 +104,7 @@ monitoring policy.
 | Capacity-constrained delivery (CVRP-style) | asset `load-capacity`/`load-capacities` vs task `load-demand`/`load-material` | Implemented (per-material dimensions, depot reload stops for multi-trip) |
 | Pickup-and-delivery pairing | task `pickup-location` | Implemented (paired nodes: same vehicle, pickup first, dropped together) |
 | Unit-uniform duration estimation | task `work-quantity`/`work-quantity-unit` vs asset `work-rates` | Implemented (rate wins; coverage model is the area fallback) |
-| Restricted zones / time-restricted areas | location `prohibited-operations`, `restricted-windows` | Implemented (zone exclusion + occupancy-aware interval blocking) |
+| Restricted zones / time-restricted areas | location `prohibited-operations`, `restricted-windows`, `polygon` | Implemented (zone exclusion, polygon/centroid restricted-area intersection, occupancy-aware interval blocking) |
 | Data-driven cost rates | cost-rate entity | Implemented (price resolution with constant fallback; fuel-priced routing arcs, net dispatch margins) |
 | Governed plan outputs | plan output contract | Implemented (publication-time binding validation) |
 | Standalone contractual commitments | commitment entity | Declared; engine consumes task-embedded deadline/penalty today |
@@ -120,17 +120,23 @@ The ontology is domain-agnostic; a domain is just a mapping pack:
 | Roadside infrastructure | `contracts/domains/roadside/` (full: data generator + solver wiring; run with `ACTIVE_DOMAIN=roadside`) | service vehicles/kits/technicians -> asset roles; road segments and service depots -> location; optional maintenance jobs -> task; signage/sensors -> stationary asset (`mobility: stationary`); inspection rounds -> observation that derives `EQUIPMENT_SERVICE` visits |
 | Utilities, marine, logistics | not yet authored | same entities; the roadside pack is the runnable template for monitoring-driven domains |
 
+One run normally selects one domain (`ACTIVE_DOMAIN`), but a staged mixed source
+tree can select several (`ACTIVE_DOMAINS=agricultural,construction`) and project
+their canonical bindings into one shared-fleet solve. The caller still supplies
+one optimization profile; policy merging across domains is not automatic.
+
 ## Known ontology gaps
 
 Deliberately not yet modeled (tracked in
 [future-improvements.md](../future-improvements.md)):
 
-- Reload stops are still a bounded construction, and geometric restricted
-  areas are not modelled.
+- Reload stops are still a bounded construction. Geometric restricted areas are
+  implemented as intersection filters, but partial-overlap severity and
+  routing around a restricted sub-area are not modelled.
 - Domain packs do not yet provide unit-conversion vocabularies or productivity
   modifiers beyond flat work-rate maps.
-- Cross-domain planning over one shared fleet is not modelled; one domain is
-  active per run.
+- Shared-fleet projection is supported, but composite multi-domain policy
+  merging is not modelled.
 
 ## Algorithms
 

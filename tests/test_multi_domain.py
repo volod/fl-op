@@ -19,6 +19,125 @@ _CONSTRUCTION_COUNTS = {"machines": 12, "attachments": 40, "jobs": 10, "yards": 
 _ROADSIDE_COUNTS = {"vehicles": 4, "kits": 8, "signs": 10, "depots": 2}
 
 
+def _cap(name: str, value, unit: str = ""):
+    from fl_op.canonical.asset import Capability
+
+    return Capability(
+        capability_id=name,
+        semantic_term=f"urn:xopt:capability:{name}",
+        value=value,
+        canonical_unit=unit or None,
+    )
+
+
+def _shared_fleet_snapshot():
+    from datetime import datetime, timedelta, timezone
+
+    from fl_op.canonical.asset import Asset, GeoLocation
+    from fl_op.canonical.bundle import BundleFeasibilitySummary
+    from fl_op.canonical.common import TimeInterval, VersionDimensions
+    from fl_op.canonical.enums import PlanningMode
+    from fl_op.canonical.location import Location
+    from fl_op.canonical.snapshot import PlanningSnapshot
+    from fl_op.canonical.task import Task
+
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    vehicle = Asset(
+        asset_id="shared_prime_1",
+        asset_type="shared-prime",
+        roles=["mobile-prime-mover"],
+        home_depot_ref="shared_depot",
+        location=GeoLocation(lat=48.5, lon=32.0),
+        capabilities=[
+            _cap("rated-power", 240.0, "kW"),
+            _cap("fuel-tank-volume", 200.0, "L"),
+            _cap("fuel-consumption-rate", 18.0, "L/h"),
+            _cap("travel-speed", 30.0, "km/h"),
+        ],
+    )
+    implement = Asset(
+        asset_id="shared_tool_1",
+        asset_type="shared-tool",
+        roles=["implement"],
+        home_depot_ref="shared_depot",
+        capabilities=[
+            _cap("compatible-operations", ["SPRAYING", "EXCAVATION"]),
+            _cap("required-power", 120.0, "kW"),
+            _cap("working-width", 12.0, "m"),
+            _cap("min-operating-speed", 4.0, "km/h"),
+            _cap("max-operating-speed", 8.0, "km/h"),
+            _cap("work-rates", {"m3": 100.0}),
+        ],
+    )
+    operator = Asset(
+        asset_id="shared_operator_1",
+        asset_type="operator",
+        roles=["operator"],
+        home_depot_ref="shared_depot",
+        capabilities=[
+            _cap("operator-certification", ["SPRAYING", "EXCAVATION"]),
+        ],
+    )
+    return PlanningSnapshot(
+        snapshot_id="snap-shared",
+        effective_at=now,
+        generated_at=now,
+        planning_mode=PlanningMode.PERIODIC,
+        planning_horizon=TimeInterval(**{"from": now, "to": now + timedelta(days=7)}),
+        version_dimensions=VersionDimensions(optimization_profile_version="0.1.0"),
+        assets=[vehicle, implement, operator],
+        locations=[
+            Location(
+                location_id="shared_depot",
+                location_type="depot",
+                lat=48.5,
+                lon=32.0,
+            ),
+            Location(
+                location_id="field_1",
+                location_type="field",
+                lat=48.51,
+                lon=32.01,
+                area_ha=5.0,
+            ),
+            Location(
+                location_id="site_1",
+                location_type="field",
+                lat=48.52,
+                lon=32.02,
+                area_ha=1.0,
+            ),
+        ],
+        bundle_summary=BundleFeasibilitySummary(),
+        tasks=[
+            Task(
+                task_id="agri_order_1",
+                order_id="contract-a",
+                operation_type="SPRAYING",
+                location_ref="field_1",
+                area_ha=5.0,
+                work_quantity=5.0,
+                work_quantity_unit="ha",
+                deadline=now + timedelta(days=2),
+                revenue_value_eur=1200.0,
+                penalty_per_day_eur=100.0,
+            ),
+            Task(
+                task_id="construction_job_1",
+                order_id="contract-c",
+                operation_type="EXCAVATION",
+                location_ref="site_1",
+                area_ha=1.0,
+                work_quantity=80.0,
+                work_quantity_unit="m3",
+                deadline=now + timedelta(days=3),
+                revenue_value_eur=1800.0,
+                penalty_per_day_eur=150.0,
+            ),
+        ],
+    )
+
+
 @pytest.fixture(scope="module")
 def construction_dataset_dir(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
     """Generate a small construction dataset once per module."""
@@ -155,6 +274,42 @@ class TestActiveDomainOverride:
         monkeypatch.setenv("ACTIVE_DOMAIN", "ghost-domain")
         with pytest.raises(KeyError, match="ghost-domain"):
             _ = FileRegistry().active_domain
+
+    def test_active_domains_env_selects_shared_domain_set(self, monkeypatch):
+        monkeypatch.setenv("ACTIVE_DOMAINS", "agricultural,construction")
+        assert FileRegistry().active_domains == ["agricultural", "construction"]
+
+
+class TestSharedFleetPlanning:
+    def test_solver_projection_unions_domain_bindings(self):
+        from fl_op.solver.inputs import SECTION_RELATED, SECTION_TASKS, build_solver_inputs
+
+        rows = build_solver_inputs(
+            _shared_fleet_snapshot(),
+            FileRegistry(),
+            domains=["agricultural", "construction"],
+        )
+        tasks = {task.task_id: task for task in rows[SECTION_TASKS]}
+
+        assert tasks["construction_job_1"].work_quantity_unit == "m3"
+        assert rows[SECTION_RELATED][0].work_rates == {"m3": 100.0}
+
+    def test_periodic_adapter_plans_shared_fleet_across_domains(self):
+        from fl_op.adapters.ortools_periodic import OrToolsPeriodicAdapter
+
+        registry = FileRegistry()
+        profile = registry.get_profile("agricultural-custom-services")
+        plan = OrToolsPeriodicAdapter().plan(
+            _shared_fleet_snapshot(),
+            profile,
+            {"domains": ["agricultural", "construction"]},
+        )
+        covered = {a.task_id for a in plan.assignments} | {
+            u.task_id for u in plan.unassigned_tasks
+        }
+
+        assert covered == {"agri_order_1", "construction_job_1"}
+        assert plan.assignments
 
 
 class TestConstructionGenerator:

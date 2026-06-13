@@ -7,6 +7,9 @@ from fl_op.solver.restrictions import (
     allowed_start_intervals,
     apply_location_restrictions,
     merge_intervals,
+    parse_polygon,
+    point_in_polygon,
+    polygons_intersect,
     subtract_intervals,
 )
 from fl_op.solver.types import SiteRow, TaskRow
@@ -30,10 +33,16 @@ def _order(oid: str, fid: str = "f0", op: str = "SPRAYING", windows: str = "",
     })
 
 
-def _site(fid: str = "f0", restricted_ops: str = "[]", windows: str = "[]") -> SiteRow:
+def _site(
+    fid: str = "f0",
+    restricted_ops: str = "[]",
+    windows: str = "[]",
+    polygon: str = "[]",
+) -> SiteRow:
     return SiteRow.from_canonical_dict({
         "location_id": fid, "lat": "48.5", "lon": "32.0", "area": "10",
         "restricted_operations": restricted_ops, "restriction_windows": windows,
+        "polygon": polygon,
     })
 
 
@@ -49,6 +58,53 @@ class TestIntervalAlgebra:
 
     def test_subtract_disjoint_is_noop(self):
         assert subtract_intervals([(0, 10)], [(20, 30)]) == [(0, 10)]
+
+
+class TestGeometricRestrictions:
+    def test_polygon_intersection_detects_overlap_and_containment(self):
+        a = parse_polygon("[[0, 0], [0, 2], [2, 2], [2, 0]]")
+        b = parse_polygon("[[1, 1], [1, 3], [3, 3], [3, 1]]")
+        c = parse_polygon("[[4, 4], [4, 5], [5, 5], [5, 4]]")
+        assert polygons_intersect(a, b)
+        assert not polygons_intersect(a, c)
+        assert point_in_polygon((1.0, 1.0), a)
+
+    def test_intersecting_restricted_area_excludes_task(self):
+        task_site = _site(
+            fid="field-1",
+            polygon="[[0, 0], [0, 2], [2, 2], [2, 0]]",
+        )
+        protected_area = _site(
+            fid="wetland",
+            restricted_ops="['SPRAYING']",
+            polygon="[[1, 1], [1, 3], [3, 3], [3, 1]]",
+        )
+
+        kept, infeasible = apply_location_restrictions(
+            [_order("o0", fid="field-1", op="SPRAYING")],
+            [task_site, protected_area],
+            _now(),
+        )
+
+        assert kept == []
+        assert infeasible[0]["reason_code"] == ReasonCode.RESTRICTED_ZONE.value
+        assert "intersects restricted area wetland" in infeasible[0]["detail"]
+
+    def test_centroid_inside_restricted_area_excludes_task_without_site_polygon(self):
+        protected_area = _site(
+            fid="wetland",
+            restricted_ops="['SPRAYING']",
+            polygon="[[48.0, 31.5], [48.0, 32.5], [49.0, 32.5], [49.0, 31.5]]",
+        )
+
+        kept, infeasible = apply_location_restrictions(
+            [_order("o0", fid="f0", op="SPRAYING")],
+            [_site(fid="f0"), protected_area],
+            _now(),
+        )
+
+        assert kept == []
+        assert infeasible[0]["task_id"] == "o0"
 
 
 class TestAllowedStartIntervals:
