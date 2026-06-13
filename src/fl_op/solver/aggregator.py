@@ -5,7 +5,14 @@ import logging
 import pathlib
 from typing import Any, Optional
 
-from fl_op.core.constants import FERTILIZER_COST_EUR_PER_KG, FUEL_COST_EUR_PER_L
+from fl_op.core.constants import (
+    FERTILIZER_COST_EUR_PER_KG,
+    FUEL_COST_EUR_PER_L,
+    RELATED_MATERIAL_FILL_RATIO,
+)
+from fl_op.solver.greedy import _estimate_repositioning_cost
+from fl_op.solver.travel_time import TravelLookup, _estimate_operation_seconds
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,6 +23,10 @@ def _compute_kpis(
     greedy_assignment: dict[str, tuple[int, int]],
     fuel_price_eur_per_l: Optional[float] = None,
     material_price_eur_per_kg: Optional[float] = None,
+    vehicles: Optional[list[Any]] = None,
+    implements: Optional[list[Any]] = None,
+    fields: Optional[list[Any]] = None,
+    travel_lookup: Optional[TravelLookup] = None,
 ) -> dict[str, Any]:
     """Aggregate schedule KPIs.
 
@@ -34,12 +45,15 @@ def _compute_kpis(
     total_fuel = sum(d.get("estimated_fuel_l", 0) for d in dispatch_packages)
     total_fertilizer = sum(d.get("estimated_fertilizer_kg", 0) for d in dispatch_packages)
 
-    order_map = {o.task_id: o for o in orders}
-    greedy_baseline = sum(
-        float(order_map[oid].revenue)
-        - float(order_map[oid].area) * fuel_price
-        for oid in greedy_assignment
-        if oid in order_map
+    greedy_baseline = _compute_greedy_baseline_margin(
+        orders,
+        greedy_assignment,
+        fuel_price,
+        material_price,
+        vehicles=vehicles,
+        implements=implements,
+        fields=fields,
+        travel_lookup=travel_lookup,
     )
 
     infeasibility_reasons: dict[str, int] = {}
@@ -61,6 +75,86 @@ def _compute_kpis(
     }
 
 
+def _compute_greedy_baseline_margin(
+    orders: list[Any],
+    greedy_assignment: dict[str, tuple[int, int]],
+    fuel_price: float,
+    material_price: float,
+    vehicles: Optional[list[Any]] = None,
+    implements: Optional[list[Any]] = None,
+    fields: Optional[list[Any]] = None,
+    travel_lookup: Optional[TravelLookup] = None,
+) -> float:
+    """Estimate the no-routing greedy baseline with dispatch-like net costs."""
+    order_map = {o.task_id: o for o in orders}
+    if vehicles is None or implements is None or fields is None:
+        return sum(
+            float(order_map[oid].revenue)
+            - float(order_map[oid].area) * fuel_price
+            for oid in greedy_assignment
+            if oid in order_map
+        )
+
+    field_map = {f.location_id: f for f in fields}
+    baseline = 0.0
+    for oid, (v_idx, i_idx) in greedy_assignment.items():
+        order = order_map.get(oid)
+        if order is None:
+            continue
+        try:
+            vehicle = vehicles[v_idx]
+            implement = implements[i_idx]
+        except (IndexError, TypeError):
+            continue
+
+        service_fuel_cost = (
+            _estimate_operation_seconds(order, implement)
+            / 3600.0
+            * float(vehicle.fuel_consumption_rate)
+            * fuel_price
+        )
+        material_cost = (
+            float(implement.material_capacity)
+            * RELATED_MATERIAL_FILL_RATIO
+            * material_price
+        )
+        repositioning_cost = _greedy_repositioning_cost(
+            order, vehicle, field_map.get(order.location_ref), fuel_price, travel_lookup
+        )
+        baseline += (
+            float(order.revenue)
+            - service_fuel_cost
+            - material_cost
+            - repositioning_cost
+        )
+    return baseline
+
+
+def _greedy_repositioning_cost(
+    order: Any,
+    vehicle: Any,
+    field: Any,
+    fuel_price: float,
+    travel_lookup: Optional[TravelLookup] = None,
+) -> float:
+    if field is None:
+        return 0.0
+    home_ref = str(getattr(vehicle, "home_depot_ref", "") or "")
+    location_ref = str(getattr(order, "location_ref", "") or "")
+    if travel_lookup and home_ref and location_ref and home_ref != location_ref:
+        seconds = travel_lookup.get((home_ref, location_ref)) or travel_lookup.get(
+            (location_ref, home_ref)
+        )
+        if seconds:
+            return (
+                float(seconds)
+                / 3600.0
+                * float(vehicle.fuel_consumption_rate)
+                * fuel_price
+            )
+    return _estimate_repositioning_cost(vehicle, field, fuel_price)
+
+
 def _write_json(obj: Any, path: pathlib.Path) -> None:
     with path.open("w") as fh:
         json.dump(obj, fh, indent=2, default=str)
@@ -79,7 +173,7 @@ def _write_report(
         f"Infeasible:   {kpis['n_infeasible']}",
         f"Total margin: {kpis['total_estimated_margin_eur']:.2f} EUR",
         f"Greedy base:  {kpis['greedy_baseline_margin_eur']:.2f} EUR",
-        f"Improvement:  {kpis['solver_improvement_eur']:.2f} EUR",
+        f"Margin delta: {kpis['solver_improvement_eur']:.2f} EUR",
         f"Total fuel:   {kpis['total_fuel_l']:.1f} L",
         "",
         "Infeasibility reasons:",

@@ -326,15 +326,19 @@ After all cluster workers complete, the aggregator:
 
 1. Merges all `DispatchPackage` lists into `schedule.json`
 2. Merges all `InfeasibleOrder` lists into `infeasible_orders.json`
-3. Computes a **greedy baseline** by running the greedy scorer alone (no OR-Tools)
-   to estimate what naive nearest-vehicle assignment would earn
+3. Computes a **greedy baseline** over the post-enforcement admitted task set
+   by running the greedy scorer alone (no OR-Tools) and netting the same
+   fuel/material prices used by the final plan
 4. Emits `schedule_kpis.json` with:
    - `n_dispatched`, `n_infeasible`
    - `total_estimated_margin_eur`
    - `greedy_baseline_margin_eur`
-   - `solver_improvement_eur` = total margin - greedy baseline
+   - `solver_improvement_eur` = total margin - admitted greedy baseline
 
-The KPI comparison quantifies OR-Tools' contribution over the greedy warm-start.
+The KPI comparison is a signed margin delta against the greedy warm-start
+diagnostic. It is not guaranteed positive: assignment-count priority, routing
+feasibility, material/dependency enforcement, or other constraints may trade
+away margin while preserving a feasible operational plan.
 
 ---
 

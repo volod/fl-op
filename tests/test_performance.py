@@ -184,6 +184,10 @@ class TestPreprocessingCache:
 
 
 class TestPoolSizing:
+    @pytest.fixture(autouse=True)
+    def _disable_feedback(self, monkeypatch):
+        monkeypatch.setattr(cluster_pool.constants, "SOLVER_FEEDBACK_ENABLED", False)
+
     def test_explicit_solver_workers_wins(self, monkeypatch):
         monkeypatch.setattr(cluster_pool, "SOLVER_WORKERS", 3)
         sizing = compute_pool_sizing([_cluster(5) for _ in range(10)])

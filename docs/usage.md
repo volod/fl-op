@@ -114,7 +114,7 @@ Dispatched:   17
 Infeasible:   3
 Total margin: 347629.82 EUR
 Greedy base:  386670.36 EUR
-Improvement:  -39040.54 EUR
+Margin delta: -39040.54 EUR
 Total fuel:   6905.8 L
 
 Infeasibility reasons:
@@ -167,8 +167,11 @@ Dispatch packages are keyed by canonical names (`prime_asset_id`,
 }
 ```
 
-`greedy_baseline_margin_eur` is what a naive nearest-vehicle greedy assignment
-would earn. `solver_improvement_eur` is how much OR-Tools improved on it.
+`greedy_baseline_margin_eur` is the admitted-task greedy warm-start margin
+estimated with the same fuel/material prices as the final plan.
+`solver_improvement_eur` is the signed final-plan margin delta against that
+baseline; it can be negative when routing feasibility, assignment-count
+priority, or other constraints trade away margin.
 
 To inspect the latest solver run in the terminal:
 

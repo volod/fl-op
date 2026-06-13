@@ -37,6 +37,23 @@ class SolverChainResult:
         self.material_reservations = material_reservations or []
 
 
+def _scored_for_cluster_tasks(
+    scored: dict[str, list[tuple[float, int, int]]],
+    clusters: list[dict[str, Any]],
+) -> dict[str, list[tuple[float, int, int]]]:
+    """Keep scored candidates for tasks still admitted to the cluster set."""
+    admitted_task_ids = {
+        task_id
+        for cluster in clusters
+        for task_id in cluster.get("task_ids", [])
+    }
+    return {
+        task_id: candidates
+        for task_id, candidates in scored.items()
+        if task_id in admitted_task_ids
+    }
+
+
 def run_solver_chain(
     rows: dict[str, list[Any]],
     matrix_out_dir: Optional[pathlib.Path] = None,
@@ -197,7 +214,9 @@ def run_solver_chain(
         clusters, order_index, depots_raw, enforcement.material_demand
     )
     enforcement_infeasible.extend(material_infeasible)
-    greedy_assignment = greedy_assign(scored, vehicle_index, implement_index)
+    greedy_assignment = greedy_assign(
+        _scored_for_cluster_tasks(scored, clusters), vehicle_index, implement_index
+    )
 
     all_dispatch, all_infeasible, cluster_telemetry = pool_solve(
         clusters, orders_raw, vehicles_raw, implements_raw, fields_raw, depots_raw,
@@ -219,6 +238,10 @@ def run_solver_chain(
         all_dispatch, all_infeasible, orders_raw, greedy_assignment,
         fuel_price_eur_per_l=fuel_price,
         material_price_eur_per_kg=material_price,
+        vehicles=vehicles_raw,
+        implements=implements_raw,
+        fields=fields_raw,
+        travel_lookup=travel_lookup,
     )
 
     return SolverChainResult(

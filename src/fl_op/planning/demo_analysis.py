@@ -127,7 +127,7 @@ def log_implementation_analysis(
         )
 
     logger.info(
-        "  objective delta : solver %+.2f EUR vs greedy baseline",
+        "  margin delta    : final plan %+.2f EUR vs admitted greedy baseline",
         float(score.get("solver_improvement_eur", 0.0)),
     )
 

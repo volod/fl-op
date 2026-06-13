@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from fl_op.core.constants import RELATED_MATERIAL_FILL_RATIO
 from fl_op.solver.cost_rates import ResourcePrices
 from fl_op.solver.travel_time import (
     TravelLookup,
@@ -158,8 +159,6 @@ def _extract_dispatch_packages(
     travel legs accumulate into the next task's inbound fuel. The margin is
     the order revenue net of fuel and material at the resolved prices.
     """
-    _FERTILIZER_FILL_RATIO = 0.8
-
     if resource_prices is None:
         resource_prices = ResourcePrices()
     dispatch_packages: list[dict[str, Any]] = []
@@ -197,7 +196,7 @@ def _extract_dispatch_packages(
             )
             travel_s_in = 0
             fertilizer_kg = (
-                float(rv["related"].material_capacity) * _FERTILIZER_FILL_RATIO
+                float(rv["related"].material_capacity) * RELATED_MATERIAL_FILL_RATIO
             )
             margin_eur = (
                 float(order.revenue)

@@ -288,6 +288,9 @@ FUEL_COST_EUR_PER_L: float = float(os.environ.get("FUEL_COST_EUR_PER_L", "1.45")
 # Liquid fertilizer cost per kilogram for inventory arc cost estimation.
 FERTILIZER_COST_EUR_PER_KG: float = float(os.environ.get("FERTILIZER_COST_EUR_PER_KG", "0.55"))
 
+# Share of a related-equipment material tank assumed consumed by one task.
+RELATED_MATERIAL_FILL_RATIO: float = 0.8
+
 # ---------------------------------------------------------------------------
 # Greedy scoring weights
 # ---------------------------------------------------------------------------

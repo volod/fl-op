@@ -11,7 +11,7 @@ import pytest
 
 from fl_op.solver.aggregator import _compute_kpis, _write_json, _write_report
 from fl_op.solver.cluster_pool import pool_solve
-from fl_op.solver.types import TaskRow
+from fl_op.solver.types import PrimeMoverRow, RelatedRow, SiteRow, TaskRow
 
 
 # ---------------------------------------------------------------------------
@@ -87,6 +87,69 @@ class TestComputeKpis:
         assert kpis["solver_improvement_eur"] == pytest.approx(
             kpis["total_estimated_margin_eur"] - kpis["greedy_baseline_margin_eur"]
         )
+
+    def test_greedy_baseline_uses_dispatch_like_net_costs_when_rows_available(self):
+        dispatch = [
+            {
+                "task_id": "o0",
+                "estimated_margin_eur": 900.0,
+                "estimated_fuel_l": 10.0,
+                "estimated_fertilizer_kg": 80.0,
+            },
+        ]
+        orders = [
+            TaskRow.from_canonical_dict(
+                {
+                    "task_id": "o0",
+                    "location_ref": "f0",
+                    "revenue": "1000",
+                    "service_duration_min": "60",
+                }
+            )
+        ]
+        vehicles = [
+            PrimeMoverRow.from_canonical_dict(
+                {
+                    "asset_id": "v0",
+                    "fuel_consumption_rate": "10",
+                    "lat": "48.5",
+                    "lon": "32.0",
+                }
+            )
+        ]
+        implements = [
+            RelatedRow.from_canonical_dict(
+                {
+                    "asset_id": "i0",
+                    "material_capacity": "100",
+                }
+            )
+        ]
+        fields = [
+            SiteRow.from_canonical_dict(
+                {
+                    "location_id": "f0",
+                    "lat": "48.5",
+                    "lon": "32.0",
+                }
+            )
+        ]
+
+        kpis = _compute_kpis(
+            dispatch,
+            [],
+            orders,
+            {"o0": (0, 0)},
+            fuel_price_eur_per_l=3.0,
+            material_price_eur_per_kg=2.0,
+            vehicles=vehicles,
+            implements=implements,
+            fields=fields,
+        )
+
+        # 1000 revenue - 10 L operation fuel * 3 - 80 kg material * 2.
+        assert kpis["greedy_baseline_margin_eur"] == pytest.approx(810.0)
+        assert kpis["solver_improvement_eur"] == pytest.approx(90.0)
 
     def test_required_keys_present(self):
         kpis = _compute_kpis([], [], [], {})

@@ -137,6 +137,12 @@ def _build_score(
         "n_service_escalated": by_action[CorrectiveActionType.SERVICE_ESCALATED],
         "plan_instability_penalty": n_changed * DEFAULT_CHANGE_PENALTY,
         "total_estimated_margin_eur": kpis.get("total_estimated_margin_eur", 0.0),
+        "greedy_baseline_margin_eur": kpis.get("greedy_baseline_margin_eur", 0.0),
+        "solver_improvement_eur": kpis.get("solver_improvement_eur", 0.0),
+        "total_fuel_l": kpis.get("total_fuel_l", 0.0),
+        "total_fuel_cost_eur": kpis.get("total_fuel_cost_eur", 0.0),
+        "total_fertilizer_kg": kpis.get("total_fertilizer_kg", 0.0),
+        "total_material_cost_eur": kpis.get("total_material_cost_eur", 0.0),
         "n_unassigned": len(unassigned),
         "n_clusters": chain.n_clusters if chain is not None else 0,
         "n_greedy_warm_start_assignments": (
