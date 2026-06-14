@@ -157,8 +157,253 @@
       },
       "odcsId": "inspection-rounds",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "roadside-inspection-rounds",
+      "fields": {
+        "finding_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "inspected_at": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "metric": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "quality_flag": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "round_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "sign_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "state_value": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "unit": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "value": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "6e835bc93432fa5942caf12a586e4241b12f4b5fd49dddc75218500f82ba1a14"
+      },
+      "odcsId": "inspection-rounds",
+      "registryArtifact": {
+        "artifactId": "roadside/inspection-rounds",
+        "artifactRef": "roadside/inspection-rounds@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "roadside",
+        "localId": "inspection-rounds",
+        "mappingVersion": "1.0.0",
+        "odcsId": "inspection-rounds",
+        "qualifiedId": "roadside/inspection-rounds",
+        "registryId": "roadside-inspection-rounds"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "observation",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "equipmentTelemetry",
+            "metricCodes": {
+              "battery_pct": "battery-level",
+              "sign_condition": "health-status"
+            },
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "inspection-rounds"
+          },
+          "field:finding_id": {
+            "binding": "observation.observationId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:observation-id"
+          },
+          "field:inspected_at": {
+            "binding": "observation.observedAt",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "monitoring"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:time:observed-at"
+          },
+          "field:metric": {
+            "binding": "observation.metric",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "monitoring"
+            ],
+            "semanticTerm": "urn:xopt:observation:metric"
+          },
+          "field:quality_flag": {
+            "binding": "observation.qualityFlag",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "monitoring"
+            ],
+            "semanticTerm": "urn:xopt:observation:quality-flag"
+          },
+          "field:sign_id": {
+            "binding": "observation.entityRef",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "monitoring"
+            ],
+            "semanticTerm": "urn:xopt:relationship:entity-ref"
+          },
+          "field:state_value": {
+            "binding": "observation.stateValue",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "monitoring"
+            ],
+            "semanticTerm": "urn:xopt:observation:state"
+          },
+          "field:unit": {
+            "binding": "observation.unit",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "monitoring"
+            ],
+            "semanticTerm": "urn:xopt:observation:unit"
+          },
+          "field:value": {
+            "binding": "observation.value",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "monitoring"
+            ],
+            "quantityKind": "measurement",
+            "semanticTerm": "urn:xopt:observation:value"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "inspection-rounds",
+  "registryArtifact": {
+    "artifactId": "roadside/inspection-rounds",
+    "artifactRef": "roadside/inspection-rounds@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "roadside",
+    "localId": "inspection-rounds",
+    "mappingVersion": "1.0.0",
+    "odcsId": "inspection-rounds",
+    "qualifiedId": "roadside/inspection-rounds",
+    "registryId": "roadside-inspection-rounds"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "canonicalEntity": "observation",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "equipmentTelemetry",
+        "metricCodes": {
+          "battery_pct": "battery-level",
+          "sign_condition": "health-status"
+        },
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "inspection-rounds"
+      },
+      "field:finding_id": {
+        "binding": "observation.observationId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:observation-id"
+      },
+      "field:inspected_at": {
+        "binding": "observation.observedAt",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "monitoring"
+        ],
+        "quantityKind": "timestamp",
+        "semanticTerm": "urn:xopt:time:observed-at"
+      },
+      "field:metric": {
+        "binding": "observation.metric",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "monitoring"
+        ],
+        "semanticTerm": "urn:xopt:observation:metric"
+      },
+      "field:quality_flag": {
+        "binding": "observation.qualityFlag",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "monitoring"
+        ],
+        "semanticTerm": "urn:xopt:observation:quality-flag"
+      },
+      "field:sign_id": {
+        "binding": "observation.entityRef",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "monitoring"
+        ],
+        "semanticTerm": "urn:xopt:relationship:entity-ref"
+      },
+      "field:state_value": {
+        "binding": "observation.stateValue",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "monitoring"
+        ],
+        "semanticTerm": "urn:xopt:observation:state"
+      },
+      "field:unit": {
+        "binding": "observation.unit",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "monitoring"
+        ],
+        "semanticTerm": "urn:xopt:observation:unit"
+      },
+      "field:value": {
+        "binding": "observation.value",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "monitoring"
+        ],
+        "quantityKind": "measurement",
+        "semanticTerm": "urn:xopt:observation:value"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

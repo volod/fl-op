@@ -75,8 +75,192 @@
       },
       "odcsId": "prices",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "drone-prices",
+      "fields": {
+        "per_unit": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "rate_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "rate_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "unit_price_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "valid_from": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "valid_to": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "8cc3bad338085bb537cc1cf9e28e4d65d4b725daa5aea67f231f9d6cb591047d"
+      },
+      "odcsId": "prices",
+      "registryArtifact": {
+        "artifactId": "drone_logistics/prices",
+        "artifactRef": "drone_logistics/prices@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "drone_logistics",
+        "localId": "prices",
+        "mappingVersion": "1.0.0",
+        "odcsId": "prices",
+        "qualifiedId": "drone_logistics/prices",
+        "registryId": "drone-prices"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "cost-rate",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "costRates",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "prices"
+          },
+          "field:per_unit": {
+            "binding": "costRate.perUnit",
+            "planningUse": [
+              "cost"
+            ],
+            "semanticTerm": "urn:xopt:cost:per-unit"
+          },
+          "field:rate_id": {
+            "binding": "costRate.costRateId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:cost-rate-id"
+          },
+          "field:rate_type": {
+            "binding": "costRate.rateType",
+            "planningUse": [
+              "cost"
+            ],
+            "semanticTerm": "urn:xopt:cost:rate-type"
+          },
+          "field:unit_price_eur": {
+            "binding": "costRate.unitPrice",
+            "canonicalUnit": "EUR",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "money",
+            "semanticTerm": "urn:xopt:cost:unit-price"
+          },
+          "field:valid_from": {
+            "binding": "costRate.validFrom",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:time:valid-from"
+          },
+          "field:valid_to": {
+            "binding": "costRate.validTo",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:time:valid-to"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "prices",
+  "registryArtifact": {
+    "artifactId": "drone_logistics/prices",
+    "artifactRef": "drone_logistics/prices@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "drone_logistics",
+    "localId": "prices",
+    "mappingVersion": "1.0.0",
+    "odcsId": "prices",
+    "qualifiedId": "drone_logistics/prices",
+    "registryId": "drone-prices"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "canonicalEntity": "cost-rate",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "costRates",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "prices"
+      },
+      "field:per_unit": {
+        "binding": "costRate.perUnit",
+        "planningUse": [
+          "cost"
+        ],
+        "semanticTerm": "urn:xopt:cost:per-unit"
+      },
+      "field:rate_id": {
+        "binding": "costRate.costRateId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:cost-rate-id"
+      },
+      "field:rate_type": {
+        "binding": "costRate.rateType",
+        "planningUse": [
+          "cost"
+        ],
+        "semanticTerm": "urn:xopt:cost:rate-type"
+      },
+      "field:unit_price_eur": {
+        "binding": "costRate.unitPrice",
+        "canonicalUnit": "EUR",
+        "planningUse": [
+          "cost"
+        ],
+        "quantityKind": "money",
+        "semanticTerm": "urn:xopt:cost:unit-price"
+      },
+      "field:valid_from": {
+        "binding": "costRate.validFrom",
+        "planningUse": [
+          "cost"
+        ],
+        "quantityKind": "timestamp",
+        "semanticTerm": "urn:xopt:time:valid-from"
+      },
+      "field:valid_to": {
+        "binding": "costRate.validTo",
+        "planningUse": [
+          "cost"
+        ],
+        "quantityKind": "timestamp",
+        "semanticTerm": "urn:xopt:time:valid-to"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

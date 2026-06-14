@@ -19,7 +19,6 @@ ids, power capabilities, the power margin), so a repeated solve over the same
 fleet skips the rebuild while any input change misses the cache.
 """
 
-import hashlib
 import logging
 from pathlib import Path
 from typing import Any
@@ -29,6 +28,7 @@ import numpy as np
 from fl_op.core import constants
 from fl_op.core.constants import POWER_MARGIN_PCT
 from fl_op.core.paths import DATA_ROOT
+from fl_op.provenance.namespace import content_hash
 
 logger = logging.getLogger(__name__)
 
@@ -76,16 +76,23 @@ def compat_cache_key(
     prime_movers: list[Any],
     related_equipment: list[Any],
 ) -> str:
-    """Content hash over everything the compatibility matrix derives from."""
-    digest = hashlib.sha256()
-    digest.update(f"margin:{POWER_MARGIN_PCT!r}".encode("ascii"))
-    for prime in prime_movers:
-        digest.update(f"p:{prime.asset_id}:{float(prime.rated_power)!r}".encode())
-    for related in related_equipment:
-        digest.update(
-            f"r:{related.asset_id}:{float(related.required_power)!r}".encode()
-        )
-    return digest.hexdigest()
+    """Content hash over everything the compatibility matrix derives from.
+
+    Routed through the shared provenance primitive so a namespace-version bump
+    invalidates every cached compatibility matrix at once.
+    """
+    payload = {
+        "kind": "compat-matrix",
+        "margin": repr(POWER_MARGIN_PCT),
+        "prime_movers": [
+            [prime.asset_id, repr(float(prime.rated_power))] for prime in prime_movers
+        ],
+        "related_equipment": [
+            [related.asset_id, repr(float(related.required_power))]
+            for related in related_equipment
+        ],
+    }
+    return content_hash("compat-matrix", payload)
 
 
 def cached_compat_matrix(

@@ -114,8 +114,203 @@
       },
       "odcsId": "prices",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "prices",
+      "fields": {
+        "per_unit": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "price_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "price_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "resource_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "valid_from": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "valid_to": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "60283bd5fa34ad6700b2c0e5fed075af33a8c7fe76aa4baf0a7ecf7fb758b8ee",
+        "optimizationMetadataHash": "68705fd516d52027d9d26ce3691ba6a5a5b202090c8206ec4a19c425662a1fdc"
+      },
+      "odcsId": "prices",
+      "registryArtifact": {
+        "artifactId": "agricultural/prices",
+        "artifactRef": "agricultural/prices@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "agricultural",
+        "localId": "prices",
+        "mappingVersion": "1.0.0",
+        "odcsId": "prices",
+        "qualifiedId": "agricultural/prices",
+        "registryId": "prices"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "cost-rate",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "resourcePrices",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "prices"
+          },
+          "field:per_unit": {
+            "binding": "costRate.perUnit",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "cost"
+            ],
+            "semanticTerm": "urn:xopt:cost:per-unit"
+          },
+          "field:price_eur": {
+            "binding": "costRate.unitPrice",
+            "canonicalUnit": "EUR",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "money",
+            "semanticTerm": "urn:xopt:cost:unit-price"
+          },
+          "field:price_id": {
+            "binding": "costRate.costRateId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:cost-rate-id"
+          },
+          "field:resource_type": {
+            "binding": "costRate.rateType",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "cost"
+            ],
+            "semanticTerm": "urn:xopt:cost:rate-type"
+          },
+          "field:valid_from": {
+            "binding": "costRate.validFrom",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:time:valid-from"
+          },
+          "field:valid_to": {
+            "binding": "costRate.validTo",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:time:valid-to"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "prices",
+  "registryArtifact": {
+    "artifactId": "agricultural/prices",
+    "artifactRef": "agricultural/prices@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "agricultural",
+    "localId": "prices",
+    "mappingVersion": "1.0.0",
+    "odcsId": "prices",
+    "qualifiedId": "agricultural/prices",
+    "registryId": "prices"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "canonicalEntity": "cost-rate",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "resourcePrices",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "prices"
+      },
+      "field:per_unit": {
+        "binding": "costRate.perUnit",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "cost"
+        ],
+        "semanticTerm": "urn:xopt:cost:per-unit"
+      },
+      "field:price_eur": {
+        "binding": "costRate.unitPrice",
+        "canonicalUnit": "EUR",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "cost"
+        ],
+        "quantityKind": "money",
+        "semanticTerm": "urn:xopt:cost:unit-price"
+      },
+      "field:price_id": {
+        "binding": "costRate.costRateId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:cost-rate-id"
+      },
+      "field:resource_type": {
+        "binding": "costRate.rateType",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "cost"
+        ],
+        "semanticTerm": "urn:xopt:cost:rate-type"
+      },
+      "field:valid_from": {
+        "binding": "costRate.validFrom",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "cost"
+        ],
+        "quantityKind": "timestamp",
+        "semanticTerm": "urn:xopt:time:valid-from"
+      },
+      "field:valid_to": {
+        "binding": "costRate.validTo",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "cost"
+        ],
+        "quantityKind": "timestamp",
+        "semanticTerm": "urn:xopt:time:valid-to"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

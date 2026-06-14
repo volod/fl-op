@@ -24,7 +24,18 @@ def test_suite_validates(registry: FileRegistry) -> None:
     report = validate_suite(registry)
     assert report.ok, [
         (c.contract_id, c.errors) for c in report.contracts if not c.ok
-    ] + report.profile_errors
+    ] + report.profile_errors + report.registry_errors
+
+
+def test_registry_exposes_versioned_contract_artifacts(registry: FileRegistry) -> None:
+    artifact = registry.contract_artifact("construction/operators")
+
+    assert artifact.registry_id == "construction-operators"
+    assert artifact.artifact_id == "construction/operators"
+    assert artifact.local_id == "operators"
+    assert artifact.contract_version
+    assert artifact.mapping_version == "1.0.0"
+    assert registry.resolve_contract_id(artifact.ref) == "construction-operators"
 
 
 def test_every_contract_has_canonical_mapping(registry: FileRegistry) -> None:

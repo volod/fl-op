@@ -36,12 +36,17 @@ _AVRO_BY_LOGICAL: dict[str, Any] = {
     "number": "double",
     "integer": "long",
     "array": {"type": "array", "items": "string"},
+    "object": {
+        "type": "map",
+        "values": ["null", "string", "double", "long", "boolean"],
+    },
 }
 _ARROW_BY_LOGICAL: dict[str, str] = {
     "string": "large_string",
     "number": "float64",
     "integer": "int64",
     "array": "list<large_string>",
+    "object": "map<large_string, large_string>",
 }
 
 # Payload list field -> generated nested record name.
@@ -49,6 +54,14 @@ _RECORD_NAMES = {
     "assignments": "PlanAssignment",
     "unassigned_tasks": "PlanUnassignedTask",
     "material_reservations": "PlanMaterialReservation",
+    "corrective_actions": "PlanCorrectiveAction",
+}
+
+# Payload object field -> generated nested record name.
+_OBJECT_NAMES = {
+    "score": "PlanScore",
+    "quality_summary": "PlanQualitySummary",
+    "risk_summary": "PlanRiskSummary",
 }
 
 # (payload_name, logicalType, required) for one schema field.
@@ -57,7 +70,11 @@ _FieldSpec = tuple[str, str, bool]
 
 def _plan_fields(
     contracts_root: pathlib.Path,
-) -> tuple[list[_FieldSpec], dict[str, list[_FieldSpec]]]:
+) -> tuple[
+    list[_FieldSpec],
+    dict[str, list[_FieldSpec]],
+    dict[str, list[_FieldSpec]],
+]:
     """Plan-envelope fields and per-list record fields, in payload vocabulary.
 
     Joins the plan ODCS contract (types, requiredness) with the publication
@@ -73,6 +90,7 @@ def _plan_fields(
                     by_binding[cp["value"]["binding"]] = prop
 
     top: list[_FieldSpec] = []
+    objects: dict[str, list[_FieldSpec]] = {}
     records: dict[str, list[_FieldSpec]] = {}
     for binding, path in _PLAN_BINDING_PATHS.items():
         prop = by_binding.get(binding)
@@ -85,9 +103,14 @@ def _plan_fields(
             records.setdefault(list_field, []).append(
                 (record_field, logical, required)
             )
+        elif "." in path:
+            object_field, nested_field = path.split(".", 1)
+            objects.setdefault(object_field, []).append(
+                (nested_field, logical, required)
+            )
         else:
             top.append((path, logical, required))
-    return top, records
+    return top, objects, records
 
 
 def _avro_field(name: str, logical: str, required: bool) -> dict[str, Any]:
@@ -100,8 +123,20 @@ def _avro_field(name: str, logical: str, required: bool) -> dict[str, Any]:
 def generate_plan_avro(contracts_root: Optional[pathlib.Path] = None) -> str:
     """Avro schema of the plan artifact: the envelope with nested record arrays."""
     root = contracts_root or CONTRACTS_ROOT
-    top, records = _plan_fields(root)
+    top, objects, records = _plan_fields(root)
     fields = [_avro_field(*spec) for spec in top]
+    for object_field in sorted(objects):
+        record = {
+            "type": "record",
+            "name": _OBJECT_NAMES.get(object_field, object_field.title()),
+            "fields": [_avro_field(*spec) for spec in objects[object_field]],
+        }
+        fields.append(
+            {
+                "name": object_field,
+                "type": record,
+            }
+        )
     for list_field in sorted(records):
         record = {
             "type": "record",
@@ -131,7 +166,7 @@ def generate_plan_avro(contracts_root: Optional[pathlib.Path] = None) -> str:
 def generate_plan_parquet(contracts_root: Optional[pathlib.Path] = None) -> str:
     """Arrow type descriptor of the plan artifact, nested lists as structs."""
     root = contracts_root or CONTRACTS_ROOT
-    top, records = _plan_fields(root)
+    top, objects, records = _plan_fields(root)
     fields: list[dict[str, Any]] = [
         {
             "name": name,
@@ -140,6 +175,22 @@ def generate_plan_parquet(contracts_root: Optional[pathlib.Path] = None) -> str:
         }
         for name, logical, required in top
     ]
+    for object_field in sorted(objects):
+        fields.append(
+            {
+                "name": object_field,
+                "arrow_type": f"struct<{_OBJECT_NAMES.get(object_field, object_field)}>",
+                "nullable": False,
+                "struct_fields": [
+                    {
+                        "name": name,
+                        "arrow_type": _ARROW_BY_LOGICAL.get(logical, "large_string"),
+                        "nullable": not required,
+                    }
+                    for name, logical, required in objects[object_field]
+                ],
+            }
+        )
     for list_field in sorted(records):
         fields.append(
             {

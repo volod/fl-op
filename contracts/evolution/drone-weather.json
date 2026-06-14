@@ -95,8 +95,246 @@
       },
       "odcsId": "weather",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "drone-weather",
+      "fields": {
+        "forecast_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "rain_mm_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "soil_moisture_pct": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "valid_from": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "valid_to": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "wind_ms": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "fae15251a5d6fe52401f8d79605d80a5c6971a1a5b3529568bb75122dfcc9825"
+      },
+      "odcsId": "weather",
+      "registryArtifact": {
+        "artifactId": "drone_logistics/weather",
+        "artifactRef": "drone_logistics/weather@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "drone_logistics",
+        "localId": "weather",
+        "mappingVersion": "1.0.0",
+        "odcsId": "weather",
+        "qualifiedId": "drone_logistics/weather",
+        "registryId": "drone-weather"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "forecast",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "weatherForecasts",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "weather"
+          },
+          "field:forecast_id": {
+            "binding": "forecast.forecastId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:forecast-id"
+          },
+          "field:lat": {
+            "binding": "forecast.location.lat",
+            "canonicalUnit": "deg",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:latitude"
+          },
+          "field:lon": {
+            "binding": "forecast.location.lon",
+            "canonicalUnit": "deg",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:longitude"
+          },
+          "field:rain_mm_per_h": {
+            "binding": "forecast.value.precipitationRate",
+            "canonicalUnit": "mm/h",
+            "planningUse": [
+              "weather-window"
+            ],
+            "quantityKind": "flow-rate",
+            "semanticTerm": "urn:xopt:forecast:precipitation-rate"
+          },
+          "field:soil_moisture_pct": {
+            "binding": "forecast.value.soilMoisture",
+            "canonicalUnit": "%",
+            "planningUse": [
+              "weather-window"
+            ],
+            "quantityKind": "ratio",
+            "semanticTerm": "urn:xopt:forecast:soil-moisture"
+          },
+          "field:valid_from": {
+            "binding": "forecast.forecastFor.from",
+            "planningUse": [
+              "weather-window"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:time:forecast-from"
+          },
+          "field:valid_to": {
+            "binding": "forecast.forecastFor.to",
+            "planningUse": [
+              "weather-window"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:time:forecast-to"
+          },
+          "field:wind_ms": {
+            "binding": "forecast.value.windSpeed",
+            "canonicalUnit": "m/s",
+            "planningUse": [
+              "weather-window"
+            ],
+            "quantityKind": "speed",
+            "semanticTerm": "urn:xopt:forecast:wind-speed"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "weather",
+  "registryArtifact": {
+    "artifactId": "drone_logistics/weather",
+    "artifactRef": "drone_logistics/weather@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "drone_logistics",
+    "localId": "weather",
+    "mappingVersion": "1.0.0",
+    "odcsId": "weather",
+    "qualifiedId": "drone_logistics/weather",
+    "registryId": "drone-weather"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "canonicalEntity": "forecast",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "weatherForecasts",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "weather"
+      },
+      "field:forecast_id": {
+        "binding": "forecast.forecastId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:forecast-id"
+      },
+      "field:lat": {
+        "binding": "forecast.location.lat",
+        "canonicalUnit": "deg",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:latitude"
+      },
+      "field:lon": {
+        "binding": "forecast.location.lon",
+        "canonicalUnit": "deg",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:longitude"
+      },
+      "field:rain_mm_per_h": {
+        "binding": "forecast.value.precipitationRate",
+        "canonicalUnit": "mm/h",
+        "planningUse": [
+          "weather-window"
+        ],
+        "quantityKind": "flow-rate",
+        "semanticTerm": "urn:xopt:forecast:precipitation-rate"
+      },
+      "field:soil_moisture_pct": {
+        "binding": "forecast.value.soilMoisture",
+        "canonicalUnit": "%",
+        "planningUse": [
+          "weather-window"
+        ],
+        "quantityKind": "ratio",
+        "semanticTerm": "urn:xopt:forecast:soil-moisture"
+      },
+      "field:valid_from": {
+        "binding": "forecast.forecastFor.from",
+        "planningUse": [
+          "weather-window"
+        ],
+        "quantityKind": "timestamp",
+        "semanticTerm": "urn:xopt:time:forecast-from"
+      },
+      "field:valid_to": {
+        "binding": "forecast.forecastFor.to",
+        "planningUse": [
+          "weather-window"
+        ],
+        "quantityKind": "timestamp",
+        "semanticTerm": "urn:xopt:time:forecast-to"
+      },
+      "field:wind_ms": {
+        "binding": "forecast.value.windSpeed",
+        "canonicalUnit": "m/s",
+        "planningUse": [
+          "weather-window"
+        ],
+        "quantityKind": "speed",
+        "semanticTerm": "urn:xopt:forecast:wind-speed"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

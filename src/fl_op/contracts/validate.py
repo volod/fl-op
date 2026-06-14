@@ -88,6 +88,7 @@ class SuiteReport:
     profile_ok: bool = False
     profile_errors: list[str] = field(default_factory=list)
     canonical_model: CanonicalModelReport = field(default_factory=CanonicalModelReport)
+    registry_errors: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -95,6 +96,7 @@ class SuiteReport:
             all(c.ok for c in self.contracts)
             and self.profile_ok
             and self.canonical_model.ok
+            and not self.registry_errors
         )
 
 
@@ -222,6 +224,46 @@ def validate_canonical_model() -> CanonicalModelReport:
     return report
 
 
+def validate_registry_artifacts(registry: FileRegistry) -> list[str]:
+    """Validate stable, versioned artifact ids for registered contracts."""
+    errors: list[str] = []
+    by_ref: dict[str, str] = {}
+    by_unversioned: dict[str, str] = {}
+
+    for contract_id in registry.list_contracts():
+        entry = registry.get_entry(contract_id)
+        artifact = registry.contract_artifact(contract_id)
+        if entry.domain and not entry.local_id:
+            errors.append(f"{contract_id}: domain contract is missing a local id")
+        if entry.odcs_ref and not artifact.contract_version:
+            errors.append(f"{contract_id}: artifact is missing an ODCS version")
+        if entry.mapping_ref and not artifact.mapping_version:
+            errors.append(f"{contract_id}: artifact is missing a mapping version")
+        if entry.domain and not artifact.artifact_id.startswith(f"{entry.domain}/"):
+            errors.append(
+                f"{contract_id}: artifact id '{artifact.artifact_id}' must be "
+                f"domain-qualified as '{entry.domain}/...'"
+            )
+
+        prior = by_ref.get(artifact.ref)
+        if prior and prior != contract_id:
+            errors.append(
+                f"{contract_id}: artifact ref '{artifact.ref}' duplicates {prior}"
+            )
+        by_ref[artifact.ref] = contract_id
+
+        prior_unversioned = by_unversioned.get(artifact.artifact_id)
+        if prior_unversioned and prior_unversioned != contract_id:
+            errors.append(
+                f"{contract_id}: artifact id '{artifact.artifact_id}' duplicates "
+                f"{prior_unversioned}; versioned registry refs must be stable "
+                "per contract artifact"
+            )
+        by_unversioned[artifact.artifact_id] = contract_id
+
+    return errors
+
+
 def validate_domain(
     domain: str, registry: FileRegistry | None = None
 ) -> DomainReport:
@@ -310,6 +352,7 @@ def validate_suite(
     report = SuiteReport(profile_id=",".join(profile_ids) or None)
 
     report.canonical_model = validate_canonical_model()
+    report.registry_errors.extend(validate_registry_artifacts(registry))
 
     model: Optional["CanonicalModel"]
     try:

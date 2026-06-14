@@ -52,6 +52,29 @@ _PLAN_BINDING_PATHS: dict[str, str] = {
     ),
     "plan.materialReservation.quantity": "material_reservations[].quantity",
     "plan.materialReservation.status": "material_reservations[].status",
+    "plan.score.optimizationObjective": "score.optimization_objective",
+    "plan.score.totalEstimatedMarginEur": "score.total_estimated_margin_eur",
+    "plan.score.greedyBaselineMarginEur": "score.greedy_baseline_margin_eur",
+    "plan.score.solverImprovementEur": "score.solver_improvement_eur",
+    "plan.score.totalCompletionTimeS": "score.total_completion_time_s",
+    "plan.score.avgCompletionTimeS": "score.avg_completion_time_s",
+    "plan.score.p95CompletionTimeS": "score.p95_completion_time_s",
+    "plan.score.maxCompletionTimeS": "score.max_completion_time_s",
+    "plan.score.nDispatched": "score.n_dispatched",
+    "plan.score.nUnassigned": "score.n_unassigned",
+    "plan.score.nClusters": "score.n_clusters",
+    "plan.score.planInstabilityPenalty": "score.plan_instability_penalty",
+    "plan.qualitySummary.nFindings": "quality_summary.n_findings",
+    "plan.qualitySummary.nEntitiesExcluded": "quality_summary.n_entities_excluded",
+    "plan.qualitySummary.nImputed": "quality_summary.n_imputed",
+    "plan.qualitySummary.bySeverity": "quality_summary.by_severity",
+    "plan.qualitySummary.observationErrorRates": (
+        "quality_summary.observation_error_rates"
+    ),
+    "plan.correctiveAction.action": "corrective_actions[].action",
+    "plan.correctiveAction.taskRef": "corrective_actions[].task_id",
+    "plan.correctiveAction.detail": "corrective_actions[].detail",
+    "plan.correctiveAction.evidence": "corrective_actions[].evidence",
 }
 
 _RECORD_PATH_SEPARATOR = "[]."
@@ -59,6 +82,15 @@ _RECORD_PATH_SEPARATOR = "[]."
 
 def _is_missing(value: Any) -> bool:
     return value is None or (isinstance(value, str) and value.strip() == "")
+
+
+def _resolve_path(payload: dict[str, Any], path: str) -> Any:
+    current: Any = payload
+    for part in path.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
 
 
 def validate_plan_payload(payload: dict[str, Any]) -> list[str]:
@@ -88,7 +120,7 @@ def validate_plan_payload(payload: dict[str, Any]) -> list[str]:
                         f"{list_field}[{n}].{record_field}: required binding "
                         f"'{fld.binding}' unresolved"
                     )
-        elif _is_missing(payload.get(path)):
+        elif _is_missing(_resolve_path(payload, path)):
             errors.append(
                 f"{path}: required binding '{fld.binding}' unresolved"
             )

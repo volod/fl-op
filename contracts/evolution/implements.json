@@ -159,8 +159,280 @@
       },
       "odcsId": "implements",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "implements",
+      "fields": {
+        "compatible_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "fertilizer_capacity_kg": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "implement_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "implement_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "max_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "min_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "required_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "working_width_m": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "5f840a05b595ceed0345e14af4cef069285961bc0f532143aeb44f70cd1e4efc",
+        "optimizationMetadataHash": "6bea53d361bcfd91b73606db9c6aa4a39c46f73063d3e348937aed73d1a11596"
+      },
+      "odcsId": "implements",
+      "registryArtifact": {
+        "artifactId": "agricultural/implements",
+        "artifactRef": "agricultural/implements@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "agricultural",
+        "localId": "implements",
+        "mappingVersion": "1.0.0",
+        "odcsId": "implements",
+        "qualifiedId": "agricultural/implements",
+        "registryId": "implements"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "assetRole": "implement",
+            "canonicalEntity": "asset",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "assetMaster",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "implements"
+          },
+          "field:compatible_operations": {
+            "binding": "asset.capabilities.compatibleOperations",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "compatibility-filter"
+            ],
+            "quantityKind": "categorical-set",
+            "semanticTerm": "urn:xopt:capability:compatible-operations"
+          },
+          "field:depot_id": {
+            "binding": "asset.homeDepotRef",
+            "planningUse": [
+              "assignment"
+            ],
+            "semanticTerm": "urn:xopt:relationship:home-depot"
+          },
+          "field:fertilizer_capacity_kg": {
+            "binding": "asset.capabilities.fertilizerCapacity",
+            "canonicalUnit": "kg",
+            "missingValuePolicy": "fallback-to-conservative-value",
+            "planningUse": [
+              "capacity"
+            ],
+            "quantityKind": "mass",
+            "semanticTerm": "urn:xopt:capability:fertilizer-capacity"
+          },
+          "field:implement_id": {
+            "binding": "asset.assetId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:asset-id"
+          },
+          "field:implement_type": {
+            "binding": "asset.assetType",
+            "planningUse": [
+              "classification"
+            ],
+            "semanticTerm": "urn:xopt:attribute:asset-type"
+          },
+          "field:max_speed_kmh": {
+            "binding": "asset.capabilities.maxOperatingSpeed",
+            "canonicalUnit": "km/h",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "speed",
+            "semanticTerm": "urn:xopt:capability:max-operating-speed"
+          },
+          "field:min_speed_kmh": {
+            "binding": "asset.capabilities.minOperatingSpeed",
+            "canonicalUnit": "km/h",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "speed",
+            "semanticTerm": "urn:xopt:capability:min-operating-speed"
+          },
+          "field:required_power_kw": {
+            "binding": "asset.capabilities.requiredPower",
+            "canonicalUnit": "kW",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "compatibility-filter"
+            ],
+            "qualityPolicyRef": "dq://implements/required-power/v1",
+            "quantityKind": "power",
+            "semanticTerm": "urn:xopt:capability:required-power"
+          },
+          "field:working_width_m": {
+            "binding": "asset.capabilities.workingWidth",
+            "canonicalUnit": "m",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "length",
+            "semanticTerm": "urn:xopt:capability:working-width"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "implements",
+  "registryArtifact": {
+    "artifactId": "agricultural/implements",
+    "artifactRef": "agricultural/implements@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "agricultural",
+    "localId": "implements",
+    "mappingVersion": "1.0.0",
+    "odcsId": "implements",
+    "qualifiedId": "agricultural/implements",
+    "registryId": "implements"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "assetRole": "implement",
+        "canonicalEntity": "asset",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "assetMaster",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "implements"
+      },
+      "field:compatible_operations": {
+        "binding": "asset.capabilities.compatibleOperations",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "compatibility-filter"
+        ],
+        "quantityKind": "categorical-set",
+        "semanticTerm": "urn:xopt:capability:compatible-operations"
+      },
+      "field:depot_id": {
+        "binding": "asset.homeDepotRef",
+        "planningUse": [
+          "assignment"
+        ],
+        "semanticTerm": "urn:xopt:relationship:home-depot"
+      },
+      "field:fertilizer_capacity_kg": {
+        "binding": "asset.capabilities.fertilizerCapacity",
+        "canonicalUnit": "kg",
+        "missingValuePolicy": "fallback-to-conservative-value",
+        "planningUse": [
+          "capacity"
+        ],
+        "quantityKind": "mass",
+        "semanticTerm": "urn:xopt:capability:fertilizer-capacity"
+      },
+      "field:implement_id": {
+        "binding": "asset.assetId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:asset-id"
+      },
+      "field:implement_type": {
+        "binding": "asset.assetType",
+        "planningUse": [
+          "classification"
+        ],
+        "semanticTerm": "urn:xopt:attribute:asset-type"
+      },
+      "field:max_speed_kmh": {
+        "binding": "asset.capabilities.maxOperatingSpeed",
+        "canonicalUnit": "km/h",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "speed",
+        "semanticTerm": "urn:xopt:capability:max-operating-speed"
+      },
+      "field:min_speed_kmh": {
+        "binding": "asset.capabilities.minOperatingSpeed",
+        "canonicalUnit": "km/h",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "speed",
+        "semanticTerm": "urn:xopt:capability:min-operating-speed"
+      },
+      "field:required_power_kw": {
+        "binding": "asset.capabilities.requiredPower",
+        "canonicalUnit": "kW",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "compatibility-filter"
+        ],
+        "qualityPolicyRef": "dq://implements/required-power/v1",
+        "quantityKind": "power",
+        "semanticTerm": "urn:xopt:capability:required-power"
+      },
+      "field:working_width_m": {
+        "binding": "asset.capabilities.workingWidth",
+        "canonicalUnit": "m",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "length",
+        "semanticTerm": "urn:xopt:capability:working-width"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

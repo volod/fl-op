@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: canonical-plan
-version: 0.1.0
+version: 1.0.0
 status: active
 name: Canonical Plan (output)
 domain: canonical
@@ -10,7 +10,8 @@ description:
   purpose: >-
     The canonical OUTPUT contract for published plans, mirroring the input
     entity contracts: the plan/revision envelope plus its assignment,
-    unassigned-task, and material-reservation records.
+    unassigned-task, material-reservation, score, quality-summary, and
+    corrective-action records.
   usage: >-
     Produced by solver adapters (src/fl_op/canonical/plan.py) and validated on
     publication (src/fl_op/contracts/plan_contract.py). Never consumed as
@@ -217,3 +218,159 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: plan.materialReservation.status, semanticTerm: urn:xopt:plan:reservation-status, planningUse: [lifecycle]}
+  - name: score
+    logicalType: object
+    properties:
+      - name: optimizationObjective
+        logicalType: string
+        required: false
+        description: Objective mode used for the solve.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.score.optimizationObjective, semanticTerm: urn:xopt:plan:optimization-objective, planningUse: [objective]}
+      - name: totalEstimatedMarginEur
+        logicalType: number
+        required: false
+        description: Total estimated margin across assigned work.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.score.totalEstimatedMarginEur, semanticTerm: urn:xopt:plan:margin-score, canonicalUnit: EUR, quantityKind: money, planningUse: [objective]}
+      - name: greedyBaselineMarginEur
+        logicalType: number
+        required: false
+        description: Margin of the greedy warm-start baseline.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.score.greedyBaselineMarginEur, semanticTerm: urn:xopt:plan:margin-score, canonicalUnit: EUR, quantityKind: money, planningUse: [objective]}
+      - name: solverImprovementEur
+        logicalType: number
+        required: false
+        description: Solver margin improvement over the greedy baseline.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.score.solverImprovementEur, semanticTerm: urn:xopt:plan:margin-score, canonicalUnit: EUR, quantityKind: money, planningUse: [objective]}
+      - name: totalCompletionTimeS
+        logicalType: number
+        required: false
+        description: Sum of assignment completion times.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.score.totalCompletionTimeS, semanticTerm: urn:xopt:plan:completion-time-score, canonicalUnit: s, quantityKind: duration, planningUse: [objective]}
+      - name: avgCompletionTimeS
+        logicalType: number
+        required: false
+        description: Mean assignment completion time.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.score.avgCompletionTimeS, semanticTerm: urn:xopt:plan:completion-time-score, canonicalUnit: s, quantityKind: duration, planningUse: [objective]}
+      - name: p95CompletionTimeS
+        logicalType: number
+        required: false
+        description: P95 assignment completion time.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.score.p95CompletionTimeS, semanticTerm: urn:xopt:plan:completion-time-score, canonicalUnit: s, quantityKind: duration, planningUse: [objective]}
+      - name: maxCompletionTimeS
+        logicalType: number
+        required: false
+        description: Maximum assignment completion time.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.score.maxCompletionTimeS, semanticTerm: urn:xopt:plan:completion-time-score, canonicalUnit: s, quantityKind: duration, planningUse: [objective]}
+      - name: nDispatched
+        logicalType: integer
+        required: false
+        description: Number of tasks assigned in the plan.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.score.nDispatched, semanticTerm: urn:xopt:plan:assignment-count, planningUse: [quality]}
+      - name: nUnassigned
+        logicalType: integer
+        required: false
+        description: Number of tasks left unassigned in the plan.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.score.nUnassigned, semanticTerm: urn:xopt:plan:assignment-count, planningUse: [quality]}
+      - name: nClusters
+        logicalType: integer
+        required: false
+        description: Number of solver clusters considered.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.score.nClusters, semanticTerm: urn:xopt:plan:cluster-count, planningUse: [solver-quality]}
+      - name: planInstabilityPenalty
+        logicalType: integer
+        required: false
+        description: Rolling-plan change penalty applied after freeze.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.score.planInstabilityPenalty, semanticTerm: urn:xopt:plan:instability-penalty, planningUse: [solver-quality]}
+  - name: qualitySummary
+    logicalType: object
+    properties:
+      - name: nFindings
+        logicalType: integer
+        required: true
+        description: Number of data-quality findings reflected in the plan.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.qualitySummary.nFindings, semanticTerm: urn:xopt:quality:finding-count, planningUse: [quality]}
+      - name: nEntitiesExcluded
+        logicalType: integer
+        required: true
+        description: Number of source entities excluded by quality policy.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.qualitySummary.nEntitiesExcluded, semanticTerm: urn:xopt:quality:entities-excluded, planningUse: [quality]}
+      - name: nImputed
+        logicalType: integer
+        required: true
+        description: Number of source values imputed by quality policy.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.qualitySummary.nImputed, semanticTerm: urn:xopt:quality:imputed-count, planningUse: [quality]}
+      - name: bySeverity
+        logicalType: object
+        required: false
+        description: Quality finding counts by severity.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.qualitySummary.bySeverity, semanticTerm: urn:xopt:quality:severity-counts, planningUse: [quality]}
+      - name: observationErrorRates
+        logicalType: object
+        required: false
+        description: Bad-reading share by source observation contract.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.qualitySummary.observationErrorRates, semanticTerm: urn:xopt:quality:observation-error-rates, planningUse: [quality]}
+  - name: correctiveAction
+    logicalType: object
+    properties:
+      - name: action
+        logicalType: string
+        required: true
+        description: Corrective action type applied by rolling planning.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.correctiveAction.action, semanticTerm: urn:xopt:plan:corrective-action, planningUse: [explanation]}
+      - name: taskRef
+        logicalType: string
+        required: true
+        description: Task affected by the corrective action.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.correctiveAction.taskRef, semanticTerm: urn:xopt:relationship:task, planningUse: [explanation]}
+      - name: detail
+        logicalType: string
+        required: false
+        description: Human-readable action detail.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.correctiveAction.detail, semanticTerm: urn:xopt:plan:evidence, planningUse: [explanation]}
+      - name: evidence
+        logicalType: object
+        required: false
+        description: Machine-readable evidence for the correction.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: plan.correctiveAction.evidence, semanticTerm: urn:xopt:plan:evidence, planningUse: [explanation]}

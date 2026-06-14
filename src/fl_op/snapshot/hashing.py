@@ -4,17 +4,27 @@ The hash covers the canonical content only: per-run identifiers, generation
 timestamp, and the non-canonical solver bridge payload are excluded. Rebuilding
 a snapshot from identical source records, effective timestamp, and version
 dimensions therefore yields an identical hash.
+
+The digest is a namespaced content hash pinned to ``SNAPSHOT_HASH_VERSION``.
+Pinning to a dedicated version (rather than the global ``NAMESPACE_VERSION``)
+keeps snapshot identity stable when the global cache version is bumped: a
+solver-cache invalidation must never re-identify snapshots or orphan the tuned
+overlays and manifests that cite them. The snapshot version is bumped only when
+the canonical content layout itself changes.
 """
 
-import hashlib
-import json
 from typing import Any
 
+from fl_op.core.constants import SNAPSHOT_HASH_VERSION
+from fl_op.provenance.namespace import content_hash
 
-def _canonical_json(content: dict[str, Any]) -> str:
-    return json.dumps(content, separators=(",", ":"), sort_keys=True, default=str)
+_SNAPSHOT_NAMESPACE = "snapshot"
 
 
 def compute_snapshot_hash(canonical_content: dict[str, Any]) -> str:
-    """SHA-256 over the canonical-JSON serialization of a snapshot's content."""
-    return hashlib.sha256(_canonical_json(canonical_content).encode("utf-8")).hexdigest()
+    """Namespaced SHA-256 over a snapshot's canonical-JSON content."""
+    return content_hash(
+        _SNAPSHOT_NAMESPACE,
+        canonical_content,
+        version=SNAPSHOT_HASH_VERSION,
+    )

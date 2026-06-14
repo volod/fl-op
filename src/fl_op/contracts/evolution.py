@@ -47,6 +47,9 @@ CHANGE_IDENTICAL = "identical"
 CHANGE_BACKWARD = "backward"
 CHANGE_BREAKING = "breaking"
 
+SEMANTIC_METADATA_KEY = "semanticMetadata"
+REGISTRY_ARTIFACT_KEY = "registryArtifact"
+
 
 @dataclass
 class ChangeReport:
@@ -68,6 +71,9 @@ class ContractEvolution:
     errors: list[str] = field(default_factory=list)
     history_versions: list[str] = field(default_factory=list)
     optimization_metadata_hash: str = ""
+    semantic_change_class: str = CHANGE_IDENTICAL
+    semantic_details: list[str] = field(default_factory=list)
+    mapping_version: str = ""
 
     @property
     def ok(self) -> bool:
@@ -120,6 +126,205 @@ def schema_snapshot(
             k: v for k, v in sorted(fingerprints.items()) if v
         }
     return snapshot
+
+
+def _normalize_json(value: Any) -> Any:
+    """Recursively normalize JSON-like metadata for deterministic comparison."""
+    if isinstance(value, dict):
+        return {k: _normalize_json(value[k]) for k in sorted(value)}
+    if isinstance(value, list):
+        return [_normalize_json(v) for v in value]
+    return value
+
+
+def _mapping_version(mapping_doc: dict[str, Any]) -> str:
+    meta = mapping_doc.get("metadata")
+    if not isinstance(meta, dict):
+        return ""
+    return str(meta.get("mappingVersion", "") or "")
+
+
+def _mapping_policy_blocks(mapping_doc: dict[str, Any]) -> dict[str, Any]:
+    """Semantic mapping metadata excluding cosmetic fields and mapping version."""
+    blocks: dict[str, Any] = {}
+    meta = mapping_doc.get("metadata")
+    if isinstance(meta, dict):
+        blocks["contract"] = {
+            k: v
+            for k, v in meta.items()
+            if k not in ("domain", "mappingVersion")
+        }
+    for fm in mapping_doc.get("fieldMappings", []):
+        if isinstance(fm, dict) and "sourceField" in fm:
+            blocks[f"field:{fm['sourceField']}"] = {
+                k: v for k, v in fm.items() if k != "sourceField"
+            }
+    return _normalize_json(blocks)
+
+
+def semantic_metadata_snapshot(mapping_doc: dict[str, Any]) -> dict[str, Any]:
+    """Versioned semantic snapshot used by the evolution policy."""
+    return {
+        "mappingVersion": _mapping_version(mapping_doc),
+        "blocks": _mapping_policy_blocks(mapping_doc),
+    }
+
+
+def _as_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if value is None:
+        return []
+    return [value]
+
+
+def _diff_additive_list(
+    field: str,
+    old_value: Any,
+    new_value: Any,
+    details: list[str],
+) -> str:
+    old = set(_as_list(old_value))
+    new = set(_as_list(new_value))
+    if old == new:
+        return CHANGE_IDENTICAL
+    removed = sorted(old - new)
+    added = sorted(new - old)
+    if removed:
+        details.append(f"{field} removed values {removed}")
+        return CHANGE_BREAKING
+    details.append(f"{field} added values {added}")
+    return CHANGE_BACKWARD
+
+
+def _diff_metric_codes(
+    old_codes: Any,
+    new_codes: Any,
+    details: list[str],
+) -> str:
+    old = old_codes if isinstance(old_codes, dict) else {}
+    new = new_codes if isinstance(new_codes, dict) else {}
+    change_class = CHANGE_IDENTICAL
+    for key, old_value in old.items():
+        if key not in new:
+            details.append(f"metricCodes removed '{key}'")
+            return CHANGE_BREAKING
+        if new[key] != old_value:
+            details.append(
+                f"metricCodes retargeted '{key}' "
+                f"'{old_value}' -> '{new[key]}'"
+            )
+            return CHANGE_BREAKING
+    added = sorted(set(new) - set(old))
+    if added:
+        details.append(f"metricCodes added {added}")
+        change_class = CHANGE_BACKWARD
+    return change_class
+
+
+def _max_change(left: str, right: str) -> str:
+    order = {
+        CHANGE_IDENTICAL: 0,
+        CHANGE_BACKWARD: 1,
+        CHANGE_BREAKING: 2,
+    }
+    return left if order[left] >= order[right] else right
+
+
+def classify_semantic_metadata_change(
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+) -> ChangeReport:
+    """Classify mapping-semantic drift and its required version bump.
+
+    Explicit rules:
+    - unit/quantity-kind conversions and enum/list expansions are backward
+      compatible and require at least a minor mapping-version bump;
+    - binding or semantic-term retargeting, field removals, enum contractions,
+      and unknown metadata rewrites are breaking and require a major bump.
+    """
+    baseline_blocks = baseline.get("blocks") or {}
+    current_blocks = current.get("blocks") or {}
+    if baseline_blocks == current_blocks:
+        return ChangeReport(CHANGE_IDENTICAL)
+
+    details: list[str] = []
+    change_class = CHANGE_IDENTICAL
+
+    baseline_keys = set(baseline_blocks)
+    current_keys = set(current_blocks)
+    for key in sorted(baseline_keys - current_keys):
+        details.append(f"removed semantic block '{key}'")
+        change_class = CHANGE_BREAKING
+    for key in sorted(current_keys - baseline_keys):
+        details.append(f"added semantic block '{key}'")
+        change_class = _max_change(change_class, CHANGE_BACKWARD)
+
+    for key in sorted(baseline_keys & current_keys):
+        old = baseline_blocks.get(key)
+        new = current_blocks.get(key)
+        if old == new:
+            continue
+        if not isinstance(old, dict) or not isinstance(new, dict):
+            details.append(f"{key} changed")
+            change_class = CHANGE_BREAKING
+            continue
+
+        if key == "contract":
+            for field in sorted(set(old) | set(new)):
+                if field == "permittedPlanningUses":
+                    change_class = _max_change(
+                        change_class,
+                        _diff_additive_list(
+                            f"{key}.{field}", old.get(field), new.get(field), details
+                        ),
+                    )
+                elif field == "metricCodes":
+                    change_class = _max_change(
+                        change_class,
+                        _diff_metric_codes(old.get(field), new.get(field), details),
+                    )
+                elif old.get(field) != new.get(field):
+                    details.append(
+                        f"{key}.{field} changed "
+                        f"'{old.get(field)}' -> '{new.get(field)}'"
+                    )
+                    change_class = CHANGE_BREAKING
+            continue
+
+        for field in sorted(set(old) | set(new)):
+            if field in {"canonicalUnit", "quantityKind"}:
+                if old.get(field) != new.get(field):
+                    details.append(
+                        f"{key}.{field} changed "
+                        f"'{old.get(field)}' -> '{new.get(field)}'"
+                    )
+                    if old.get(field) and not new.get(field):
+                        change_class = CHANGE_BREAKING
+                    else:
+                        change_class = _max_change(change_class, CHANGE_BACKWARD)
+            elif field == "planningUse":
+                change_class = _max_change(
+                    change_class,
+                    _diff_additive_list(
+                        f"{key}.{field}", old.get(field), new.get(field), details
+                    ),
+                )
+            elif field in {"binding", "semanticTerm"}:
+                if old.get(field) != new.get(field):
+                    details.append(
+                        f"{key}.{field} retargeted "
+                        f"'{old.get(field)}' -> '{new.get(field)}'"
+                    )
+                    change_class = CHANGE_BREAKING
+            elif old.get(field) != new.get(field):
+                details.append(
+                    f"{key}.{field} changed "
+                    f"'{old.get(field)}' -> '{new.get(field)}'"
+                )
+                change_class = CHANGE_BREAKING
+
+    return ChangeReport(change_class, details)
 
 
 def classify_change(
@@ -189,6 +394,7 @@ def version_policy_errors(
     baseline_version: str,
     current_version: str,
     change: ChangeReport,
+    subject: str = "schema",
 ) -> list[str]:
     """Enforce the bump policy for one contract; returns human-readable errors."""
     old = _parse_version(baseline_version)
@@ -204,13 +410,13 @@ def version_policy_errors(
 
     if new <= old:
         return [
-            f"{contract_id}: schema changed ({change.change_class}) but the "
-            f"contract version was not bumped "
+            f"{contract_id}: {subject} changed ({change.change_class}) but the "
+            f"{subject} version was not bumped "
             f"({baseline_version} -> {current_version}); changes: {change.details}"
         ]
     if change.change_class == CHANGE_BREAKING and new[0] <= old[0]:
         return [
-            f"{contract_id}: breaking schema change requires a major version "
+            f"{contract_id}: breaking {subject} change requires a major version "
             f"bump ({baseline_version} -> {current_version}); "
             f"changes: {change.details}"
         ]
@@ -220,7 +426,7 @@ def version_policy_errors(
         and new[1] <= old[1]
     ):
         return [
-            f"{contract_id}: backward-compatible schema change requires at "
+            f"{contract_id}: backward-compatible {subject} change requires at "
             f"least a minor version bump "
             f"({baseline_version} -> {current_version}); "
             f"changes: {change.details}"
@@ -288,9 +494,21 @@ def _current_snapshot(
     odcs: OdcsContract,
 ) -> dict[str, Any]:
     fingerprints: dict[str, str] = {}
+    semantic_metadata: dict[str, Any] | None = None
     if contract_id in registry.entries:
         fingerprints = _evolution_fingerprints(registry, contract_id)
-    return schema_snapshot(odcs, contract_id, fingerprints=fingerprints)
+        entry = registry.get_entry(contract_id)
+        if entry.mapping_ref:
+            mapping_doc = mapping_metadata_blocks(registry.root / entry.mapping_ref)
+            semantic_metadata = semantic_metadata_snapshot(mapping_doc)
+    snapshot = schema_snapshot(odcs, contract_id, fingerprints=fingerprints)
+    if contract_id in registry.entries:
+        snapshot[REGISTRY_ARTIFACT_KEY] = registry.contract_artifact(
+            contract_id
+        ).model_dump()
+    if semantic_metadata:
+        snapshot[SEMANTIC_METADATA_KEY] = semantic_metadata
+    return snapshot
 
 
 def _evolution_fingerprints(
@@ -330,6 +548,46 @@ def _metadata_drift_errors(
     return []
 
 
+def _semantic_metadata(document: dict[str, Any]) -> dict[str, Any]:
+    value = document.get(SEMANTIC_METADATA_KEY)
+    return value if isinstance(value, dict) else {}
+
+
+def _semantic_drift_errors(
+    contract_id: str,
+    reviewed: dict[str, Any],
+    current: dict[str, Any],
+) -> tuple[ChangeReport, list[str]]:
+    reviewed_semantic = _semantic_metadata(reviewed)
+    current_semantic = _semantic_metadata(current)
+    if not reviewed_semantic or not current_semantic:
+        return ChangeReport(CHANGE_IDENTICAL), _metadata_drift_errors(
+            contract_id, reviewed, current
+        )
+
+    change = classify_semantic_metadata_change(reviewed_semantic, current_semantic)
+    errors = version_policy_errors(
+        contract_id,
+        str(reviewed_semantic.get("mappingVersion", "") or ""),
+        str(current_semantic.get("mappingVersion", "") or ""),
+        change,
+        subject="semantic metadata",
+    )
+    if change.change_class != CHANGE_IDENTICAL:
+        reviewed_hash = _snapshot_fingerprints(reviewed).get(
+            "optimizationMetadataHash"
+        )
+        current_hash = _snapshot_fingerprints(current).get(
+            "optimizationMetadataHash"
+        )
+        errors.append(
+            f"{contract_id}: optimization metadata changed "
+            f"({reviewed_hash or '<unknown>'} -> {current_hash or '<unknown>'}); "
+            "review the mapping semantics and record a new evolution snapshot"
+        )
+    return change, errors
+
+
 def _pairwise_history_errors(contract_id: str, history: list[dict[str, Any]]) -> list[str]:
     """Validate every adjacent reviewed migration step in history."""
     errors: list[str] = []
@@ -343,6 +601,21 @@ def _pairwise_history_errors(contract_id: str, history: list[dict[str, Any]]) ->
                 change,
             )
         )
+        prev_semantic = _semantic_metadata(prev)
+        next_semantic = _semantic_metadata(nxt)
+        if prev_semantic and next_semantic:
+            semantic_change = classify_semantic_metadata_change(
+                prev_semantic, next_semantic
+            )
+            errors.extend(
+                version_policy_errors(
+                    contract_id,
+                    str(prev_semantic.get("mappingVersion", "") or ""),
+                    str(next_semantic.get("mappingVersion", "") or ""),
+                    semantic_change,
+                    subject="semantic metadata",
+                )
+            )
     return errors
 
 
@@ -353,13 +626,29 @@ def _merge_history(
     history = baseline_history(existing or {})
     comparable = {
         key: snapshot.get(key)
-        for key in ("version", "fields", "fingerprints", "contractId", "odcsId")
+        for key in (
+            "version",
+            "fields",
+            "fingerprints",
+            "contractId",
+            "odcsId",
+            SEMANTIC_METADATA_KEY,
+            REGISTRY_ARTIFACT_KEY,
+        )
     }
     if history:
         latest = history[-1]
         latest_comparable = {
             key: latest.get(key)
-            for key in ("version", "fields", "fingerprints", "contractId", "odcsId")
+            for key in (
+                "version",
+                "fields",
+                "fingerprints",
+                "contractId",
+                "odcsId",
+                SEMANTIC_METADATA_KEY,
+                REGISTRY_ARTIFACT_KEY,
+            )
         }
         if latest_comparable == comparable:
             return history
@@ -411,7 +700,10 @@ def check_evolution(registry: Optional[FileRegistry] = None) -> EvolutionReport:
         errors = version_policy_errors(
             contract_id, latest.get("version", ""), current["version"], change
         )
-        errors.extend(_metadata_drift_errors(contract_id, latest, current))
+        semantic_change, semantic_errors = _semantic_drift_errors(
+            contract_id, latest, current
+        )
+        errors.extend(semantic_errors)
         errors.extend(_pairwise_history_errors(contract_id, history))
         if contract_id in registry.entries:
             stored_hash = registry.get_entry(contract_id).stored_fingerprints.get(
@@ -437,6 +729,11 @@ def check_evolution(registry: Optional[FileRegistry] = None) -> EvolutionReport:
                 history_versions=[str(item.get("version", "")) for item in history],
                 optimization_metadata_hash=_snapshot_fingerprints(current).get(
                     "optimizationMetadataHash", ""
+                ),
+                semantic_change_class=semantic_change.change_class,
+                semantic_details=semantic_change.details,
+                mapping_version=str(
+                    _semantic_metadata(current).get("mappingVersion", "") or ""
                 ),
             )
         )

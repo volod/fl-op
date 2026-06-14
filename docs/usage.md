@@ -286,13 +286,15 @@ Response in under 5 seconds at production scale. No solver call involved.
 ## Declarative data-contract layer (batch + stream)
 
 On top of the solver, fl-op provides a solver-neutral data-contract platform.
-ODCS contracts are the single source of truth for all semantic metadata (field
-bindings, canonical units, planning use, quality policies). Avro, Protobuf, and
-Elasticsearch schemas are generated from ODCS and carry no embedded semantic
-blocks. The mapping engine reads ODCS bindings to translate governed source
-fields into stable canonical abstractions (`Asset`, `Capability`, `Task`,
-`OperationalBundle`, ...), builds an immutable, reproducibly-hashed planning
-snapshot, and optimizes it in both batch (periodic) and stream (rolling) mode.
+ODCS contracts are the source of truth for physical field structure, while
+domain mapping documents are the source of truth for optimization semantics
+(field bindings, canonical units, planning use, quality policies). Avro,
+Protobuf, and Elasticsearch schemas are generated from ODCS and carry no
+embedded semantic blocks. The mapping engine reads those governed mappings to
+translate source fields into stable canonical abstractions (`Asset`,
+`Capability`, `Task`, `OperationalBundle`, ...), builds an immutable,
+reproducibly-hashed planning snapshot, and optimizes it in both batch
+(periodic) and stream (rolling) mode.
 See [`docs/current-implementation.md`](current-implementation.md).
 
 ```bash
@@ -309,13 +311,14 @@ See [`docs/current-implementation.md`](current-implementation.md).
 .venv/bin/fl-op contracts validate
 # or: make contracts
 
-# Schema evolution: check every ODCS contract against its committed reviewed
-# history (contracts/evolution/), enforcing pairwise version-bump policy:
-# added optional fields need a minor bump, anything breaking needs a major
-# bump, and mapping-semantic hash drift must be reviewed in the same gate.
+# Schema evolution: check every ODCS contract and canonical mapping against its
+# committed reviewed history (contracts/evolution/). Added optional ODCS fields,
+# unit conversions, and enum/list expansions need minor bumps; breaking schema
+# changes and binding retargets need major bumps. Mapping-semantic hash drift
+# must still be reviewed in the same gate after the semantic class is reported.
 .venv/bin/fl-op contracts evolution-check     # or: make evolution-check
-# After a reviewed contract/mapping change (with the policy-required version
-# bump where structural schema changed), record the new history snapshot:
+# After a reviewed contract/mapping change with the policy-required contract or
+# mapping version bump, record the new history snapshot:
 .venv/bin/fl-op contracts evolution-freeze    # or: make evolution-freeze
 
 # Build an immutable, reproducibly-hashed planning snapshot from source data.

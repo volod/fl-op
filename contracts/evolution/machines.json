@@ -174,8 +174,287 @@
       },
       "odcsId": "machines",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "machines",
+      "fields": {
+        "burn_l_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "engine_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "machine_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "machine_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "tank_litres": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "telematics_hours": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "transit_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "yard_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "f4563fa427bb845659293c2f67edbe26d37567a03480f505dd66e4bfcf2cacb6",
+        "optimizationMetadataHash": "3f40e6ba9b33715692bb3db6c06fe810f5d5fa05f3d0645e7ebdaaf34aebb034"
+      },
+      "odcsId": "machines",
+      "registryArtifact": {
+        "artifactId": "construction/machines",
+        "artifactRef": "construction/machines@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "construction",
+        "localId": "machines",
+        "mappingVersion": "1.0.0",
+        "odcsId": "machines",
+        "qualifiedId": "construction/machines",
+        "registryId": "machines"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "assetRole": "mobile-prime-mover",
+            "canonicalEntity": "asset",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "assetMaster",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "machines"
+          },
+          "field:burn_l_per_h": {
+            "binding": "asset.capabilities.fuelConsumptionRate",
+            "canonicalUnit": "L/h",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "flow-rate",
+            "semanticTerm": "urn:xopt:capability:fuel-consumption-rate"
+          },
+          "field:current_lat": {
+            "binding": "asset.location.lat",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:latitude"
+          },
+          "field:current_lon": {
+            "binding": "asset.location.lon",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:longitude"
+          },
+          "field:engine_power_kw": {
+            "binding": "asset.capabilities.ratedPower",
+            "canonicalUnit": "kW",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "capacity",
+              "compatibility-filter"
+            ],
+            "quantityKind": "power",
+            "semanticTerm": "urn:xopt:capability:rated-power"
+          },
+          "field:machine_class": {
+            "binding": "asset.assetType",
+            "planningUse": [
+              "classification"
+            ],
+            "semanticTerm": "urn:xopt:attribute:asset-type"
+          },
+          "field:machine_id": {
+            "binding": "asset.assetId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:asset-id"
+          },
+          "field:tank_litres": {
+            "binding": "asset.capabilities.fuelTankVolume",
+            "canonicalUnit": "L",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "capacity"
+            ],
+            "quantityKind": "volume",
+            "semanticTerm": "urn:xopt:capability:fuel-tank-volume"
+          },
+          "field:transit_speed_kmh": {
+            "binding": "asset.capabilities.travelSpeed",
+            "canonicalUnit": "km/h",
+            "missingValuePolicy": "fallback-to-conservative-value",
+            "planningUse": [
+              "routing"
+            ],
+            "quantityKind": "speed",
+            "semanticTerm": "urn:xopt:capability:travel-speed"
+          },
+          "field:yard_id": {
+            "binding": "asset.homeDepotRef",
+            "planningUse": [
+              "assignment"
+            ],
+            "semanticTerm": "urn:xopt:relationship:home-depot"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "machines",
+  "registryArtifact": {
+    "artifactId": "construction/machines",
+    "artifactRef": "construction/machines@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "construction",
+    "localId": "machines",
+    "mappingVersion": "1.0.0",
+    "odcsId": "machines",
+    "qualifiedId": "construction/machines",
+    "registryId": "machines"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "assetRole": "mobile-prime-mover",
+        "canonicalEntity": "asset",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "assetMaster",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "machines"
+      },
+      "field:burn_l_per_h": {
+        "binding": "asset.capabilities.fuelConsumptionRate",
+        "canonicalUnit": "L/h",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "cost"
+        ],
+        "quantityKind": "flow-rate",
+        "semanticTerm": "urn:xopt:capability:fuel-consumption-rate"
+      },
+      "field:current_lat": {
+        "binding": "asset.location.lat",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:latitude"
+      },
+      "field:current_lon": {
+        "binding": "asset.location.lon",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:longitude"
+      },
+      "field:engine_power_kw": {
+        "binding": "asset.capabilities.ratedPower",
+        "canonicalUnit": "kW",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "capacity",
+          "compatibility-filter"
+        ],
+        "quantityKind": "power",
+        "semanticTerm": "urn:xopt:capability:rated-power"
+      },
+      "field:machine_class": {
+        "binding": "asset.assetType",
+        "planningUse": [
+          "classification"
+        ],
+        "semanticTerm": "urn:xopt:attribute:asset-type"
+      },
+      "field:machine_id": {
+        "binding": "asset.assetId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:asset-id"
+      },
+      "field:tank_litres": {
+        "binding": "asset.capabilities.fuelTankVolume",
+        "canonicalUnit": "L",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "capacity"
+        ],
+        "quantityKind": "volume",
+        "semanticTerm": "urn:xopt:capability:fuel-tank-volume"
+      },
+      "field:transit_speed_kmh": {
+        "binding": "asset.capabilities.travelSpeed",
+        "canonicalUnit": "km/h",
+        "missingValuePolicy": "fallback-to-conservative-value",
+        "planningUse": [
+          "routing"
+        ],
+        "quantityKind": "speed",
+        "semanticTerm": "urn:xopt:capability:travel-speed"
+      },
+      "field:yard_id": {
+        "binding": "asset.homeDepotRef",
+        "planningUse": [
+          "assignment"
+        ],
+        "semanticTerm": "urn:xopt:relationship:home-depot"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

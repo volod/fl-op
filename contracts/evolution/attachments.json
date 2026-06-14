@@ -159,8 +159,276 @@
       },
       "odcsId": "attachments",
       "version": "1.1.0"
+    },
+    {
+      "contractId": "attachments",
+      "fields": {
+        "attachment_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "attachment_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "cut_width_m": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "draw_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "max_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "min_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "supported_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "work_rates": {
+          "logicalType": "object",
+          "physicalType": "string",
+          "required": false
+        },
+        "yard_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "3e38f5c560e92a1b212e5acf811b67a66c80ebcefcc50e62c49e5e418c9e3fab",
+        "optimizationMetadataHash": "8619730cad06d219d88c2db4227e80f3fe1204a2f6e9b4ecdf273b4004b1620e"
+      },
+      "odcsId": "attachments",
+      "registryArtifact": {
+        "artifactId": "construction/attachments",
+        "artifactRef": "construction/attachments@odcs:1.1.0+mapping:1.1.0",
+        "contractVersion": "1.1.0",
+        "domain": "construction",
+        "localId": "attachments",
+        "mappingVersion": "1.1.0",
+        "odcsId": "attachments",
+        "qualifiedId": "construction/attachments",
+        "registryId": "attachments"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "assetRole": "implement",
+            "canonicalEntity": "asset",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "assetMaster",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "attachments"
+          },
+          "field:attachment_class": {
+            "binding": "asset.assetType",
+            "planningUse": [
+              "classification"
+            ],
+            "semanticTerm": "urn:xopt:attribute:asset-type"
+          },
+          "field:attachment_id": {
+            "binding": "asset.assetId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:asset-id"
+          },
+          "field:cut_width_m": {
+            "binding": "asset.capabilities.workingWidth",
+            "canonicalUnit": "m",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "length",
+            "semanticTerm": "urn:xopt:capability:working-width"
+          },
+          "field:draw_power_kw": {
+            "binding": "asset.capabilities.requiredPower",
+            "canonicalUnit": "kW",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "compatibility-filter"
+            ],
+            "quantityKind": "power",
+            "semanticTerm": "urn:xopt:capability:required-power"
+          },
+          "field:max_speed_kmh": {
+            "binding": "asset.capabilities.maxOperatingSpeed",
+            "canonicalUnit": "km/h",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "speed",
+            "semanticTerm": "urn:xopt:capability:max-operating-speed"
+          },
+          "field:min_speed_kmh": {
+            "binding": "asset.capabilities.minOperatingSpeed",
+            "canonicalUnit": "km/h",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "speed",
+            "semanticTerm": "urn:xopt:capability:min-operating-speed"
+          },
+          "field:supported_operations": {
+            "binding": "asset.capabilities.compatibleOperations",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "compatibility-filter"
+            ],
+            "quantityKind": "categorical-set",
+            "semanticTerm": "urn:xopt:capability:compatible-operations"
+          },
+          "field:work_rates": {
+            "binding": "asset.capabilities.workRates",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "rate-map",
+            "semanticTerm": "urn:xopt:capability:work-rates"
+          },
+          "field:yard_id": {
+            "binding": "asset.homeDepotRef",
+            "planningUse": [
+              "assignment"
+            ],
+            "semanticTerm": "urn:xopt:relationship:home-depot"
+          }
+        },
+        "mappingVersion": "1.1.0"
+      },
+      "version": "1.1.0"
     }
   ],
   "odcsId": "attachments",
+  "registryArtifact": {
+    "artifactId": "construction/attachments",
+    "artifactRef": "construction/attachments@odcs:1.1.0+mapping:1.1.0",
+    "contractVersion": "1.1.0",
+    "domain": "construction",
+    "localId": "attachments",
+    "mappingVersion": "1.1.0",
+    "odcsId": "attachments",
+    "qualifiedId": "construction/attachments",
+    "registryId": "attachments"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "assetRole": "implement",
+        "canonicalEntity": "asset",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "assetMaster",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "attachments"
+      },
+      "field:attachment_class": {
+        "binding": "asset.assetType",
+        "planningUse": [
+          "classification"
+        ],
+        "semanticTerm": "urn:xopt:attribute:asset-type"
+      },
+      "field:attachment_id": {
+        "binding": "asset.assetId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:asset-id"
+      },
+      "field:cut_width_m": {
+        "binding": "asset.capabilities.workingWidth",
+        "canonicalUnit": "m",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "length",
+        "semanticTerm": "urn:xopt:capability:working-width"
+      },
+      "field:draw_power_kw": {
+        "binding": "asset.capabilities.requiredPower",
+        "canonicalUnit": "kW",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "compatibility-filter"
+        ],
+        "quantityKind": "power",
+        "semanticTerm": "urn:xopt:capability:required-power"
+      },
+      "field:max_speed_kmh": {
+        "binding": "asset.capabilities.maxOperatingSpeed",
+        "canonicalUnit": "km/h",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "speed",
+        "semanticTerm": "urn:xopt:capability:max-operating-speed"
+      },
+      "field:min_speed_kmh": {
+        "binding": "asset.capabilities.minOperatingSpeed",
+        "canonicalUnit": "km/h",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "speed",
+        "semanticTerm": "urn:xopt:capability:min-operating-speed"
+      },
+      "field:supported_operations": {
+        "binding": "asset.capabilities.compatibleOperations",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "compatibility-filter"
+        ],
+        "quantityKind": "categorical-set",
+        "semanticTerm": "urn:xopt:capability:compatible-operations"
+      },
+      "field:work_rates": {
+        "binding": "asset.capabilities.workRates",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "rate-map",
+        "semanticTerm": "urn:xopt:capability:work-rates"
+      },
+      "field:yard_id": {
+        "binding": "asset.homeDepotRef",
+        "planningUse": [
+          "assignment"
+        ],
+        "semanticTerm": "urn:xopt:relationship:home-depot"
+      }
+    },
+    "mappingVersion": "1.1.0"
+  },
   "version": "1.1.0"
 }

@@ -82,13 +82,33 @@ canonical plan OUTPUT contract generates physical schemas too
 (`contracts/plan_schema_gen.py`, Avro and Parquet): nested records named
 after the plan.json payload fields, joined from the same binding table the
 publication validator uses, so downstream consumers can validate received
-plan artifacts without this codebase.
+plan artifacts without this codebase. The plan output contract governs the
+common score metrics, quality-summary fields, and corrective-action records in
+addition to the envelope, assignments, unassigned tasks, and material
+reservations; domain-specific nested score payloads such as solver attribution
+and drone KPIs remain extra artifact data.
 
 `fl-op contracts validate` checks: generated-schema structural fingerprints, the
 canonical model, and per-domain **mapping completeness** (every mapping binds only
 to declared canonical fields + known terms, and covers every required canonical
-binding). `fl-op contracts validate-domain --domain <d>` additionally reports each
-contract's optimization-mapped vs extra (analytical) physical fields.
+binding). The registry also exposes every source projection as a versioned
+artifact ref (`domain/local-id@odcs:<version>+mapping:<version>`), validates
+that those refs are unique, and still resolves legacy global ids and
+domain-local aliases for compatibility. `fl-op contracts validate-domain
+--domain <d>` additionally reports each contract's optimization-mapped vs
+extra (analytical) physical fields.
+
+`fl-op contracts evolution-check` enforces both structural and semantic
+versioning. ODCS field changes keep the existing policy: added optional fields
+need at least a minor contract-version bump, while removed fields, type
+changes, requiredness changes, and added required fields need a major bump.
+Canonical mapping metadata is snapshotted separately in the evolution history:
+unit or quantity-kind conversions and enum/list expansions require a minor
+mapping-version bump; binding or semantic-term retargeting, removals, enum
+contractions, and unknown semantic rewrites require a major mapping-version
+bump. Reviewed baselines carry both the normalized semantic metadata and the
+registry artifact ref, so metadata edits are classified before the hash gate is
+accepted.
 
 ## Planning pipeline
 
@@ -326,7 +346,9 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    completion-time KPIs (`total_completion_time_s`,
    `avg_completion_time_s`, `p95_completion_time_s`,
    `max_completion_time_s`) and deadline adherence (`on_time_rate_pct`,
-   `n_tasks_with_deadlines`, `n_on_time`, `n_late`).
+   `n_tasks_with_deadlines`, `n_on_time`, `n_late`). Common scalar/count score
+   fields are declared in the canonical plan output contract; richer nested
+   score maps remain advisory extension data.
    Adapter-normalized plans also carry per-task attribution maps in
    `plan.score`: assigned tasks record their cluster status/objectives,
    LNS delta, time-limit state, estimated margin, and same-cluster unserved
@@ -542,6 +564,56 @@ a rolling replan. Each check writes a `freshness.json` artifact under
 - CI (`.github/workflows/ci.yml`, `make ci`) regenerates all physical
   schemas from ODCS before any validation, then runs the suite validation,
   domain validations, the evolution gate, and the tests.
+
+## Artifact provenance and registry
+
+- `fl_op/provenance/namespace.py` is the single content-hashing primitive for the
+  whole codebase. `canonical_json` serializes any payload deterministically
+  (sorted keys, compact separators, `str` fallback); `content_hash(namespace,
+  payload)` wraps the payload in `{namespace, namespace_version, payload}` before
+  hashing so two subsystems never collide. By default the version folded in is the
+  global `PROVENANCE_NAMESPACE_VERSION`, so a single bump invalidates every derived
+  cache at once. A call site that needs a hash whose stability is decoupled from
+  global cache invalidation passes an explicit `version`.
+- `snapshot/hashing.py:compute_snapshot_hash` routes through `content_hash` under
+  the `"snapshot"` namespace, but pinned to its own `SNAPSHOT_HASH_VERSION` rather
+  than the global namespace version. A snapshot hash is a durable identity (tuned
+  overlays and manifests cite it as provenance), so a cache-invalidating bump of
+  `PROVENANCE_NAMESPACE_VERSION` must never re-identify snapshots or orphan the
+  overlays that reference them. `SNAPSHOT_HASH_VERSION` is bumped only when the
+  snapshot's canonical content layout itself changes.
+- The content-addressed caches were unified onto `content_hash`: compatibility
+  matrix keys (`solver/feasibility.py:compat_cache_key`), preprocessing /
+  candidate-filter keys (`solver/preprocessing.py:_hash_payload`), and
+  `/feasibility` request keys (`solver/query_pipeline.py:
+  feasibility_request_cache_key`) all share the versioned primitive. Leaf
+  binary digests over raw numpy bytes (`preprocessing._array_digest`) and file
+  bytes (`query_pipeline._file_digest`) stay on a bare SHA-256 and are folded
+  into the namespaced payload, since binary content has no canonical-JSON form.
+- Artifact manifests (`provenance/manifest.py`) are additive provenance
+  sidecars. `write_manifest` drops a `manifest.json` next to a run's primary
+  artifacts recording the artifact kind, schema versions, generation time,
+  derived snapshot hashes, optional tuned-overlay scope, and a SHA-256 of every
+  file in the run directory (recursive, manifest excluded). `manifestHash` is a
+  `content_hash` over all fields except the volatile `generatedAt`, so two runs
+  that produced byte-identical artifacts from the same inputs share a manifest
+  hash. Snapshot builds (`planning/snapshots.py`) now emit a manifest beside
+  `snapshot.json` with the snapshot hash and planning mode as scope.
+  `verify_manifest` re-hashes the on-disk files and reports missing, mismatched,
+  or untracked files.
+- The artifact registry (`provenance/registry.py`) is a read-only scanner over
+  `$DATA_DIR`. It aggregates three views: per-namespace cache provenance (entry
+  counts, total bytes, last-modified) for the caches listed in
+  `CACHE_PROVENANCE_DIRNAMES`; every manifest sidecar with its declared snapshot
+  hashes and scope; and reviewed tuned solver overlays with their selection
+  metadata (scope, `source_snapshot_hashes`, reviewer, review time). It never
+  mutates artifacts.
+- `fl-op artifacts` (`cli/artifacts_commands.py`) exposes the foundation:
+  `artifacts registry` logs the aggregated provenance summary and, with
+  `--write`, persists the index to
+  `$DATA_DIR/registry/artifact-registry.json`; `artifacts verify --run-dir
+  <dir>` re-checks a run's files against its manifest and exits non-zero on any
+  mismatch.
 
 ## Serving
 

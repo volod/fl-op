@@ -99,8 +99,170 @@
       },
       "odcsId": "execution-events",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "execution-events",
+      "fields": {
+        "entity_ref": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "event_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "event_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "observed_at": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": true
+        },
+        "payload_json": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "ca78597cda1433a55cb6efddd2ee21b820aec9a6645052f87f5a8a20224655b2",
+        "optimizationMetadataHash": "893cf11af71d6aa1eb4841311a35987f068b7f1cf633a9de9ad988f10daab23f"
+      },
+      "odcsId": "execution-events",
+      "registryArtifact": {
+        "artifactId": "agricultural/execution-events",
+        "artifactRef": "agricultural/execution-events@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "agricultural",
+        "localId": "execution-events",
+        "mappingVersion": "1.0.0",
+        "odcsId": "execution-events",
+        "qualifiedId": "agricultural/execution-events",
+        "registryId": "execution-events"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "execution-event",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "executionEvents",
+            "entityKeyField": "event_id",
+            "eventTimeField": "observed_at",
+            "permittedPlanningUses": [
+              "rolling-dispatch"
+            ],
+            "sourceContract": "execution-events"
+          },
+          "field:entity_ref": {
+            "binding": "event.entityRef",
+            "planningUse": [
+              "replanning-trigger"
+            ],
+            "semanticTerm": "urn:xopt:relationship:entity-ref"
+          },
+          "field:event_id": {
+            "binding": "event.eventId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:event-id"
+          },
+          "field:event_type": {
+            "binding": "event.eventType",
+            "planningUse": [
+              "replanning-trigger"
+            ],
+            "semanticTerm": "urn:xopt:attribute:event-type"
+          },
+          "field:observed_at": {
+            "binding": "event.observedAt",
+            "planningUse": [
+              "temporal"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:time:observed-at"
+          },
+          "field:payload_json": {
+            "binding": "event.payload",
+            "planningUse": [
+              "replanning-trigger"
+            ],
+            "semanticTerm": "urn:xopt:attribute:event-payload"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "execution-events",
+  "registryArtifact": {
+    "artifactId": "agricultural/execution-events",
+    "artifactRef": "agricultural/execution-events@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "agricultural",
+    "localId": "execution-events",
+    "mappingVersion": "1.0.0",
+    "odcsId": "execution-events",
+    "qualifiedId": "agricultural/execution-events",
+    "registryId": "execution-events"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "canonicalEntity": "execution-event",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "executionEvents",
+        "entityKeyField": "event_id",
+        "eventTimeField": "observed_at",
+        "permittedPlanningUses": [
+          "rolling-dispatch"
+        ],
+        "sourceContract": "execution-events"
+      },
+      "field:entity_ref": {
+        "binding": "event.entityRef",
+        "planningUse": [
+          "replanning-trigger"
+        ],
+        "semanticTerm": "urn:xopt:relationship:entity-ref"
+      },
+      "field:event_id": {
+        "binding": "event.eventId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:event-id"
+      },
+      "field:event_type": {
+        "binding": "event.eventType",
+        "planningUse": [
+          "replanning-trigger"
+        ],
+        "semanticTerm": "urn:xopt:attribute:event-type"
+      },
+      "field:observed_at": {
+        "binding": "event.observedAt",
+        "planningUse": [
+          "temporal"
+        ],
+        "quantityKind": "timestamp",
+        "semanticTerm": "urn:xopt:time:observed-at"
+      },
+      "field:payload_json": {
+        "binding": "event.payload",
+        "planningUse": [
+          "replanning-trigger"
+        ],
+        "semanticTerm": "urn:xopt:attribute:event-payload"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

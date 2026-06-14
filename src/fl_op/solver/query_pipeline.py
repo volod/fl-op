@@ -14,6 +14,7 @@ from typing import Any
 from fl_op.core import constants
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
 from fl_op.core.paths import DATA_ROOT
+from fl_op.provenance.namespace import content_hash
 from fl_op.canonical.enums import ReasonCode
 from fl_op.io import detect_format, get_codec, locate_source
 from fl_op.solver.feasibility import cached_compat_matrix
@@ -144,21 +145,21 @@ def feasibility_request_cache_key(
     The key includes bytes of every source file the query reads, schedule.json,
     and the request order payload, so a changed dataset/schedule/order misses
     even when the path is reused.
+
+    Routed through the shared provenance primitive so a namespace-version bump
+    invalidates every cached feasibility response at once.
     """
-    digest = hashlib.sha256()
-    digest.update(b"feasibility-v1")
+    sources = []
     for filename in ("vehicles.csv", "implements.csv", "fields.csv"):
         source = locate_source(data_path, filename, codec)
-        digest.update(str(source.name).encode("utf-8"))
-        digest.update(_file_digest(source).encode("ascii"))
-    digest.update(b"schedule")
-    digest.update(_file_digest(schedule_path / "schedule.json").encode("ascii"))
-    digest.update(
-        json.dumps(order, separators=(",", ":"), sort_keys=True, default=str).encode(
-            "utf-8"
-        )
-    )
-    return digest.hexdigest()
+        sources.append([source.name, _file_digest(source)])
+    payload = {
+        "kind": "feasibility-request",
+        "sources": sources,
+        "schedule": _file_digest(schedule_path / "schedule.json"),
+        "order": order,
+    }
+    return content_hash("feasibility-request", payload)
 
 
 def _file_digest(path: pathlib.Path) -> str:

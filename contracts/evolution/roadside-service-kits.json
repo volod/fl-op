@@ -157,8 +157,275 @@
       },
       "odcsId": "service-kits",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "roadside-service-kits",
+      "fields": {
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "draw_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "kit_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "kit_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "max_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "min_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "supported_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "work_rates": {
+          "logicalType": "object",
+          "physicalType": "string",
+          "required": false
+        },
+        "working_width_m": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "9114985ec914d56f86136b867b7f8cee429418d814cba87073a071c42519e71d"
+      },
+      "odcsId": "service-kits",
+      "registryArtifact": {
+        "artifactId": "roadside/service-kits",
+        "artifactRef": "roadside/service-kits@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "roadside",
+        "localId": "service-kits",
+        "mappingVersion": "1.0.0",
+        "odcsId": "service-kits",
+        "qualifiedId": "roadside/service-kits",
+        "registryId": "roadside-service-kits"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "assetRole": "implement",
+            "canonicalEntity": "asset",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "assetMaster",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "service-kits"
+          },
+          "field:depot_id": {
+            "binding": "asset.homeDepotRef",
+            "planningUse": [
+              "assignment"
+            ],
+            "semanticTerm": "urn:xopt:relationship:home-depot"
+          },
+          "field:draw_power_kw": {
+            "binding": "asset.capabilities.requiredPower",
+            "canonicalUnit": "kW",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "compatibility-filter"
+            ],
+            "quantityKind": "power",
+            "semanticTerm": "urn:xopt:capability:required-power"
+          },
+          "field:kit_class": {
+            "binding": "asset.assetType",
+            "planningUse": [
+              "classification"
+            ],
+            "semanticTerm": "urn:xopt:attribute:asset-type"
+          },
+          "field:kit_id": {
+            "binding": "asset.assetId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:asset-id"
+          },
+          "field:max_speed_kmh": {
+            "binding": "asset.capabilities.maxOperatingSpeed",
+            "canonicalUnit": "km/h",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "speed",
+            "semanticTerm": "urn:xopt:capability:max-operating-speed"
+          },
+          "field:min_speed_kmh": {
+            "binding": "asset.capabilities.minOperatingSpeed",
+            "canonicalUnit": "km/h",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "speed",
+            "semanticTerm": "urn:xopt:capability:min-operating-speed"
+          },
+          "field:supported_operations": {
+            "binding": "asset.capabilities.compatibleOperations",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "compatibility-filter"
+            ],
+            "quantityKind": "categorical-set",
+            "semanticTerm": "urn:xopt:capability:compatible-operations"
+          },
+          "field:work_rates": {
+            "binding": "asset.capabilities.workRates",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "rate-map",
+            "semanticTerm": "urn:xopt:capability:work-rates"
+          },
+          "field:working_width_m": {
+            "binding": "asset.capabilities.workingWidth",
+            "canonicalUnit": "m",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "length",
+            "semanticTerm": "urn:xopt:capability:working-width"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "service-kits",
+  "registryArtifact": {
+    "artifactId": "roadside/service-kits",
+    "artifactRef": "roadside/service-kits@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "roadside",
+    "localId": "service-kits",
+    "mappingVersion": "1.0.0",
+    "odcsId": "service-kits",
+    "qualifiedId": "roadside/service-kits",
+    "registryId": "roadside-service-kits"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "assetRole": "implement",
+        "canonicalEntity": "asset",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "assetMaster",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "service-kits"
+      },
+      "field:depot_id": {
+        "binding": "asset.homeDepotRef",
+        "planningUse": [
+          "assignment"
+        ],
+        "semanticTerm": "urn:xopt:relationship:home-depot"
+      },
+      "field:draw_power_kw": {
+        "binding": "asset.capabilities.requiredPower",
+        "canonicalUnit": "kW",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "compatibility-filter"
+        ],
+        "quantityKind": "power",
+        "semanticTerm": "urn:xopt:capability:required-power"
+      },
+      "field:kit_class": {
+        "binding": "asset.assetType",
+        "planningUse": [
+          "classification"
+        ],
+        "semanticTerm": "urn:xopt:attribute:asset-type"
+      },
+      "field:kit_id": {
+        "binding": "asset.assetId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:asset-id"
+      },
+      "field:max_speed_kmh": {
+        "binding": "asset.capabilities.maxOperatingSpeed",
+        "canonicalUnit": "km/h",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "speed",
+        "semanticTerm": "urn:xopt:capability:max-operating-speed"
+      },
+      "field:min_speed_kmh": {
+        "binding": "asset.capabilities.minOperatingSpeed",
+        "canonicalUnit": "km/h",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "speed",
+        "semanticTerm": "urn:xopt:capability:min-operating-speed"
+      },
+      "field:supported_operations": {
+        "binding": "asset.capabilities.compatibleOperations",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "compatibility-filter"
+        ],
+        "quantityKind": "categorical-set",
+        "semanticTerm": "urn:xopt:capability:compatible-operations"
+      },
+      "field:work_rates": {
+        "binding": "asset.capabilities.workRates",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "rate-map",
+        "semanticTerm": "urn:xopt:capability:work-rates"
+      },
+      "field:working_width_m": {
+        "binding": "asset.capabilities.workingWidth",
+        "canonicalUnit": "m",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "length",
+        "semanticTerm": "urn:xopt:capability:working-width"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }
