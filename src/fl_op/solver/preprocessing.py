@@ -21,6 +21,7 @@ from sklearn.neighbors import BallTree
 from fl_op.core import constants
 from fl_op.core.constants import CLUSTER_TARGET_SIZE
 from fl_op.core.paths import DATA_ROOT
+from fl_op.provenance.namespace import content_hash
 from fl_op.solver.travel_time import (
     TravelLookup,
     iter_travel_lookup_items,
@@ -611,8 +612,13 @@ def _prune_cache(cache_dir: Path) -> None:
 
 
 def _hash_payload(payload: dict[str, Any]) -> str:
-    canonical = json.dumps(payload, separators=(",", ":"), sort_keys=True, default=str)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    """Namespaced content hash for preprocessing cache keys.
+
+    Routed through the shared provenance primitive so a single namespace-version
+    bump invalidates every preprocessing cache entry. The per-payload ``kind``
+    field keeps the candidate-filter and cluster-specs key spaces distinct.
+    """
+    return content_hash("preprocessing", payload)
 
 
 def _rows_for_hash(rows: list[Any]) -> list[Any]:
@@ -634,6 +640,10 @@ def _normalise_for_hash(value: Any) -> Any:
 
 
 def _array_digest(array: np.ndarray) -> dict[str, Any]:
+    # Raw numpy bytes have no canonical-JSON form, so this leaf digest stays on a
+    # bare sha256 (the same choice as `_file_digest`). The returned mapping is
+    # folded into the namespaced `content_hash("candidate-filter", ...)` payload,
+    # which is where provenance framing and version invalidation are applied.
     contiguous = np.ascontiguousarray(array)
     return {
         "shape": list(contiguous.shape),

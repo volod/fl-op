@@ -9,6 +9,7 @@ from fl_op.canonical.enums import PlanningMode
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
 from fl_op.core.paths import DATA_ROOT
 from fl_op.planning.artifacts import model_json, run_timestamp, write_json
+from fl_op.provenance.manifest import write_manifest
 from fl_op.snapshot.builder import SnapshotBuilder
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,15 @@ def run_snapshot_build(
     write_json(
         {"schema_version": ARTIFACT_SCHEMA_VERSION, **model_json(snapshot)},
         out_dir / "snapshot.json",
+    )
+    # Drop a provenance sidecar beside the snapshot so the run is discoverable by
+    # the artifact registry and its on-disk bytes can be verified later.
+    write_manifest(
+        out_dir,
+        artifact_kind="PlanningSnapshot",
+        schema_version=ARTIFACT_SCHEMA_VERSION,
+        snapshot_hashes=[snapshot.snapshot_hash],
+        scope={"planning_mode": planning_mode.value},
     )
     logger.info(
         "Snapshot %s (hash %s) -> %s",

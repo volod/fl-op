@@ -447,6 +447,46 @@ EVENT_DEDUP_MAX_IDS: int = int(os.environ.get("EVENT_DEDUP_MAX_IDS", "10000"))
 ARTIFACT_SCHEMA_VERSION: str = "1.0"
 
 # ---------------------------------------------------------------------------
+# Provenance / content hashing
+# ---------------------------------------------------------------------------
+
+# Version prefix folded into every namespaced content hash
+# (fl_op.provenance.namespace.content_hash) unless a call site passes its own
+# version. Bumping this constant invalidates every derived cache key wholesale
+# without touching individual call sites. Snapshot hashes are deliberately
+# pinned to SNAPSHOT_HASH_VERSION instead, so a cache-invalidating bump here
+# never silently re-identifies snapshots or orphans the tuned overlays that
+# reference them.
+PROVENANCE_NAMESPACE_VERSION: str = "1"
+
+# Version for the snapshot content hash, kept independent of
+# PROVENANCE_NAMESPACE_VERSION on purpose. A snapshot hash is a stable identity
+# for a set of source records, not a disposable cache key: tuned overlays and
+# manifests cite it as provenance. Bumping the global cache version must not
+# change snapshot identity, so the snapshot hash carries its own version that is
+# only ever bumped when the snapshot's canonical content layout itself changes.
+SNAPSHOT_HASH_VERSION: str = "1"
+
+# Schema version for artifact manifests (manifest.json sidecars and the
+# aggregated artifact registry index).
+MANIFEST_SCHEMA_VERSION: str = "1.0"
+
+# Filename for the per-run artifact manifest sidecar.
+ARTIFACT_MANIFEST_FILENAME: str = "manifest.json"
+
+# Cache namespaces relative to DATA_DIR scanned for provenance reporting.
+CACHE_PROVENANCE_DIRNAMES: tuple[str, ...] = (
+    COMPAT_MATRIX_CACHE_DIRNAME,
+    PREPROCESSING_CACHE_DIRNAME,
+    FEASIBILITY_CACHE_DIRNAME,
+)
+
+# Directory and filename for the aggregated artifact-registry index written by
+# the `artifacts registry` command (relative to DATA_DIR).
+ARTIFACT_REGISTRY_DIRNAME: str = "registry"
+ARTIFACT_REGISTRY_FILENAME: str = "artifact-registry.json"
+
+# ---------------------------------------------------------------------------
 # Physical data format
 # ---------------------------------------------------------------------------
 
