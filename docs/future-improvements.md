@@ -90,6 +90,15 @@ Recommended order, optimized for dependency reuse and low rework:
   so non-area work (`m3`, `items`) never charges material. Reservations also
   have no time dimension in feasibility: charges are horizon-cumulative, not
   windowed against replenishment.
+- Prime-mover travel speed does not affect routing travel time. When no network
+  lookup is available, `travel_time.py` derives leg duration from the centralized
+  `core/geometry.travel_time_seconds` helper at the fixed `FALLBACK_TRAVEL_SPEED_KMH`
+  fallback speed, so travel time is geometry-fixed and identical across vehicles
+  regardless of `PrimeMoverRow.travel_speed`. The only per-vehicle
+  completion-time differentiator today is service time, driven by implement
+  `working_width` and `max_speed`. Investigate threading per-vehicle travel speed
+  (and travel mode) into the fallback travel-time estimate so `--objective time`
+  can prefer genuinely faster movers, not just faster implements.
 
 ## Ontology Coverage
 

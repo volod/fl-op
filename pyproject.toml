@@ -21,6 +21,8 @@ dependencies = [
     "mlflow-skinny>=3.13.0",
     "fastapi>=0.115",
     "uvicorn>=0.30",
+    "pyproj>=3.7.1",
+    "shapely>=2.1.2",
 ]
 
 [project.optional-dependencies]

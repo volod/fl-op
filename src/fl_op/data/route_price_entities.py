@@ -5,7 +5,8 @@ from typing import Any
 
 import numpy as np
 
-from fl_op.core.constants import EARTH_RADIUS_KM, RATE_TYPE_FUEL, RATE_TYPE_MATERIAL
+from fl_op.core.constants import RATE_TYPE_FUEL, RATE_TYPE_MATERIAL
+from fl_op.core.geometry import haversine_km
 
 # Road geometry: real road distance exceeds the geodesic line by a curvature
 # factor, and convoy road speed differs from the engine's haversine default,
@@ -25,14 +26,6 @@ _PRICE_VALID_DAYS = 365
 _PRICE_HISTORY_DAYS = 30
 
 
-def _haversine_km_scalar(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    phi1, phi2 = np.radians(lat1), np.radians(lat2)
-    dphi = np.radians(lat2 - lat1)
-    dlambda = np.radians(lon2 - lon1)
-    a = np.sin(dphi / 2) ** 2 + np.cos(phi1) * np.cos(phi2) * np.sin(dlambda / 2) ** 2
-    return float(2 * EARTH_RADIUS_KM * np.arcsin(np.sqrt(min(1.0, max(0.0, a)))))
-
-
 def _generate_routes(
     rng: np.random.Generator,
     depots: list[dict[str, Any]],
@@ -50,7 +43,7 @@ def _generate_routes(
         depot = depot_by_id.get(field["nearest_depot_id"])
         if depot is None:
             continue
-        line_km = _haversine_km_scalar(
+        line_km = haversine_km(
             depot["lat"], depot["lon"], field["centroid_lat"], field["centroid_lon"]
         )
         road_km = round(line_km * _ROAD_CURVATURE_FACTOR, 2)

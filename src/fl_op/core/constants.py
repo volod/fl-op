@@ -190,6 +190,13 @@ MAX_PAIRS_PER_ORDER: int = int(os.environ.get("MAX_PAIRS_PER_ORDER", "30"))
 # WGS-84 mean Earth radius used for haversine distance calculations.
 EARTH_RADIUS_KM: float = 6371.0
 
+# Average ground speed (km/h) for the geometric travel-time fallback used when
+# no travel-network link connects a location pair. Env-configurable so the
+# geometry-fixed leg duration can be tuned without code changes.
+FALLBACK_TRAVEL_SPEED_KMH: float = float(
+    os.environ.get("FALLBACK_TRAVEL_SPEED_KMH", "15.0")
+)
+
 # Travel-network locations above which the all-pairs shortest-path closure is
 # skipped (the composed lookup grows with the square of the node count);
 # direct links still apply, pairs without one fall back to haversine.

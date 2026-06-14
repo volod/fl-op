@@ -313,8 +313,16 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    directed travel-link graph (Dijkstra per source, skipped past
    `TRAVEL_NETWORK_MAX_COMPOSE_NODES`) and is indexed by `networkMode`
    (`road`, `air`, or `any`), with a reverse-direction and haversine fallback
-   for pairs without any network path (`solver/travel_time.py`). Per-vehicle
-   time matrices keep road and air travel isolated. The selected objective is
+   for pairs without any network path (`solver/travel_time.py`). That fallback
+   leg duration, like every distance in the engine, routes through the
+   centralized `core/geometry.py` module: a `pyproj` geodesic engine configured
+   as a sphere of mean Earth radius reproduces the legacy haversine results to
+   floating-point noise while serving both scalar and vectorized call sites, the
+   geometric fallback speed is `FALLBACK_TRAVEL_SPEED_KMH` (env-configurable),
+   nearest-neighbor depot affinity uses a `scikit-learn` haversine `BallTree`,
+   and `shapely` point/linestring/bounding-box primitives back future map-based
+   interface control. Per-vehicle time matrices keep road and air travel
+   isolated. The selected objective is
    `SolverParameters.optimization_objective`, exposed by `plan periodic`,
    `plan rolling`, and `demo` as `--objective cost|time`; `cost` is the
    default. Cost mode prices arcs per vehicle as travel energy cost
