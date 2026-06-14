@@ -3,6 +3,9 @@
 .env
 .env.example.local
 
+.gemini/
+.local_bin/
+
 # Generated physical schemas (derived from ODCS contracts -- do not edit directly)
 contracts/generated/
 

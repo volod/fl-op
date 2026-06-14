@@ -1,4 +1,4 @@
-# Codex
+# Gemini
 
 ## Project rules
 
