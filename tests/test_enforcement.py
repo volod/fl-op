@@ -105,6 +105,99 @@ def test_weather_reports_non_compliant_windows_as_blocked_intervals() -> None:
     assert blocked == {"t1": [(start, end)]}
 
 
+def _spray_task(task_id: str, deadline: str) -> TaskRow:
+    return TaskRow.from_canonical_dict(
+        {
+            "task_id": task_id,
+            "operation_type": "SPRAYING",
+            "location_ref": "field_1",
+            "area": 10.0,
+            "penalty_per_day": 100.0,
+            "deadline": deadline,
+        }
+    )
+
+
+def _epoch(ts: str) -> int:
+    from datetime import datetime
+
+    return int(datetime.fromisoformat(ts).timestamp())
+
+
+_CONSERVATIVE = WeatherPolicySpec(
+    sensitivity={"SPRAYING": ["wind", "rain"]}, requireForecastCoverage=True
+)
+
+
+def test_conservative_weather_blocks_uncovered_horizon_tail() -> None:
+    """A compliant window covering only part of [now, deadline] keeps the task but
+    blocks the uncovered tail; lenient mode would leave it unblocked."""
+    from datetime import datetime
+
+    now = datetime.fromisoformat("2027-06-01T06:00:00+00:00")
+    forecasts = [
+        ForecastRow.from_canonical_dict(
+            {"forecast_id": "w1", "lat": 50.0, "lon": 28.0, "wind_speed": 3.0,
+             "valid_from": "2027-06-01T06:00:00+00:00",
+             "valid_to": "2027-06-01T12:00:00+00:00"}
+        )
+    ]
+    task = _spray_task("t1", "2027-06-01T18:00:00+00:00")
+    kept, infeasible, blocked = apply_weather_filter(
+        [task], _SITES, forecasts, _CONSERVATIVE, now=now
+    )
+    assert len(kept) == 1 and infeasible == []
+    assert blocked == {"t1": [(_epoch("2027-06-01T12:00:00+00:00") + 1,
+                              _epoch("2027-06-01T18:00:00+00:00"))]}
+
+    # Lenient policy leaves the same tail open (only non-compliant windows block).
+    lenient = WeatherPolicySpec(sensitivity={"SPRAYING": ["wind", "rain"]})
+    _, _, lenient_blocked = apply_weather_filter(
+        [task], _SITES, forecasts, lenient, now=now
+    )
+    assert lenient_blocked == {}
+
+
+def test_conservative_weather_drops_task_without_horizon_coverage() -> None:
+    """A compliant window entirely before ``now`` proves nothing about the horizon,
+    so the conservative filter declares the task infeasible."""
+    from datetime import datetime
+
+    now = datetime.fromisoformat("2027-06-01T06:00:00+00:00")
+    forecasts = [
+        ForecastRow.from_canonical_dict(
+            {"forecast_id": "w1", "lat": 50.0, "lon": 28.0, "wind_speed": 3.0,
+             "valid_from": "2027-06-01T00:00:00+00:00",
+             "valid_to": "2027-06-01T05:00:00+00:00"}
+        )
+    ]
+    task = _spray_task("t1", "2027-06-01T18:00:00+00:00")
+    kept, infeasible, blocked = apply_weather_filter(
+        [task], _SITES, forecasts, _CONSERVATIVE, now=now
+    )
+    assert kept == [] and blocked == {}
+    assert infeasible[0]["reason_code"] == ReasonCode.NO_VALID_WEATHER_WINDOW.value
+
+
+def test_conservative_weather_full_coverage_blocks_nothing() -> None:
+    """A compliant window spanning the whole horizon keeps the task with no gaps."""
+    from datetime import datetime
+
+    now = datetime.fromisoformat("2027-06-01T06:00:00+00:00")
+    forecasts = [
+        ForecastRow.from_canonical_dict(
+            {"forecast_id": "w1", "lat": 50.0, "lon": 28.0, "wind_speed": 3.0,
+             "valid_from": "2027-06-01T05:00:00+00:00",
+             "valid_to": "2027-06-01T20:00:00+00:00"}
+        )
+    ]
+    task = _spray_task("t1", "2027-06-01T18:00:00+00:00")
+    kept, infeasible, blocked = apply_weather_filter(
+        [task], _SITES, forecasts, _CONSERVATIVE, now=now
+    )
+    assert len(kept) == 1 and infeasible == [] and blocked == {}
+
+
 def _cluster(task_ids: list[str], operator_ref: str = "op_1") -> ClusterSpec:
     return {
         "cluster_id": "c1",
@@ -186,6 +279,90 @@ def test_operator_pairing_prefers_freest_backup() -> None:
     )
     assert infeasible == []
     assert cluster["task_operators"] == {"t1": "op_free"}
+
+
+def _task_tw(task_id: str, op: str, window: str) -> TaskRow:
+    return TaskRow.from_canonical_dict(
+        {
+            "task_id": task_id,
+            "operation_type": op,
+            "location_ref": "field_1",
+            "area": 10.0,
+            "penalty_per_day": 100.0,
+            "time_windows": [window],
+        }
+    )
+
+
+def test_backup_shared_across_clusters_with_disjoint_windows() -> None:
+    from datetime import datetime, timezone
+
+    now = datetime(2026, 6, 14, 0, 0, tzinfo=timezone.utc)
+    cluster_a = _cluster(["t1"], operator_ref="op_1")
+    cluster_b = _cluster(["t2"], operator_ref="op_3")
+    cluster_b["cluster_id"] = "c2"
+    order_index = {
+        "t1": _task_tw(
+            "t1", "SPRAYING", "2026-06-14T01:00:00Z/2026-06-14T03:00:00Z"
+        ),
+        "t2": _task_tw(
+            "t2", "SPRAYING", "2026-06-14T05:00:00Z/2026-06-14T07:00:00Z"
+        ),
+    }
+    operators = {
+        "op_1": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_1", "certified_operations": "['TILLAGE']"}
+        ),
+        "op_3": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_3", "certified_operations": "['TILLAGE']"}
+        ),
+        "op_backup": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_backup", "certified_operations": "['SPRAYING']"}
+        ),
+    }
+    infeasible = apply_operator_qualification(
+        [cluster_a, cluster_b], order_index, operators, None, now
+    )
+    assert infeasible == []
+    # One backup covers both clusters because their windows do not overlap.
+    assert cluster_a["task_operators"] == {"t1": "op_backup"}
+    assert cluster_b["task_operators"] == {"t2": "op_backup"}
+
+
+def test_backup_not_shared_when_windows_overlap() -> None:
+    from datetime import datetime, timezone
+
+    now = datetime(2026, 6, 14, 0, 0, tzinfo=timezone.utc)
+    cluster_a = _cluster(["t1"], operator_ref="op_1")
+    cluster_b = _cluster(["t2"], operator_ref="op_3")
+    cluster_b["cluster_id"] = "c2"
+    order_index = {
+        "t1": _task_tw(
+            "t1", "SPRAYING", "2026-06-14T01:00:00Z/2026-06-14T04:00:00Z"
+        ),
+        "t2": _task_tw(
+            "t2", "SPRAYING", "2026-06-14T03:00:00Z/2026-06-14T06:00:00Z"
+        ),
+    }
+    operators = {
+        "op_1": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_1", "certified_operations": "['TILLAGE']"}
+        ),
+        "op_3": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_3", "certified_operations": "['TILLAGE']"}
+        ),
+        "op_backup": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_backup", "certified_operations": "['SPRAYING']"}
+        ),
+    }
+    infeasible = apply_operator_qualification(
+        [cluster_a, cluster_b], order_index, operators, None, now
+    )
+    # First cluster claims the only backup over its window; the overlapping
+    # second cluster finds no free backup and its task is dropped.
+    assert cluster_a["task_operators"] == {"t1": "op_backup"}
+    assert [i["task_id"] for i in infeasible] == ["t2"]
+    assert cluster_b["task_ids"] == []
 
 
 def test_material_limit_serves_high_penalty_first() -> None:

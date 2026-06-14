@@ -273,6 +273,42 @@ class TestHoldAwareScoring:
         assert capacity["v0"] == 0.5
         assert capacity["i0"] == 1.0
 
+    def test_build_free_capacity_penalizes_fragmentation(self):
+        from fl_op.solver.allocation.scoring import build_free_capacity
+
+        now = 1_000_000
+        horizon = 24 * 3600
+        h = 3600
+        # Both assets are busy for a total of 12h (free total 12h), but differ in
+        # how that free time is laid out across the horizon.
+        # Contiguous: one 12h block in the middle leaves a 6h gap on each side.
+        contiguous = {"v0": [(now + 6 * h, now + 18 * h)]}
+        # Fragmented: three 4h blocks split the free time into 4h gaps.
+        fragmented = {
+            "v1": [
+                (now + 4 * h, now + 8 * h),
+                (now + 12 * h, now + 16 * h),
+                (now + 20 * h, now + 24 * h),
+            ]
+        }
+        contiguous_cap = build_free_capacity(contiguous, now, horizon_s=horizon)
+        fragmented_cap = build_free_capacity(fragmented, now, horizon_s=horizon)
+        # Largest single gap: 6h contiguous vs 4h fragmented.
+        assert contiguous_cap["v0"] == 6 * h / horizon
+        assert fragmented_cap["v1"] == 4 * h / horizon
+        # Equal total free time, yet fragmentation scores strictly lower.
+        assert fragmented_cap["v1"] < contiguous_cap["v0"]
+
+    def test_build_free_capacity_edge_block_uses_exact_span(self):
+        from fl_op.solver.allocation.scoring import build_free_capacity
+
+        now = 1_000_000
+        horizon = 24 * 3600
+        # A block flush against the start edge leaves one exact tail gap.
+        held = {"v0": [(now, now + 6 * 3600)]}
+        capacity = build_free_capacity(held, now, horizon_s=horizon)
+        assert capacity["v0"] == 18 * 3600 / horizon
+
     def test_held_implement_discounted_among_equals(self):
         _vr, _ir, _compat, pm, v_idx, i_idx = _build_setup(2, 2)
         orders = [_order("o0", 500)]

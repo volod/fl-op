@@ -1,5 +1,6 @@
 """Dataset generation CLI commands."""
 
+import json
 import os
 
 import click
@@ -117,5 +118,36 @@ def generate_data(
         raise click.ClickException(str(exc)) from exc
 
 
+@click.command("domain-capabilities")
+@click.option(
+    "--domain",
+    default=None,
+    show_default="all generator domains",
+    help="Report capabilities for one domain; omit to list every generator domain.",
+)
+def domain_capabilities(domain: str | None) -> None:
+    """Print generator capability metadata as JSON.
+
+    Capabilities describe what a domain pack produces: canonical entities, the
+    contracts staged into a dataset, their source formats, and any extras the
+    domain declares. They let downstream tooling discover a domain's outputs
+    without inspecting the registry or running the generator.
+    """
+    from fl_op.data.domain_generators import (
+        all_generator_capabilities,
+        domain_generator_capabilities,
+    )
+
+    try:
+        if domain:
+            payload: object = domain_generator_capabilities(domain)
+        else:
+            payload = all_generator_capabilities()
+    except (KeyError, ValueError, TypeError, AttributeError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(json.dumps(payload, indent=2, sort_keys=True))
+
+
 def register_data_commands(cli: click.Group) -> None:
     cli.add_command(generate_data)
+    cli.add_command(domain_capabilities)

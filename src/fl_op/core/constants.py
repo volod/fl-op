@@ -11,6 +11,12 @@ DEFAULT_GENERATE_IMPLEMENTS: int = int(os.environ.get("IMPLEMENTS", "400"))
 DEFAULT_GENERATE_ORDERS: int = int(os.environ.get("ORDERS", "250"))
 DEFAULT_GENERATE_DEPOTS: int = int(os.environ.get("DEPOTS", "50"))
 
+# Synthetic delivery delay between a mutable reading being taken (observed_at)
+# and arriving at the platform (ingested_at). Every generator that stamps
+# arrival times draws a delay in [0, this], so arrival order is explicit
+# across restarts instead of approximated by source row order.
+INGESTION_DELAY_MAX_S: float = 120.0
+
 # ---------------------------------------------------------------------------
 # Pre-allocation
 # ---------------------------------------------------------------------------
@@ -322,6 +328,39 @@ TIME_OBJECTIVE_COMPLETION_WEIGHT: int = int(
     os.environ.get("TIME_OBJECTIVE_COMPLETION_WEIGHT", "1")
 )
 
+# Optional deadline-slack / customer-class calibration for the time objective.
+# When disabled (default), the completion-time soft cost uses the flat weight
+# above for every task. When enabled, the per-task weight is scaled up by an
+# integer "urgency factor" so higher-priority customer classes and tighter
+# deadline slack pull their starts earlier. Opt in only when a deployment needs
+# stronger urgency ordering than hard deadlines plus penalty-per-day scoring.
+TIME_OBJECTIVE_URGENCY_CALIBRATION: bool = (
+    os.environ.get("TIME_OBJECTIVE_URGENCY_CALIBRATION", "0").strip().lower()
+    in {"1", "true", "yes", "on"}
+)
+
+# Baseline priority class (matches the canonical Task default). Tasks at or
+# above this class get no class-based urgency boost; each class below it adds
+# TIME_OBJECTIVE_CLASS_WEIGHT_STEP extra weight steps. Lower numbers are more
+# urgent, so class 1 with a baseline of 5 and step 1 adds four steps.
+TIME_OBJECTIVE_BASELINE_PRIORITY_CLASS: int = int(
+    os.environ.get("TIME_OBJECTIVE_BASELINE_PRIORITY_CLASS", "5")
+)
+TIME_OBJECTIVE_CLASS_WEIGHT_STEP: int = int(
+    os.environ.get("TIME_OBJECTIVE_CLASS_WEIGHT_STEP", "1")
+)
+
+# Deadline-slack reference window in seconds (default 7 days). A task whose
+# slack (deadline minus now) is below the reference earns a graduated boost up
+# to TIME_OBJECTIVE_SLACK_WEIGHT_BONUS steps as slack approaches zero; tasks
+# with slack at or above the reference earn no slack boost.
+TIME_OBJECTIVE_SLACK_REFERENCE_S: int = int(
+    os.environ.get("TIME_OBJECTIVE_SLACK_REFERENCE_S", str(7 * 24 * 3600))
+)
+TIME_OBJECTIVE_SLACK_WEIGHT_BONUS: int = int(
+    os.environ.get("TIME_OBJECTIVE_SLACK_WEIGHT_BONUS", "4")
+)
+
 # ---------------------------------------------------------------------------
 # Canonical solver-row defaults
 # ---------------------------------------------------------------------------
@@ -438,6 +477,20 @@ EVENT_DEDUP_FILENAME: str = "event-dedup.ids"
 # Retention of the id log: past this many ids it is compacted in place to
 # the newest ones (atomic replace), bounding the file across deployments.
 EVENT_DEDUP_MAX_IDS: int = int(os.environ.get("EVENT_DEDUP_MAX_IDS", "10000"))
+
+# ---------------------------------------------------------------------------
+# Serving-side continuous watcher (plan watch)
+# ---------------------------------------------------------------------------
+
+# Seconds the watcher sleeps between drain cycles once the visible backlog is
+# exhausted: a tradeoff between replan latency and idle polling cost.
+PLAN_WATCH_POLL_INTERVAL_S: float = float(
+    os.environ.get("PLAN_WATCH_POLL_INTERVAL_S", "5.0")
+)
+
+# Bound on watcher cycles for finite runs (tests, smoke runs): 0 means loop
+# forever (the daemon default).
+PLAN_WATCH_MAX_CYCLES: int = int(os.environ.get("PLAN_WATCH_MAX_CYCLES", "0"))
 
 # ---------------------------------------------------------------------------
 # JSON artifact schema

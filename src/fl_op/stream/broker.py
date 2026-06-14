@@ -131,13 +131,25 @@ class BrokerEventSource:
             except (json.JSONDecodeError, ValueError) as exc:
                 logger.warning("Skipping malformed broker event: %s", exc)
 
+    def commit_offsets(self) -> None:
+        """Commit the consumed offsets without closing the consumer.
+
+        Used for bounded mid-stream commits: a continuous watcher publishes a
+        revision per batch and advances offsets behind it, so a crash only
+        redelivers events after the last published revision rather than the
+        whole session. The consumer stays open for the next batch.
+        """
+        if self._consumer is None:
+            return
+        self._consumer.commit(asynchronous=False)
+        logger.info("Committed broker offsets after revision publication")
+
     def commit(self) -> None:
         """Commit the consumed offsets and close; call after publication."""
         if self._consumer is None:
             return
         try:
-            self._consumer.commit(asynchronous=False)
-            logger.info("Committed broker offsets after revision publication")
+            self.commit_offsets()
         finally:
             self._consumer.close()
             self._consumer = None

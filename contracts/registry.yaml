@@ -397,4 +397,4 @@ contracts:
     sourceFile: inspection-rounds.jsonl
     sourceFormat: jsonl
     fingerprints:
-      optimizationMetadataHash: 6e835bc93432fa5942caf12a586e4241b12f4b5fd49dddc75218500f82ba1a14
+      optimizationMetadataHash: 32537cc533be671a83cfef236ed10bf4d5d20214135578fdf81f23cf2c18d12f

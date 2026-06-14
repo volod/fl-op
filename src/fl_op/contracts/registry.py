@@ -366,6 +366,93 @@ class FileRegistry:
             return apply_drone_profile_tuning(profile)
         return profile
 
+    def domain_profile_ids(self, domains: list[str]) -> list[str]:
+        """Profile ids declared by the given domains, in domain order, deduped.
+
+        A domain without a declared profile contributes nothing; the result is
+        the ordered set of profiles to compose for a (possibly multi-domain)
+        shared-fleet build.
+        """
+        profile_ids: list[str] = []
+        for domain in domains:
+            spec = self.get_domain_spec(domain)
+            profile_id = spec.get("profile")
+            if profile_id and profile_id not in profile_ids:
+                profile_ids.append(profile_id)
+        return profile_ids
+
+    def composite_profile(
+        self, domains: list[str]
+    ) -> Optional[OptimizationProfile]:
+        """Compose the active domains' profiles into one optimization profile.
+
+        The first domain that declares a profile is the primary (it supplies the
+        base identity, scalar defaults, and objective hierarchy); each subsequent
+        domain profile is layered on via ``OptimizationProfile.composed_with``.
+        Returns ``None`` when no selected domain declares a profile, so callers
+        fall back to engine defaults exactly as before.
+        """
+        profile_ids = self.domain_profile_ids(domains)
+        if not profile_ids:
+            return None
+        composite = self.get_profile(profile_ids[0])
+        for profile_id in profile_ids[1:]:
+            composite = composite.composed_with(self.get_profile(profile_id))
+        return composite
+
+    # -- generator capability metadata --------------------------------------------
+
+    def domain_entities(self, domain: str) -> list[str]:
+        """Canonical entities the domain's contracts map, in declaration order.
+
+        Drives generator capability metadata: a domain can generate exactly the
+        canonical entities its registered contracts project, so the registry is
+        the single source of truth rather than a hand-maintained list.
+        """
+        entities: list[str] = []
+        for cid in self.list_contracts():
+            entry = self.entries[cid]
+            if entry.domain != domain or not entry.mapping_ref:
+                continue
+            mapping = self.get_mapping(cid)
+            if mapping is not None and mapping.canonical_entity not in entities:
+                entities.append(mapping.canonical_entity)
+        return entities
+
+    def generator_capabilities(self, domain: str) -> dict[str, Any]:
+        """Describe what a domain's data generator can produce.
+
+        Combines registry-derived facts (the generator callable, the canonical
+        entities the domain maps, the contract ids and source formats it stages)
+        with any operator-declared ``capabilities`` block on the domain spec.
+        Derived fields always reflect the registry so declared metadata cannot
+        silently drift from the contracts.
+        """
+        spec = self.get_domain_spec(domain)
+        contract_ids = [
+            self.entries[cid].qualified_id
+            for cid in self.list_contracts()
+            if self.entries[cid].domain == domain
+        ]
+        source_formats = sorted(
+            {
+                self.entries[cid].source_format
+                for cid in self.list_contracts()
+                if self.entries[cid].domain == domain
+                and self.entries[cid].source_file
+            }
+        )
+        declared = spec.get("capabilities")
+        return {
+            "domain": domain,
+            "generator": spec.get("generator"),
+            "profile": spec.get("profile"),
+            "canonicalEntities": self.domain_entities(domain),
+            "contracts": contract_ids,
+            "sourceFormats": source_formats,
+            "declared": dict(declared) if isinstance(declared, dict) else {},
+        }
+
     # -- fingerprint computation --------------------------------------------------
 
     def compute_fingerprints(self, contract_id: str) -> dict[str, str]:

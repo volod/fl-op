@@ -439,6 +439,63 @@ class TestCostTrueRouting:
         assert {d["task_id"] for d in dispatch} == {"o0"}, infeasible
         assert dispatch[0]["prime_asset_id"] == "v_frugal"
 
+    def test_objective_trades_slow_cheap_for_fast_expensive(self):
+        """Slow/cheap vs fast/expensive: cost mode picks the cheap mover, time
+        mode picks the fast one and lands an earlier completion without losing
+        the assignment.
+
+        The cheap pair burns little fuel (low arc cost) but works the field
+        slowly (long service time); the expensive pair burns a lot of fuel
+        (high arc cost) yet finishes the operation far faster. Cost mode prices
+        only fuel on travel arcs, so it favors the cheap prime; time mode prices
+        travel + service, so it favors the fast implement and lands an earlier
+        completion -- without dropping the order.
+        """
+        from datetime import datetime
+
+        slow_cheap = dataclasses.replace(
+            _vehicle("v_slow_cheap"), fuel_consumption_rate=5.0
+        )
+        fast_expensive = dataclasses.replace(
+            _vehicle("v_fast_expensive"), fuel_consumption_rate=80.0
+        )
+        # i0 is the slow implement (narrow + slow -> long service time);
+        # i1 is the fast implement (wide + fast -> short service time).
+        slow_impl = dataclasses.replace(
+            _implement("i0"), working_width=4.0, max_speed=2.0
+        )
+        fast_impl = dataclasses.replace(
+            _implement("i1"), working_width=36.0, max_speed=15.0
+        )
+        allocated = {"v_slow_cheap": ["i0"], "v_fast_expensive": ["i1"]}
+
+        def _solve(objective):
+            cd = _cluster(task_ids=["o0"], allocated=allocated)
+            return solve_cluster(
+                cd, [_order("o0", fid="f_far")],
+                [slow_cheap, fast_expensive],
+                [slow_impl, fast_impl],
+                [_field("f_far", lat=49.0)], [_depot()],
+                {}, {"v_slow_cheap": 0, "v_fast_expensive": 1}, {"i0": 0, "i1": 1},
+                optimization_objective=objective,
+            )
+
+        cost_dispatch, cost_infeasible = _solve("cost")
+        time_dispatch, time_infeasible = _solve("time")
+
+        # Assignment count is preserved under both objectives.
+        assert {d["task_id"] for d in cost_dispatch} == {"o0"}, cost_infeasible
+        assert {d["task_id"] for d in time_dispatch} == {"o0"}, time_infeasible
+
+        # Cost minimization picks the slow/cheap mover; time minimization the fast one.
+        assert cost_dispatch[0]["prime_asset_id"] == "v_slow_cheap"
+        assert time_dispatch[0]["prime_asset_id"] == "v_fast_expensive"
+
+        # Time objective lowers the completion-time KPI (earlier makespan).
+        cost_end = datetime.fromisoformat(cost_dispatch[0]["scheduled_end"]).timestamp()
+        time_end = datetime.fromisoformat(time_dispatch[0]["scheduled_end"]).timestamp()
+        assert time_end < cost_end
+
     def test_margin_is_net_of_fuel_and_material_at_resolved_prices(self):
         from fl_op.solver.cost_rates import ResourcePrices
 

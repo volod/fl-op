@@ -3,6 +3,7 @@
 import click
 
 from fl_op.cli.options import data_option, resolve_data_dir
+from fl_op.core.constants import PLAN_WATCH_MAX_CYCLES, PLAN_WATCH_POLL_INTERVAL_S
 
 _OBJECTIVE_OPTION = click.option(
     "--objective",
@@ -212,6 +213,56 @@ def plan_rolling(
         events_path=events,
         effective_at=effective_at,
         objective=objective,
+    )
+
+
+@plan_group.command("watch")
+@data_option
+@click.option(
+    "--events",
+    required=False,
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    help="Events file polled each cycle (jsonl source); ignored for broker sources.",
+)
+@click.option(
+    "--effective-at",
+    default=None,
+    help="ISO-8601 effective timestamp (default: now).",
+)
+@click.option(
+    "--poll-interval",
+    type=float,
+    default=PLAN_WATCH_POLL_INTERVAL_S,
+    show_default=True,
+    help="Seconds to idle between drain cycles when no events are visible.",
+)
+@click.option(
+    "--max-cycles",
+    type=int,
+    default=PLAN_WATCH_MAX_CYCLES,
+    show_default=True,
+    help="Drain cycles before stopping; 0 runs forever (daemon).",
+)
+@_OBJECTIVE_OPTION
+def plan_watch(
+    data: str,
+    events: str | None,
+    effective_at: str | None,
+    poll_interval: float,
+    max_cycles: int,
+    objective: str,
+) -> None:
+    """Continuous watcher: one rolling session draining bounded batches forever."""
+    from fl_op.planning.plans import run_plan_watch
+
+    run_plan_watch(
+        str(resolve_data_dir(data)),
+        events_path=events,
+        effective_at=effective_at,
+        objective=objective,
+        poll_interval_s=poll_interval,
+        max_cycles=max_cycles,
     )
 
 

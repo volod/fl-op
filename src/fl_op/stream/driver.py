@@ -10,7 +10,7 @@ import copy
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from fl_op.adapters.ortools_rolling import OrToolsRollingAdapter
 from fl_op.canonical.enums import PlanningMode
@@ -114,6 +114,26 @@ class StreamDriver:
         revision = Revision(event=None, plan=plan, snapshot_id=snapshot.snapshot_id)
         return revision, _service_reasons(snapshot)
 
+    def session(
+        self,
+        sources: dict[str, list[dict[str, Any]]],
+        effective_at: Optional[datetime] = None,
+        objective: str = OBJECTIVE_MODE_COST,
+    ) -> "StreamSession":
+        """Open a stateful session that survives many drain cycles.
+
+        The session owns the mutable working copy, the rolling continuity
+        (previous plan and service reasons) and the accumulated watermarks, so
+        a continuous watcher can drain successive bounded batches from a broker
+        without rebuilding the baseline each cycle.
+        """
+        return StreamSession(
+            self,
+            sources,
+            effective_at or datetime.now(tz=timezone.utc),
+            objective,
+        )
+
     def run(
         self,
         sources: dict[str, list[dict[str, Any]]],
@@ -121,6 +141,7 @@ class StreamDriver:
         effective_at: Optional[datetime] = None,
         convergence_window_s: float = STREAM_CONVERGENCE_WINDOW_S,
         objective: str = OBJECTIVE_MODE_COST,
+        on_revision: Optional[Callable[["Revision"], None]] = None,
     ) -> StreamResult:
         """Produce a baseline revision plus one revision per converged batch.
 
@@ -129,26 +150,84 @@ class StreamDriver:
         flushing its backlog converges before replanning. With the window at 0
         every event yields its own revision. Replayed event ids are applied
         idempotently and never produce a revision.
+
+        ``on_revision`` is invoked once per published event-driven revision
+        (not the baseline) so callers can persist artifacts and advance broker
+        offsets behind each revision instead of only at the end of the stream.
         """
-        effective_at = effective_at or datetime.now(tz=timezone.utc)
-        working = copy.deepcopy(sources)
-
+        session = self.session(sources, effective_at, objective)
         result = StreamResult()
-        baseline, previous_service_reasons = self._baseline(
-            working, effective_at, objective
+        result.revisions.append(session.start())
+        result.revisions.extend(
+            session.drain(
+                events,
+                convergence_window_s=convergence_window_s,
+                on_revision=on_revision,
+            )
         )
-        result.revisions.append(baseline)
-        previous_plan = baseline.plan
+        session.finalize()
+        logger.info("Stream produced %d revisions", len(result.revisions))
+        return result
 
-        for batch in _coalesce(events, convergence_window_s, effective_at):
-            applied = [self.applicator.apply(working, event) for event in batch]
+
+class StreamSession:
+    """Mutable rolling-planning state spanning one or more drain cycles.
+
+    Built via :meth:`StreamDriver.session`. ``start`` produces the baseline
+    revision; ``drain`` applies a bounded batch of events and yields the
+    resulting revisions; ``finalize`` runs the accuracy/lead-time/auto-tune
+    housekeeping. A periodic run calls all three once; a continuous watcher
+    calls ``start`` once and then loops ``drain`` (+ ``finalize`` per cycle).
+    """
+
+    def __init__(
+        self,
+        driver: "StreamDriver",
+        sources: dict[str, list[dict[str, Any]]],
+        effective_at: datetime,
+        objective: str,
+    ) -> None:
+        self._driver = driver
+        self.effective_at = effective_at
+        self.objective = objective
+        self.working = copy.deepcopy(sources)
+        self.previous_plan: Optional[Plan] = None
+        self.previous_service_reasons: dict[str, str] = {}
+
+    def start(self) -> Revision:
+        """Build and remember the baseline revision (no events applied yet)."""
+        baseline, reasons = self._driver._baseline(
+            self.working, self.effective_at, self.objective
+        )
+        self.previous_plan = baseline.plan
+        self.previous_service_reasons = reasons
+        return baseline
+
+    def drain(
+        self,
+        events: list[ExecutionEvent],
+        convergence_window_s: float = STREAM_CONVERGENCE_WINDOW_S,
+        on_revision: Optional[Callable[["Revision"], None]] = None,
+    ) -> list[Revision]:
+        """Apply one bounded batch of events; return its event-driven revisions.
+
+        ``on_revision`` is called as each revision is produced so a continuous
+        watcher can publish artifacts and record dedup ids before the cycle's
+        offsets are committed, bounding crash redelivery to a single cycle.
+        """
+        if self.previous_plan is None:
+            raise RuntimeError("StreamSession.start() must run before drain()")
+        driver = self._driver
+        revisions: list[Revision] = []
+        for batch in _coalesce(events, convergence_window_s, self.effective_at):
+            applied = [driver.applicator.apply(self.working, event) for event in batch]
             # Completions captured by this batch are measured against the
             # plan the tasks were executing under (the previous revision).
-            if self.applicator.completions:
+            if driver.applicator.completions:
                 from fl_op.stream.lead_time import record_completions
 
-                record_completions(self.applicator.completions, previous_plan)
-                self.applicator.completions = []
+                record_completions(driver.applicator.completions, self.previous_plan)
+                driver.applicator.completions = []
             if not any(applied):
                 continue
             applied_event_ids = [
@@ -157,35 +236,39 @@ class StreamDriver:
                 if was_applied and event.event_id
             ]
             last_event = batch[-1]
-            now = _event_now(last_event, effective_at)
-            snapshot = self.builder.build_from_sources(
-                working, PlanningMode.ROLLING, effective_at,
+            now = _event_now(last_event, self.effective_at)
+            snapshot = driver.builder.build_from_sources(
+                self.working, PlanningMode.ROLLING, self.effective_at,
                 lineage_ref=f"stream://{last_event.event_id}",
-                source_watermarks=dict(self.applicator.watermarks),
+                source_watermarks=dict(driver.applicator.watermarks),
             )
-            plan = self.adapter.plan(
+            plan = driver.adapter.plan(
                 snapshot,
-                self._profile_for_builder(),
+                driver._profile_for_builder(),
                 {
                     "now": now,
-                    "previous_plan": previous_plan,
-                    "previous_service_reasons": previous_service_reasons,
-                    "objective": objective,
+                    "previous_plan": self.previous_plan,
+                    "previous_service_reasons": self.previous_service_reasons,
+                    "objective": self.objective,
                 },
             )
-            result.revisions.append(
-                Revision(
-                    event=last_event,
-                    plan=plan,
-                    snapshot_id=snapshot.snapshot_id,
-                    n_coalesced_events=sum(applied),
-                    applied_event_ids=applied_event_ids,
-                )
+            revision = Revision(
+                event=last_event,
+                plan=plan,
+                snapshot_id=snapshot.snapshot_id,
+                n_coalesced_events=sum(applied),
+                applied_event_ids=applied_event_ids,
             )
+            revisions.append(revision)
             record_prognosis_outcomes(plan)
-            previous_plan = plan
-            previous_service_reasons = _service_reasons(snapshot)
+            self.previous_plan = plan
+            self.previous_service_reasons = _service_reasons(snapshot)
+            if on_revision is not None:
+                on_revision(revision)
+        return revisions
 
+    def finalize(self) -> None:
+        """Log accuracy/lead-time stats and auto-tune the monitoring policy."""
         accuracy = prognosis_accuracy()
         log_threshold_recommendations(accuracy)
         from fl_op.stream.lead_time import lead_time_stats
@@ -198,9 +281,7 @@ class StreamDriver:
         if _constants.MONITORING_AUTO_TUNE_ENABLED:
             from fl_op.snapshot.policy_tuning import auto_tune_monitoring_policy
 
-            auto_tune_monitoring_policy(accuracy, self.builder.monitoring_policy)
-        logger.info("Stream produced %d revisions", len(result.revisions))
-        return result
+            auto_tune_monitoring_policy(accuracy, self._driver.builder.monitoring_policy)
 
 
 def _coalesce(
