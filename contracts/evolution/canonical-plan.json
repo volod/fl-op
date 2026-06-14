@@ -1,6 +1,11 @@
 {
   "contractId": "canonical-plan",
   "fields": {
+    "action": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": true
+    },
     "assetRefs": {
       "logicalType": "array",
       "physicalType": "",
@@ -11,6 +16,21 @@
       "physicalType": "",
       "required": true
     },
+    "avgCompletionTimeS": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "bySeverity": {
+      "logicalType": "object",
+      "physicalType": "",
+      "required": false
+    },
+    "detail": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
     "effectiveFrom": {
       "logicalType": "string",
       "physicalType": "",
@@ -18,6 +38,11 @@
     },
     "effectiveTo": {
       "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "evidence": {
+      "logicalType": "object",
       "physicalType": "",
       "required": false
     },
@@ -41,6 +66,11 @@
       "physicalType": "",
       "required": true
     },
+    "greedyBaselineMarginEur": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
     "inventoryLocationRef": {
       "logicalType": "string",
       "physicalType": "",
@@ -51,8 +81,58 @@
       "physicalType": "",
       "required": true
     },
+    "maxCompletionTimeS": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "nClusters": {
+      "logicalType": "integer",
+      "physicalType": "",
+      "required": false
+    },
+    "nDispatched": {
+      "logicalType": "integer",
+      "physicalType": "",
+      "required": false
+    },
+    "nEntitiesExcluded": {
+      "logicalType": "integer",
+      "physicalType": "",
+      "required": true
+    },
+    "nFindings": {
+      "logicalType": "integer",
+      "physicalType": "",
+      "required": true
+    },
+    "nImputed": {
+      "logicalType": "integer",
+      "physicalType": "",
+      "required": true
+    },
+    "nUnassigned": {
+      "logicalType": "integer",
+      "physicalType": "",
+      "required": false
+    },
+    "observationErrorRates": {
+      "logicalType": "object",
+      "physicalType": "",
+      "required": false
+    },
     "operatorRefs": {
       "logicalType": "array",
+      "physicalType": "",
+      "required": false
+    },
+    "optimizationObjective": {
+      "logicalType": "string",
+      "physicalType": "",
+      "required": false
+    },
+    "p95CompletionTimeS": {
+      "logicalType": "number",
       "physicalType": "",
       "required": false
     },
@@ -65,6 +145,11 @@
       "logicalType": "string",
       "physicalType": "",
       "required": true
+    },
+    "planInstabilityPenalty": {
+      "logicalType": "integer",
+      "physicalType": "",
+      "required": false
     },
     "plannedFinish": {
       "logicalType": "string",
@@ -106,6 +191,11 @@
       "physicalType": "",
       "required": true
     },
+    "solverImprovementEur": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
     "status": {
       "logicalType": "string",
       "physicalType": "",
@@ -115,6 +205,16 @@
       "logicalType": "string",
       "physicalType": "",
       "required": true
+    },
+    "totalCompletionTimeS": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "totalEstimatedMarginEur": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
     }
   },
   "history": [
@@ -239,8 +339,230 @@
       },
       "odcsId": "canonical-plan",
       "version": "0.1.0"
+    },
+    {
+      "contractId": "canonical-plan",
+      "fields": {
+        "action": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "assetRefs": {
+          "logicalType": "array",
+          "physicalType": "",
+          "required": false
+        },
+        "assignmentId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "avgCompletionTimeS": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "bySeverity": {
+          "logicalType": "object",
+          "physicalType": "",
+          "required": false
+        },
+        "detail": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "effectiveFrom": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "effectiveTo": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "evidence": {
+          "logicalType": "object",
+          "physicalType": "",
+          "required": false
+        },
+        "expectedCost": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "expectedMargin": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "expectedRevenue": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "generatedAt": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "greedyBaselineMarginEur": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "inventoryLocationRef": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "materialType": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "maxCompletionTimeS": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "nClusters": {
+          "logicalType": "integer",
+          "physicalType": "",
+          "required": false
+        },
+        "nDispatched": {
+          "logicalType": "integer",
+          "physicalType": "",
+          "required": false
+        },
+        "nEntitiesExcluded": {
+          "logicalType": "integer",
+          "physicalType": "",
+          "required": true
+        },
+        "nFindings": {
+          "logicalType": "integer",
+          "physicalType": "",
+          "required": true
+        },
+        "nImputed": {
+          "logicalType": "integer",
+          "physicalType": "",
+          "required": true
+        },
+        "nUnassigned": {
+          "logicalType": "integer",
+          "physicalType": "",
+          "required": false
+        },
+        "observationErrorRates": {
+          "logicalType": "object",
+          "physicalType": "",
+          "required": false
+        },
+        "operatorRefs": {
+          "logicalType": "array",
+          "physicalType": "",
+          "required": false
+        },
+        "optimizationObjective": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "p95CompletionTimeS": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "parentRevisionId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "planId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "planInstabilityPenalty": {
+          "logicalType": "integer",
+          "physicalType": "",
+          "required": false
+        },
+        "plannedFinish": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "plannedStart": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "planningMode": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "quantity": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": true
+        },
+        "reasonCode": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "reservationId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "revisionId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "snapshotRef": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "solverImprovementEur": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "status": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "taskRef": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "totalCompletionTimeS": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "totalEstimatedMarginEur": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        }
+      },
+      "odcsId": "canonical-plan",
+      "version": "1.0.0"
     }
   ],
   "odcsId": "canonical-plan",
-  "version": "0.1.0"
+  "version": "1.0.0"
 }

@@ -171,11 +171,13 @@ To add a domain:
    completely onto the canonical model.
 5. To make the pack runnable, register its contracts under `contracts:`
    with a globally unique registry key and, when useful, a domain-local `id`.
-   Profiles can then reference local ids (`operators` in construction resolves
-   to the `construction-operators` compatibility key). Register the profile
-   under `profiles:`, provide source data or a generator, and select the
-   domain at run time with `ACTIVE_DOMAIN=<domain>` or include it in
-   `ACTIVE_DOMAINS` for a shared-fleet run. The engine needs no change:
+   The registry exposes that projection as a versioned artifact ref
+   (`domain/local-id@odcs:<version>+mapping:<version>`) while still accepting
+   the compatibility key. Profiles can reference local ids (`operators` in
+   construction resolves to the `construction-operators` compatibility key).
+   Register the profile under `profiles:`, provide source data or a generator,
+   and select the domain at run time with `ACTIVE_DOMAIN=<domain>` or include
+   it in `ACTIVE_DOMAINS` for a shared-fleet run. The engine needs no change:
    solver inputs resolve binding tables by canonical entity and asset role.
 
 `contracts/domains/roadside/` is the runnable monitoring-driven example:

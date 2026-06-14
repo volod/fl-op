@@ -82,13 +82,33 @@ canonical plan OUTPUT contract generates physical schemas too
 (`contracts/plan_schema_gen.py`, Avro and Parquet): nested records named
 after the plan.json payload fields, joined from the same binding table the
 publication validator uses, so downstream consumers can validate received
-plan artifacts without this codebase.
+plan artifacts without this codebase. The plan output contract governs the
+common score metrics, quality-summary fields, and corrective-action records in
+addition to the envelope, assignments, unassigned tasks, and material
+reservations; domain-specific nested score payloads such as solver attribution
+and drone KPIs remain extra artifact data.
 
 `fl-op contracts validate` checks: generated-schema structural fingerprints, the
 canonical model, and per-domain **mapping completeness** (every mapping binds only
 to declared canonical fields + known terms, and covers every required canonical
-binding). `fl-op contracts validate-domain --domain <d>` additionally reports each
-contract's optimization-mapped vs extra (analytical) physical fields.
+binding). The registry also exposes every source projection as a versioned
+artifact ref (`domain/local-id@odcs:<version>+mapping:<version>`), validates
+that those refs are unique, and still resolves legacy global ids and
+domain-local aliases for compatibility. `fl-op contracts validate-domain
+--domain <d>` additionally reports each contract's optimization-mapped vs
+extra (analytical) physical fields.
+
+`fl-op contracts evolution-check` enforces both structural and semantic
+versioning. ODCS field changes keep the existing policy: added optional fields
+need at least a minor contract-version bump, while removed fields, type
+changes, requiredness changes, and added required fields need a major bump.
+Canonical mapping metadata is snapshotted separately in the evolution history:
+unit or quantity-kind conversions and enum/list expansions require a minor
+mapping-version bump; binding or semantic-term retargeting, removals, enum
+contractions, and unknown semantic rewrites require a major mapping-version
+bump. Reviewed baselines carry both the normalized semantic metadata and the
+registry artifact ref, so metadata edits are classified before the hash gate is
+accepted.
 
 ## Planning pipeline
 
@@ -326,7 +346,9 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    completion-time KPIs (`total_completion_time_s`,
    `avg_completion_time_s`, `p95_completion_time_s`,
    `max_completion_time_s`) and deadline adherence (`on_time_rate_pct`,
-   `n_tasks_with_deadlines`, `n_on_time`, `n_late`).
+   `n_tasks_with_deadlines`, `n_on_time`, `n_late`). Common scalar/count score
+   fields are declared in the canonical plan output contract; richer nested
+   score maps remain advisory extension data.
    Adapter-normalized plans also carry per-task attribution maps in
    `plan.score`: assigned tasks record their cluster status/objectives,
    LNS delta, time-limit state, estimated margin, and same-cluster unserved

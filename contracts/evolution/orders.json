@@ -234,8 +234,387 @@
       },
       "odcsId": "orders",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "orders",
+      "fields": {
+        "area_ha": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "contract_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "deadline": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": true
+        },
+        "depends_on_order_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "estimated_revenue_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "field_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "material_load_kg": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "operation_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "order_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "penalty_per_day_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "priority": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": false
+        },
+        "service_duration_minutes": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "status": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "workable_windows": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "fe2423525a31523a96287a7227218ea3ba2169be2eb8f5d34eb9e74df89b31ef",
+        "optimizationMetadataHash": "5e68a7eb83b3c3dcd187de27b1898a320f162faf9605c6854d26dcbcfb920e78"
+      },
+      "odcsId": "orders",
+      "registryArtifact": {
+        "artifactId": "agricultural/orders",
+        "artifactRef": "agricultural/orders@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "agricultural",
+        "localId": "orders",
+        "mappingVersion": "1.0.0",
+        "odcsId": "orders",
+        "qualifiedId": "agricultural/orders",
+        "registryId": "orders"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "task",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "serviceOrders",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "orders"
+          },
+          "field:area_ha": {
+            "binding": "task.workQuantity",
+            "canonicalUnit": "ha",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "work",
+            "semanticTerm": "urn:xopt:attribute:work-quantity"
+          },
+          "field:contract_id": {
+            "binding": "task.orderId",
+            "planningUse": [
+              "commitment"
+            ],
+            "semanticTerm": "urn:xopt:relationship:contract"
+          },
+          "field:deadline": {
+            "binding": "task.deadline",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "time-window",
+              "commitment"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:commitment:deadline"
+          },
+          "field:depends_on_order_id": {
+            "binding": "task.dependsOnTaskRef",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "precedence"
+            ],
+            "semanticTerm": "urn:xopt:relationship:depends-on"
+          },
+          "field:estimated_revenue_eur": {
+            "binding": "task.revenueValue",
+            "canonicalUnit": "EUR",
+            "missingValuePolicy": "fallback-to-conservative-value",
+            "planningUse": [
+              "objective"
+            ],
+            "quantityKind": "money",
+            "semanticTerm": "urn:xopt:attribute:expected-revenue"
+          },
+          "field:field_id": {
+            "binding": "task.locationRef",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "semanticTerm": "urn:xopt:relationship:location"
+          },
+          "field:material_load_kg": {
+            "binding": "task.loadDemand",
+            "canonicalUnit": "kg",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "capacity"
+            ],
+            "quantityKind": "mass",
+            "semanticTerm": "urn:xopt:attribute:load-demand"
+          },
+          "field:operation_type": {
+            "binding": "task.operationType",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "compatibility-filter"
+            ],
+            "semanticTerm": "urn:xopt:attribute:operation-type"
+          },
+          "field:order_id": {
+            "binding": "task.taskId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:task-id"
+          },
+          "field:penalty_per_day_eur": {
+            "binding": "task.penaltyPerDay",
+            "canonicalUnit": "EUR",
+            "missingValuePolicy": "fallback-to-conservative-value",
+            "planningUse": [
+              "objective",
+              "commitment"
+            ],
+            "quantityKind": "money",
+            "semanticTerm": "urn:xopt:commitment:lateness-penalty"
+          },
+          "field:priority": {
+            "binding": "task.priorityClass",
+            "missingValuePolicy": "fallback-to-conservative-value",
+            "planningUse": [
+              "objective"
+            ],
+            "semanticTerm": "urn:xopt:attribute:priority-class"
+          },
+          "field:service_duration_minutes": {
+            "binding": "task.serviceDurationMinutes",
+            "canonicalUnit": "min",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "duration",
+            "semanticTerm": "urn:xopt:attribute:service-duration"
+          },
+          "field:status": {
+            "binding": "task.status",
+            "planningUse": [
+              "freeze"
+            ],
+            "semanticTerm": "urn:xopt:attribute:task-status"
+          },
+          "field:workable_windows": {
+            "binding": "task.timeWindows",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "time-window"
+            ],
+            "quantityKind": "interval-set",
+            "semanticTerm": "urn:xopt:time:workable-windows"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "orders",
+  "registryArtifact": {
+    "artifactId": "agricultural/orders",
+    "artifactRef": "agricultural/orders@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "agricultural",
+    "localId": "orders",
+    "mappingVersion": "1.0.0",
+    "odcsId": "orders",
+    "qualifiedId": "agricultural/orders",
+    "registryId": "orders"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "canonicalEntity": "task",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "serviceOrders",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "orders"
+      },
+      "field:area_ha": {
+        "binding": "task.workQuantity",
+        "canonicalUnit": "ha",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "work",
+        "semanticTerm": "urn:xopt:attribute:work-quantity"
+      },
+      "field:contract_id": {
+        "binding": "task.orderId",
+        "planningUse": [
+          "commitment"
+        ],
+        "semanticTerm": "urn:xopt:relationship:contract"
+      },
+      "field:deadline": {
+        "binding": "task.deadline",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "time-window",
+          "commitment"
+        ],
+        "quantityKind": "timestamp",
+        "semanticTerm": "urn:xopt:commitment:deadline"
+      },
+      "field:depends_on_order_id": {
+        "binding": "task.dependsOnTaskRef",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "precedence"
+        ],
+        "semanticTerm": "urn:xopt:relationship:depends-on"
+      },
+      "field:estimated_revenue_eur": {
+        "binding": "task.revenueValue",
+        "canonicalUnit": "EUR",
+        "missingValuePolicy": "fallback-to-conservative-value",
+        "planningUse": [
+          "objective"
+        ],
+        "quantityKind": "money",
+        "semanticTerm": "urn:xopt:attribute:expected-revenue"
+      },
+      "field:field_id": {
+        "binding": "task.locationRef",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "semanticTerm": "urn:xopt:relationship:location"
+      },
+      "field:material_load_kg": {
+        "binding": "task.loadDemand",
+        "canonicalUnit": "kg",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "capacity"
+        ],
+        "quantityKind": "mass",
+        "semanticTerm": "urn:xopt:attribute:load-demand"
+      },
+      "field:operation_type": {
+        "binding": "task.operationType",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "compatibility-filter"
+        ],
+        "semanticTerm": "urn:xopt:attribute:operation-type"
+      },
+      "field:order_id": {
+        "binding": "task.taskId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:task-id"
+      },
+      "field:penalty_per_day_eur": {
+        "binding": "task.penaltyPerDay",
+        "canonicalUnit": "EUR",
+        "missingValuePolicy": "fallback-to-conservative-value",
+        "planningUse": [
+          "objective",
+          "commitment"
+        ],
+        "quantityKind": "money",
+        "semanticTerm": "urn:xopt:commitment:lateness-penalty"
+      },
+      "field:priority": {
+        "binding": "task.priorityClass",
+        "missingValuePolicy": "fallback-to-conservative-value",
+        "planningUse": [
+          "objective"
+        ],
+        "semanticTerm": "urn:xopt:attribute:priority-class"
+      },
+      "field:service_duration_minutes": {
+        "binding": "task.serviceDurationMinutes",
+        "canonicalUnit": "min",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "duration",
+        "semanticTerm": "urn:xopt:attribute:service-duration"
+      },
+      "field:status": {
+        "binding": "task.status",
+        "planningUse": [
+          "freeze"
+        ],
+        "semanticTerm": "urn:xopt:attribute:task-status"
+      },
+      "field:workable_windows": {
+        "binding": "task.timeWindows",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "time-window"
+        ],
+        "quantityKind": "interval-set",
+        "semanticTerm": "urn:xopt:time:workable-windows"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

@@ -159,8 +159,276 @@
       },
       "odcsId": "sensor-readings",
       "version": "1.1.0"
+    },
+    {
+      "contractId": "sensor-readings",
+      "fields": {
+        "ingested_at": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "metric": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "observed_at": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": true
+        },
+        "quality_flag": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "reading_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "sensor_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "state_value": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "unit": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "value": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "6aa9fd8ec01baac37df24df0e90618099c147d8eddd5d440bceea0b398e6c4c0",
+        "optimizationMetadataHash": "a4439474d3e38dda4f75c649d1acc5b9d8f3c4cee2406957204ab32ced80c2e7"
+      },
+      "odcsId": "sensor-readings",
+      "registryArtifact": {
+        "artifactId": "agricultural/sensor-readings",
+        "artifactRef": "agricultural/sensor-readings@odcs:1.1.0+mapping:1.2.0",
+        "contractVersion": "1.1.0",
+        "domain": "agricultural",
+        "localId": "sensor-readings",
+        "mappingVersion": "1.2.0",
+        "odcsId": "sensor-readings",
+        "qualifiedId": "agricultural/sensor-readings",
+        "registryId": "sensor-readings"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "observation",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "equipmentTelemetry",
+            "metricCodes": {
+              "battery_pct": "battery-level",
+              "health_state": "health-status",
+              "soil_moisture_pct": "soil-moisture",
+              "work_progress_pct": "work-progress"
+            },
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "sensor-readings"
+          },
+          "field:ingested_at": {
+            "binding": "observation.ingestedAt",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "monitoring"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:time:ingested-at"
+          },
+          "field:metric": {
+            "binding": "observation.metric",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "monitoring"
+            ],
+            "semanticTerm": "urn:xopt:observation:metric"
+          },
+          "field:observed_at": {
+            "binding": "observation.observedAt",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "monitoring"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:time:observed-at"
+          },
+          "field:quality_flag": {
+            "binding": "observation.qualityFlag",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "monitoring"
+            ],
+            "semanticTerm": "urn:xopt:observation:quality-flag"
+          },
+          "field:reading_id": {
+            "binding": "observation.observationId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:observation-id"
+          },
+          "field:sensor_id": {
+            "binding": "observation.entityRef",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "monitoring"
+            ],
+            "semanticTerm": "urn:xopt:relationship:entity-ref"
+          },
+          "field:state_value": {
+            "binding": "observation.stateValue",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "monitoring"
+            ],
+            "semanticTerm": "urn:xopt:observation:state"
+          },
+          "field:unit": {
+            "binding": "observation.unit",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "monitoring"
+            ],
+            "semanticTerm": "urn:xopt:observation:unit"
+          },
+          "field:value": {
+            "binding": "observation.value",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "monitoring"
+            ],
+            "quantityKind": "measurement",
+            "semanticTerm": "urn:xopt:observation:value"
+          }
+        },
+        "mappingVersion": "1.2.0"
+      },
+      "version": "1.1.0"
     }
   ],
   "odcsId": "sensor-readings",
+  "registryArtifact": {
+    "artifactId": "agricultural/sensor-readings",
+    "artifactRef": "agricultural/sensor-readings@odcs:1.1.0+mapping:1.2.0",
+    "contractVersion": "1.1.0",
+    "domain": "agricultural",
+    "localId": "sensor-readings",
+    "mappingVersion": "1.2.0",
+    "odcsId": "sensor-readings",
+    "qualifiedId": "agricultural/sensor-readings",
+    "registryId": "sensor-readings"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "canonicalEntity": "observation",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "equipmentTelemetry",
+        "metricCodes": {
+          "battery_pct": "battery-level",
+          "health_state": "health-status",
+          "soil_moisture_pct": "soil-moisture",
+          "work_progress_pct": "work-progress"
+        },
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "sensor-readings"
+      },
+      "field:ingested_at": {
+        "binding": "observation.ingestedAt",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "monitoring"
+        ],
+        "quantityKind": "timestamp",
+        "semanticTerm": "urn:xopt:time:ingested-at"
+      },
+      "field:metric": {
+        "binding": "observation.metric",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "monitoring"
+        ],
+        "semanticTerm": "urn:xopt:observation:metric"
+      },
+      "field:observed_at": {
+        "binding": "observation.observedAt",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "monitoring"
+        ],
+        "quantityKind": "timestamp",
+        "semanticTerm": "urn:xopt:time:observed-at"
+      },
+      "field:quality_flag": {
+        "binding": "observation.qualityFlag",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "monitoring"
+        ],
+        "semanticTerm": "urn:xopt:observation:quality-flag"
+      },
+      "field:reading_id": {
+        "binding": "observation.observationId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:observation-id"
+      },
+      "field:sensor_id": {
+        "binding": "observation.entityRef",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "monitoring"
+        ],
+        "semanticTerm": "urn:xopt:relationship:entity-ref"
+      },
+      "field:state_value": {
+        "binding": "observation.stateValue",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "monitoring"
+        ],
+        "semanticTerm": "urn:xopt:observation:state"
+      },
+      "field:unit": {
+        "binding": "observation.unit",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "monitoring"
+        ],
+        "semanticTerm": "urn:xopt:observation:unit"
+      },
+      "field:value": {
+        "binding": "observation.value",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "monitoring"
+        ],
+        "quantityKind": "measurement",
+        "semanticTerm": "urn:xopt:observation:value"
+      }
+    },
+    "mappingVersion": "1.2.0"
+  },
   "version": "1.1.0"
 }

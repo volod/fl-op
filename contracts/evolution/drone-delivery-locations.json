@@ -105,8 +105,251 @@
       },
       "odcsId": "delivery-locations",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "drone-delivery-locations",
+      "fields": {
+        "customer_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "location_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "polygon": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "restricted_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "restriction_windows": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "service_area_ha": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "cfe92e9b6db9e91fe1a22c075811a2679bd0c5ad2f34534c3c2dad43c727cab5"
+      },
+      "odcsId": "delivery-locations",
+      "registryArtifact": {
+        "artifactId": "drone_logistics/delivery-locations",
+        "artifactRef": "drone_logistics/delivery-locations@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "drone_logistics",
+        "localId": "delivery-locations",
+        "mappingVersion": "1.0.0",
+        "odcsId": "delivery-locations",
+        "qualifiedId": "drone_logistics/delivery-locations",
+        "registryId": "drone-delivery-locations"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "location",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "customerLocations",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "delivery-locations"
+          },
+          "field:lat": {
+            "binding": "location.lat",
+            "canonicalUnit": "deg",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:latitude"
+          },
+          "field:location_id": {
+            "binding": "location.locationId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:location-id"
+          },
+          "field:lon": {
+            "binding": "location.lon",
+            "canonicalUnit": "deg",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:longitude"
+          },
+          "field:name": {
+            "binding": "location.name",
+            "planningUse": [
+              "classification"
+            ],
+            "semanticTerm": "urn:xopt:attribute:display-name"
+          },
+          "field:polygon": {
+            "binding": "location.polygon",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "geometry",
+            "semanticTerm": "urn:xopt:attribute:polygon"
+          },
+          "field:restricted_operations": {
+            "binding": "location.restrictedOperations",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "restriction"
+            ],
+            "quantityKind": "categorical-set",
+            "semanticTerm": "urn:xopt:restriction:prohibited-operations"
+          },
+          "field:restriction_windows": {
+            "binding": "location.restrictionWindows",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "restriction"
+            ],
+            "quantityKind": "interval-set",
+            "semanticTerm": "urn:xopt:restriction:restricted-windows"
+          },
+          "field:service_area_ha": {
+            "binding": "location.areaHa",
+            "canonicalUnit": "ha",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "area",
+            "semanticTerm": "urn:xopt:attribute:area"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "delivery-locations",
+  "registryArtifact": {
+    "artifactId": "drone_logistics/delivery-locations",
+    "artifactRef": "drone_logistics/delivery-locations@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "drone_logistics",
+    "localId": "delivery-locations",
+    "mappingVersion": "1.0.0",
+    "odcsId": "delivery-locations",
+    "qualifiedId": "drone_logistics/delivery-locations",
+    "registryId": "drone-delivery-locations"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "canonicalEntity": "location",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "customerLocations",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "delivery-locations"
+      },
+      "field:lat": {
+        "binding": "location.lat",
+        "canonicalUnit": "deg",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:latitude"
+      },
+      "field:location_id": {
+        "binding": "location.locationId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:location-id"
+      },
+      "field:lon": {
+        "binding": "location.lon",
+        "canonicalUnit": "deg",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:longitude"
+      },
+      "field:name": {
+        "binding": "location.name",
+        "planningUse": [
+          "classification"
+        ],
+        "semanticTerm": "urn:xopt:attribute:display-name"
+      },
+      "field:polygon": {
+        "binding": "location.polygon",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "geometry",
+        "semanticTerm": "urn:xopt:attribute:polygon"
+      },
+      "field:restricted_operations": {
+        "binding": "location.restrictedOperations",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "restriction"
+        ],
+        "quantityKind": "categorical-set",
+        "semanticTerm": "urn:xopt:restriction:prohibited-operations"
+      },
+      "field:restriction_windows": {
+        "binding": "location.restrictionWindows",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "restriction"
+        ],
+        "quantityKind": "interval-set",
+        "semanticTerm": "urn:xopt:restriction:restricted-windows"
+      },
+      "field:service_area_ha": {
+        "binding": "location.areaHa",
+        "canonicalUnit": "ha",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "area",
+        "semanticTerm": "urn:xopt:attribute:area"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

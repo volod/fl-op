@@ -159,8 +159,272 @@
       },
       "odcsId": "fields",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "fields",
+      "fields": {
+        "area_ha": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "centroid_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "centroid_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "field_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "polygon": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "restricted_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "restricted_windows": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "soil_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "7070d3eedce5ac9138cb6b4c3cc8e9ed181afad784eaf00d170ea5938f0efa74",
+        "optimizationMetadataHash": "25757fc9b9ddf831cc598c0183bb76503ae5f3fe1442908414c67c729250fe9d"
+      },
+      "odcsId": "fields",
+      "registryArtifact": {
+        "artifactId": "agricultural/fields",
+        "artifactRef": "agricultural/fields@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "agricultural",
+        "localId": "fields",
+        "mappingVersion": "1.0.0",
+        "odcsId": "fields",
+        "qualifiedId": "agricultural/fields",
+        "registryId": "fields"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "location",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "fieldParcels",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "fields"
+          },
+          "field:area_ha": {
+            "binding": "location.areaHa",
+            "canonicalUnit": "ha",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "area",
+            "semanticTerm": "urn:xopt:attribute:area"
+          },
+          "field:centroid_lat": {
+            "binding": "location.lat",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:latitude"
+          },
+          "field:centroid_lon": {
+            "binding": "location.lon",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:longitude"
+          },
+          "field:field_id": {
+            "binding": "location.locationId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:location-id"
+          },
+          "field:name": {
+            "binding": "location.name",
+            "planningUse": [
+              "display"
+            ],
+            "semanticTerm": "urn:xopt:attribute:display-name"
+          },
+          "field:polygon": {
+            "binding": "location.polygon",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "geometry",
+            "semanticTerm": "urn:xopt:attribute:polygon"
+          },
+          "field:restricted_operations": {
+            "binding": "location.restrictedOperations",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "field-restriction"
+            ],
+            "quantityKind": "categorical-set",
+            "semanticTerm": "urn:xopt:restriction:prohibited-operations"
+          },
+          "field:restricted_windows": {
+            "binding": "location.restrictionWindows",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "field-restriction",
+              "time-window"
+            ],
+            "quantityKind": "interval-set",
+            "semanticTerm": "urn:xopt:restriction:restricted-windows"
+          },
+          "field:soil_type": {
+            "binding": "location.soilType",
+            "planningUse": [
+              "field-restriction"
+            ],
+            "semanticTerm": "urn:xopt:attribute:soil-type"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "fields",
+  "registryArtifact": {
+    "artifactId": "agricultural/fields",
+    "artifactRef": "agricultural/fields@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "agricultural",
+    "localId": "fields",
+    "mappingVersion": "1.0.0",
+    "odcsId": "fields",
+    "qualifiedId": "agricultural/fields",
+    "registryId": "fields"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "canonicalEntity": "location",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "fieldParcels",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "fields"
+      },
+      "field:area_ha": {
+        "binding": "location.areaHa",
+        "canonicalUnit": "ha",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "area",
+        "semanticTerm": "urn:xopt:attribute:area"
+      },
+      "field:centroid_lat": {
+        "binding": "location.lat",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:latitude"
+      },
+      "field:centroid_lon": {
+        "binding": "location.lon",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:longitude"
+      },
+      "field:field_id": {
+        "binding": "location.locationId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:location-id"
+      },
+      "field:name": {
+        "binding": "location.name",
+        "planningUse": [
+          "display"
+        ],
+        "semanticTerm": "urn:xopt:attribute:display-name"
+      },
+      "field:polygon": {
+        "binding": "location.polygon",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "geometry",
+        "semanticTerm": "urn:xopt:attribute:polygon"
+      },
+      "field:restricted_operations": {
+        "binding": "location.restrictedOperations",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "field-restriction"
+        ],
+        "quantityKind": "categorical-set",
+        "semanticTerm": "urn:xopt:restriction:prohibited-operations"
+      },
+      "field:restricted_windows": {
+        "binding": "location.restrictionWindows",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "field-restriction",
+          "time-window"
+        ],
+        "quantityKind": "interval-set",
+        "semanticTerm": "urn:xopt:restriction:restricted-windows"
+      },
+      "field:soil_type": {
+        "binding": "location.soilType",
+        "planningUse": [
+          "field-restriction"
+        ],
+        "semanticTerm": "urn:xopt:attribute:soil-type"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

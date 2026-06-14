@@ -114,8 +114,201 @@
       },
       "odcsId": "sites",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "sites",
+      "fields": {
+        "entry_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "entry_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "ground_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "label": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "plot_ha": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "site_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "288b6e3057805552024cdf40ad45b2712ebd4c862f526c1949d282b1b625b88f",
+        "optimizationMetadataHash": "4deb817344fd530e24f85a74e5bdcc51edf450c8ef428035b1df15a11a4214b6"
+      },
+      "odcsId": "sites",
+      "registryArtifact": {
+        "artifactId": "construction/sites",
+        "artifactRef": "construction/sites@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "construction",
+        "localId": "sites",
+        "mappingVersion": "1.0.0",
+        "odcsId": "sites",
+        "qualifiedId": "construction/sites",
+        "registryId": "sites"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "location",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "workSites",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "sites"
+          },
+          "field:entry_lat": {
+            "binding": "location.lat",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:latitude"
+          },
+          "field:entry_lon": {
+            "binding": "location.lon",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:longitude"
+          },
+          "field:ground_class": {
+            "binding": "location.soilType",
+            "planningUse": [
+              "field-restriction"
+            ],
+            "semanticTerm": "urn:xopt:attribute:soil-type"
+          },
+          "field:label": {
+            "binding": "location.name",
+            "planningUse": [
+              "display"
+            ],
+            "semanticTerm": "urn:xopt:attribute:display-name"
+          },
+          "field:plot_ha": {
+            "binding": "location.areaHa",
+            "canonicalUnit": "ha",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "area",
+            "semanticTerm": "urn:xopt:attribute:area"
+          },
+          "field:site_id": {
+            "binding": "location.locationId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:location-id"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "sites",
+  "registryArtifact": {
+    "artifactId": "construction/sites",
+    "artifactRef": "construction/sites@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "construction",
+    "localId": "sites",
+    "mappingVersion": "1.0.0",
+    "odcsId": "sites",
+    "qualifiedId": "construction/sites",
+    "registryId": "sites"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "canonicalEntity": "location",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "workSites",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "sites"
+      },
+      "field:entry_lat": {
+        "binding": "location.lat",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:latitude"
+      },
+      "field:entry_lon": {
+        "binding": "location.lon",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:longitude"
+      },
+      "field:ground_class": {
+        "binding": "location.soilType",
+        "planningUse": [
+          "field-restriction"
+        ],
+        "semanticTerm": "urn:xopt:attribute:soil-type"
+      },
+      "field:label": {
+        "binding": "location.name",
+        "planningUse": [
+          "display"
+        ],
+        "semanticTerm": "urn:xopt:attribute:display-name"
+      },
+      "field:plot_ha": {
+        "binding": "location.areaHa",
+        "canonicalUnit": "ha",
+        "planningUse": [
+          "duration-estimation"
+        ],
+        "quantityKind": "area",
+        "semanticTerm": "urn:xopt:attribute:area"
+      },
+      "field:site_id": {
+        "binding": "location.locationId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:location-id"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

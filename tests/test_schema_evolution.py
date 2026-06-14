@@ -16,7 +16,9 @@ from fl_op.contracts.evolution import (
     baseline_history,
     check_evolution,
     classify_change,
+    classify_semantic_metadata_change,
     freeze_baselines,
+    semantic_metadata_snapshot,
     schema_snapshot,
     version_policy_errors,
 )
@@ -63,6 +65,100 @@ def test_requiredness_change_is_breaking_in_both_directions() -> None:
         classify_change({"a": dict(_OPTIONAL)}, {"a": dict(_FIELD)}).change_class
         == CHANGE_BREAKING
     )
+
+
+def test_semantic_unit_conversion_requires_minor_mapping_bump() -> None:
+    base = {
+        "metadata": {
+            "sourceContract": "vehicles",
+            "canonicalEntity": "asset",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "mappingVersion": "1.0.0",
+        },
+        "fieldMappings": [
+            {
+                "sourceField": "rated_power_kw",
+                "binding": "asset.capabilities.ratedPower",
+                "semanticTerm": "urn:xopt:capability:rated-power",
+                "canonicalUnit": "kW",
+            }
+        ],
+    }
+    changed = copy.deepcopy(base)
+    changed["fieldMappings"][0]["canonicalUnit"] = "W"
+
+    report = classify_semantic_metadata_change(
+        semantic_metadata_snapshot(base),
+        semantic_metadata_snapshot(changed),
+    )
+
+    assert report.change_class == CHANGE_BACKWARD
+    assert version_policy_errors(
+        "vehicles",
+        "1.0.0",
+        "1.0.1",
+        report,
+        subject="semantic metadata",
+    )
+    assert (
+        version_policy_errors(
+            "vehicles",
+            "1.0.0",
+            "1.1.0",
+            report,
+            subject="semantic metadata",
+        )
+        == []
+    )
+
+
+def test_semantic_enum_expansion_is_backward_compatible() -> None:
+    base = {
+        "metadata": {
+            "sourceContract": "sensor-readings",
+            "canonicalEntity": "observation",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "mappingVersion": "1.2.0",
+            "metricCodes": {"battery_pct": "battery-level"},
+        },
+        "fieldMappings": [],
+    }
+    changed = copy.deepcopy(base)
+    changed["metadata"]["metricCodes"]["temperature_c"] = "temperature"
+
+    report = classify_semantic_metadata_change(
+        semantic_metadata_snapshot(base),
+        semantic_metadata_snapshot(changed),
+    )
+
+    assert report.change_class == CHANGE_BACKWARD
+
+
+def test_semantic_binding_retargeting_is_breaking() -> None:
+    base = {
+        "metadata": {
+            "sourceContract": "vehicles",
+            "canonicalEntity": "asset",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "mappingVersion": "1.0.0",
+        },
+        "fieldMappings": [
+            {
+                "sourceField": "depot_id",
+                "binding": "asset.homeDepotRef",
+                "semanticTerm": "urn:xopt:relationship:home-depot",
+            }
+        ],
+    }
+    changed = copy.deepcopy(base)
+    changed["fieldMappings"][0]["binding"] = "asset.assetId"
+
+    report = classify_semantic_metadata_change(
+        semantic_metadata_snapshot(base),
+        semantic_metadata_snapshot(changed),
+    )
+
+    assert report.change_class == CHANGE_BREAKING
 
 
 def test_identical_allows_same_or_higher_version_but_not_lower() -> None:
@@ -215,6 +311,8 @@ def test_check_unifies_metadata_hash_drift_with_evolution_gate(
 
     assert not report.ok
     assert any("optimization metadata" in err for err in vehicles.errors)
+    assert vehicles.semantic_change_class == CHANGE_BACKWARD
+    assert any("semantic metadata change" in err for err in vehicles.errors)
 
 
 def test_check_accepts_reviewed_metadata_hash_history(contracts_copy) -> None:
@@ -222,7 +320,9 @@ def test_check_accepts_reviewed_metadata_hash_history(contracts_copy) -> None:
     freeze_baselines(registry)
     mapping_path = contracts_copy / "domains/agricultural/mappings/vehicles.mapping.yaml"
     mapping_path.write_text(
-        mapping_path.read_text().replace("canonicalUnit: kW", "canonicalUnit: W", 1)
+        mapping_path.read_text()
+        .replace("canonicalUnit: kW", "canonicalUnit: W", 1)
+        .replace("mappingVersion: 1.0.0", "mappingVersion: 1.1.0", 1)
     )
     freeze_baselines(FileRegistry(root=contracts_copy))
     payload = json.loads((contracts_copy / "evolution" / "vehicles.json").read_text())

@@ -99,8 +99,186 @@
       },
       "odcsId": "yards",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "yards",
+      "fields": {
+        "diesel_litres": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "label": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "yard_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "ba320cec1eef2f0bf179ce4d7f50916073c4b56a369b6e90a244a6e648e2b22c",
+        "optimizationMetadataHash": "8d94b28bd3d0a15786e997ab0ca5d3bed91d43f50bdb7be734a492bd2ee5caed"
+      },
+      "odcsId": "yards",
+      "registryArtifact": {
+        "artifactId": "construction/yards",
+        "artifactRef": "construction/yards@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "construction",
+        "localId": "yards",
+        "mappingVersion": "1.0.0",
+        "odcsId": "yards",
+        "qualifiedId": "construction/yards",
+        "registryId": "yards"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "assetRole": "depot",
+            "canonicalEntity": "location",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "depots",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "yards"
+          },
+          "field:diesel_litres": {
+            "binding": "location.inventory.fuel",
+            "canonicalUnit": "L",
+            "missingValuePolicy": "fallback-to-conservative-value",
+            "planningUse": [
+              "material-availability"
+            ],
+            "quantityKind": "volume",
+            "semanticTerm": "urn:xopt:inventory:fuel"
+          },
+          "field:label": {
+            "binding": "location.name",
+            "planningUse": [
+              "display"
+            ],
+            "semanticTerm": "urn:xopt:attribute:display-name"
+          },
+          "field:lat": {
+            "binding": "location.lat",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:latitude"
+          },
+          "field:lon": {
+            "binding": "location.lon",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:longitude"
+          },
+          "field:yard_id": {
+            "binding": "location.locationId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:location-id"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "yards",
+  "registryArtifact": {
+    "artifactId": "construction/yards",
+    "artifactRef": "construction/yards@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "construction",
+    "localId": "yards",
+    "mappingVersion": "1.0.0",
+    "odcsId": "yards",
+    "qualifiedId": "construction/yards",
+    "registryId": "yards"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "assetRole": "depot",
+        "canonicalEntity": "location",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "depots",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "yards"
+      },
+      "field:diesel_litres": {
+        "binding": "location.inventory.fuel",
+        "canonicalUnit": "L",
+        "missingValuePolicy": "fallback-to-conservative-value",
+        "planningUse": [
+          "material-availability"
+        ],
+        "quantityKind": "volume",
+        "semanticTerm": "urn:xopt:inventory:fuel"
+      },
+      "field:label": {
+        "binding": "location.name",
+        "planningUse": [
+          "display"
+        ],
+        "semanticTerm": "urn:xopt:attribute:display-name"
+      },
+      "field:lat": {
+        "binding": "location.lat",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:latitude"
+      },
+      "field:lon": {
+        "binding": "location.lon",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:longitude"
+      },
+      "field:yard_id": {
+        "binding": "location.locationId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:location-id"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

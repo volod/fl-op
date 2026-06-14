@@ -114,8 +114,203 @@
       },
       "odcsId": "operators",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "operators",
+      "fields": {
+        "certified_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "operator_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "shift_end_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "shift_start_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "c063eb2e4b5e1f058c3e893baf5bc7846fba4f589c0bdc0621d4f0232f123e63",
+        "optimizationMetadataHash": "2f61c80d03d93c2b2d75e67f5962fb0130cf21fd4ff920c89d4a242b499be531"
+      },
+      "odcsId": "operators",
+      "registryArtifact": {
+        "artifactId": "agricultural/operators",
+        "artifactRef": "agricultural/operators@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "agricultural",
+        "localId": "operators",
+        "mappingVersion": "1.0.0",
+        "odcsId": "operators",
+        "qualifiedId": "agricultural/operators",
+        "registryId": "operators"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "assetRole": "operator",
+            "canonicalEntity": "asset",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "operatorMaster",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "operators"
+          },
+          "field:certified_operations": {
+            "binding": "asset.capabilities.certifiedOperations",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "compatibility-filter"
+            ],
+            "quantityKind": "categorical-set",
+            "semanticTerm": "urn:xopt:capability:operator-certification"
+          },
+          "field:depot_id": {
+            "binding": "asset.homeDepotRef",
+            "planningUse": [
+              "assignment"
+            ],
+            "semanticTerm": "urn:xopt:relationship:home-depot"
+          },
+          "field:name": {
+            "binding": "asset.name",
+            "planningUse": [
+              "display"
+            ],
+            "semanticTerm": "urn:xopt:attribute:display-name"
+          },
+          "field:operator_id": {
+            "binding": "asset.assetId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:asset-id"
+          },
+          "field:shift_end_s": {
+            "binding": "asset.availability.shiftEnd",
+            "canonicalUnit": "s",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "availability"
+            ],
+            "quantityKind": "time",
+            "semanticTerm": "urn:xopt:availability:shift-end"
+          },
+          "field:shift_start_s": {
+            "binding": "asset.availability.shiftStart",
+            "canonicalUnit": "s",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "availability"
+            ],
+            "quantityKind": "time",
+            "semanticTerm": "urn:xopt:availability:shift-start"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "operators",
+  "registryArtifact": {
+    "artifactId": "agricultural/operators",
+    "artifactRef": "agricultural/operators@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "agricultural",
+    "localId": "operators",
+    "mappingVersion": "1.0.0",
+    "odcsId": "operators",
+    "qualifiedId": "agricultural/operators",
+    "registryId": "operators"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "assetRole": "operator",
+        "canonicalEntity": "asset",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "operatorMaster",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "operators"
+      },
+      "field:certified_operations": {
+        "binding": "asset.capabilities.certifiedOperations",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "compatibility-filter"
+        ],
+        "quantityKind": "categorical-set",
+        "semanticTerm": "urn:xopt:capability:operator-certification"
+      },
+      "field:depot_id": {
+        "binding": "asset.homeDepotRef",
+        "planningUse": [
+          "assignment"
+        ],
+        "semanticTerm": "urn:xopt:relationship:home-depot"
+      },
+      "field:name": {
+        "binding": "asset.name",
+        "planningUse": [
+          "display"
+        ],
+        "semanticTerm": "urn:xopt:attribute:display-name"
+      },
+      "field:operator_id": {
+        "binding": "asset.assetId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:asset-id"
+      },
+      "field:shift_end_s": {
+        "binding": "asset.availability.shiftEnd",
+        "canonicalUnit": "s",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "availability"
+        ],
+        "quantityKind": "time",
+        "semanticTerm": "urn:xopt:availability:shift-end"
+      },
+      "field:shift_start_s": {
+        "binding": "asset.availability.shiftStart",
+        "canonicalUnit": "s",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "availability"
+        ],
+        "quantityKind": "time",
+        "semanticTerm": "urn:xopt:availability:shift-start"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

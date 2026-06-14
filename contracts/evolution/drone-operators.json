@@ -75,8 +75,196 @@
       },
       "odcsId": "drone-operators",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "drone-operators",
+      "fields": {
+        "certified_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "full_name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "hub_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "operator_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "shift_end_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "shift_start_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "878cd9746213493d323c6c02118baf7fbad532a91426dd4f758a10401019c364"
+      },
+      "odcsId": "drone-operators",
+      "registryArtifact": {
+        "artifactId": "drone_logistics/drone-operators",
+        "artifactRef": "drone_logistics/drone-operators@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "drone_logistics",
+        "localId": "drone-operators",
+        "mappingVersion": "1.0.0",
+        "odcsId": "drone-operators",
+        "qualifiedId": "drone_logistics/drone-operators",
+        "registryId": "drone-operators"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "assetRole": "operator",
+            "canonicalEntity": "asset",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "operatorRoster",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "drone-operators"
+          },
+          "field:certified_operations": {
+            "binding": "asset.capabilities.certifiedOperations",
+            "planningUse": [
+              "compatibility-filter"
+            ],
+            "quantityKind": "categorical-set",
+            "semanticTerm": "urn:xopt:capability:operator-certification"
+          },
+          "field:full_name": {
+            "binding": "asset.name",
+            "planningUse": [
+              "classification"
+            ],
+            "semanticTerm": "urn:xopt:attribute:display-name"
+          },
+          "field:hub_id": {
+            "binding": "asset.homeDepotRef",
+            "planningUse": [
+              "assignment"
+            ],
+            "semanticTerm": "urn:xopt:relationship:home-depot"
+          },
+          "field:operator_id": {
+            "binding": "asset.assetId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:asset-id"
+          },
+          "field:shift_end_s": {
+            "binding": "asset.availability.shiftEnd",
+            "canonicalUnit": "s",
+            "planningUse": [
+              "availability"
+            ],
+            "quantityKind": "time",
+            "semanticTerm": "urn:xopt:availability:shift-end"
+          },
+          "field:shift_start_s": {
+            "binding": "asset.availability.shiftStart",
+            "canonicalUnit": "s",
+            "planningUse": [
+              "availability"
+            ],
+            "quantityKind": "time",
+            "semanticTerm": "urn:xopt:availability:shift-start"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "drone-operators",
+  "registryArtifact": {
+    "artifactId": "drone_logistics/drone-operators",
+    "artifactRef": "drone_logistics/drone-operators@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "drone_logistics",
+    "localId": "drone-operators",
+    "mappingVersion": "1.0.0",
+    "odcsId": "drone-operators",
+    "qualifiedId": "drone_logistics/drone-operators",
+    "registryId": "drone-operators"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "assetRole": "operator",
+        "canonicalEntity": "asset",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "operatorRoster",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "drone-operators"
+      },
+      "field:certified_operations": {
+        "binding": "asset.capabilities.certifiedOperations",
+        "planningUse": [
+          "compatibility-filter"
+        ],
+        "quantityKind": "categorical-set",
+        "semanticTerm": "urn:xopt:capability:operator-certification"
+      },
+      "field:full_name": {
+        "binding": "asset.name",
+        "planningUse": [
+          "classification"
+        ],
+        "semanticTerm": "urn:xopt:attribute:display-name"
+      },
+      "field:hub_id": {
+        "binding": "asset.homeDepotRef",
+        "planningUse": [
+          "assignment"
+        ],
+        "semanticTerm": "urn:xopt:relationship:home-depot"
+      },
+      "field:operator_id": {
+        "binding": "asset.assetId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:asset-id"
+      },
+      "field:shift_end_s": {
+        "binding": "asset.availability.shiftEnd",
+        "canonicalUnit": "s",
+        "planningUse": [
+          "availability"
+        ],
+        "quantityKind": "time",
+        "semanticTerm": "urn:xopt:availability:shift-end"
+      },
+      "field:shift_start_s": {
+        "binding": "asset.availability.shiftStart",
+        "canonicalUnit": "s",
+        "planningUse": [
+          "availability"
+        ],
+        "quantityKind": "time",
+        "semanticTerm": "urn:xopt:availability:shift-start"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

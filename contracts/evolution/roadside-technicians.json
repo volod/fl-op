@@ -112,8 +112,202 @@
       },
       "odcsId": "technicians",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "roadside-technicians",
+      "fields": {
+        "certified_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "full_name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "shift_end_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "shift_start_s": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": true
+        },
+        "technician_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "29fb93be2437d0a6e1b977a749ebf4047e3078a957e117f06f2054a7304f2496"
+      },
+      "odcsId": "technicians",
+      "registryArtifact": {
+        "artifactId": "roadside/technicians",
+        "artifactRef": "roadside/technicians@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "roadside",
+        "localId": "technicians",
+        "mappingVersion": "1.0.0",
+        "odcsId": "technicians",
+        "qualifiedId": "roadside/technicians",
+        "registryId": "roadside-technicians"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "assetRole": "operator",
+            "canonicalEntity": "asset",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "operatorMaster",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "technicians"
+          },
+          "field:certified_operations": {
+            "binding": "asset.capabilities.certifiedOperations",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "compatibility-filter"
+            ],
+            "quantityKind": "categorical-set",
+            "semanticTerm": "urn:xopt:capability:operator-certification"
+          },
+          "field:depot_id": {
+            "binding": "asset.homeDepotRef",
+            "planningUse": [
+              "assignment"
+            ],
+            "semanticTerm": "urn:xopt:relationship:home-depot"
+          },
+          "field:full_name": {
+            "binding": "asset.name",
+            "planningUse": [
+              "display"
+            ],
+            "semanticTerm": "urn:xopt:attribute:display-name"
+          },
+          "field:shift_end_s": {
+            "binding": "asset.availability.shiftEnd",
+            "canonicalUnit": "s",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "availability"
+            ],
+            "quantityKind": "time",
+            "semanticTerm": "urn:xopt:availability:shift-end"
+          },
+          "field:shift_start_s": {
+            "binding": "asset.availability.shiftStart",
+            "canonicalUnit": "s",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "availability"
+            ],
+            "quantityKind": "time",
+            "semanticTerm": "urn:xopt:availability:shift-start"
+          },
+          "field:technician_id": {
+            "binding": "asset.assetId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:asset-id"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "technicians",
+  "registryArtifact": {
+    "artifactId": "roadside/technicians",
+    "artifactRef": "roadside/technicians@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "roadside",
+    "localId": "technicians",
+    "mappingVersion": "1.0.0",
+    "odcsId": "technicians",
+    "qualifiedId": "roadside/technicians",
+    "registryId": "roadside-technicians"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "assetRole": "operator",
+        "canonicalEntity": "asset",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "operatorMaster",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "technicians"
+      },
+      "field:certified_operations": {
+        "binding": "asset.capabilities.certifiedOperations",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "compatibility-filter"
+        ],
+        "quantityKind": "categorical-set",
+        "semanticTerm": "urn:xopt:capability:operator-certification"
+      },
+      "field:depot_id": {
+        "binding": "asset.homeDepotRef",
+        "planningUse": [
+          "assignment"
+        ],
+        "semanticTerm": "urn:xopt:relationship:home-depot"
+      },
+      "field:full_name": {
+        "binding": "asset.name",
+        "planningUse": [
+          "display"
+        ],
+        "semanticTerm": "urn:xopt:attribute:display-name"
+      },
+      "field:shift_end_s": {
+        "binding": "asset.availability.shiftEnd",
+        "canonicalUnit": "s",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "availability"
+        ],
+        "quantityKind": "time",
+        "semanticTerm": "urn:xopt:availability:shift-end"
+      },
+      "field:shift_start_s": {
+        "binding": "asset.availability.shiftStart",
+        "canonicalUnit": "s",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "availability"
+        ],
+        "quantityKind": "time",
+        "semanticTerm": "urn:xopt:availability:shift-start"
+      },
+      "field:technician_id": {
+        "binding": "asset.assetId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:asset-id"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

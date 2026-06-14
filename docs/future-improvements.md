@@ -12,48 +12,45 @@ serving, and integration hardening.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-1. Contract and registry governance. Classify semantic metadata drift into
-   explicit versioning rules, schema the plan quality/score/corrective
-   sections, and move domain-local ids toward versioned registry artifacts.
-2. Artifact and provenance foundation. Introduce a shared `snapshot_hash`
+1. Artifact and provenance foundation. Introduce a shared `snapshot_hash`
    namespace, artifact manifests, cache provenance, and artifact-registry
    selection metadata for tuned overlays.
-3. Multi-domain staging and policy composition. Add collision-free
+2. Multi-domain staging and policy composition. Add collision-free
    mixed-domain source staging, composite profile/policy merging, and
    generator capability metadata.
-4. Event visibility and continuous replanning. Extend ingested-at timestamps
+3. Event visibility and continuous replanning. Extend ingested-at timestamps
    and source watermarks to all mutable sources, add bounded mid-stream offset
    commits, then run freshness/replan logic from a serving-side watcher.
-5. Temporal solver correctness. Add an operator time dimension, gap-aware
+4. Temporal solver correctness. Add an operator time dimension, gap-aware
    held-asset scoring, non-overlapping backup-operator sharing, conservative
    unknown-weather handling, and finish-within-window enforcement.
-6. Optional time-objective validation. Add a slow/cheap vs fast/expensive
+5. Optional time-objective validation. Add a slow/cheap vs fast/expensive
    comparison workload and deadline-urgency calibration for `--objective time`.
-7. Unit, material, and resource semantics. Add a controlled unit vocabulary
+6. Unit, material, and resource semantics. Add a controlled unit vocabulary
    with conversions, per-unit-kind material demand, time-windowed material
    reservations/replenishment, and productivity modifiers.
-8. Routing topology and geography. Map current vehicle positions to network
+7. Routing topology and geography. Map current vehicle positions to network
    nodes, support optional reload and multiple reload trips, resolve supplier
    pickup locations outside the cluster site table, and improve partial
    restricted-area handling.
-9. Cost model expansion. Price driver time, machine wear, tolls, and other arc
+8. Cost model expansion. Price driver time, machine wear, tolls, and other arc
    or service costs after routing topology is expressive enough for those
    rates to change decisions.
-10. Spatial execution feedback. Capture per-pass coverage geometry and use it
+9. Spatial execution feedback. Capture per-pass coverage geometry and use it
     to refine remaining work, partial-area restrictions, and rolling progress
     explanations.
-11. Closed-loop monitoring policy. Learn composite health weights from
+10. Closed-loop monitoring policy. Learn composite health weights from
     prognosis outcomes, consume completion lead-time distributions, and split
     auto-tuning by asset type and additional tunables such as battery
     thresholds.
-12. Experiment and tuning maturity. Add generic rolling replay datasets for
+11. Experiment and tuning maturity. Add generic rolling replay datasets for
     real instability measurement, holdout validation, per-domain objective
     weights, CPU/RSS-aware worker selection, cluster-size memory coefficients,
     and per-cluster LNS budget learning.
-13. Serving and integration hardening. Add OIDC/JWT validation, route-level
+12. Serving and integration hardening. Add OIDC/JWT validation, route-level
     authorization, token rotation, audit/rate-limit hooks, object-store
     artifact backends, and additional durable event clients.
-14. Solver explanation research. Investigate exact resource-conflict
+13. Solver explanation research. Investigate exact resource-conflict
     attribution through richer solver instrumentation or an alternative model
     that exposes dual/shadow-price signals.
 
@@ -123,15 +120,7 @@ Recommended order, optimized for dependency reuse and low rework:
   no controlled unit vocabulary or conversion between compatible units. Rates
   are flat per implement; productivity modifiers such as ground class or
   prime-mover pairing are not modelled.
-- Plan output schemas do not yet cover Protobuf/Elasticsearch, and the
-  artifact's free-form score, quality-summary, and corrective-action sections
-  are not schematized.
-
-## Data Contracts
-
-- Semantic metadata changes are still reviewed as hash drift, not classified
-  into semver levels. A richer policy could distinguish unit conversion, enum
-  expansion, and binding-retargeting changes with explicit bump rules.
+- Plan output schemas do not yet cover Protobuf/Elasticsearch.
 
 ## Observations And Monitoring
 
@@ -205,7 +194,8 @@ Effect catalog:
   capability declaration yet; external packs still need their Python module
   importable in the running environment.
 - Generated schema filenames and evolution baseline filenames remain keyed by
-  the global registry id.
+  the global registry id, though registry artifacts now expose versioned
+  domain-local refs.
 
 ## Performance
 

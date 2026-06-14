@@ -5,8 +5,14 @@ from datetime import datetime, timezone
 import pytest
 
 from fl_op.canonical.common import VersionDimensions
-from fl_op.canonical.enums import PlanningMode, ReasonCode
-from fl_op.canonical.plan import Assignment, MaterialReservation, Plan, UnassignedTask
+from fl_op.canonical.enums import CorrectiveActionType, PlanningMode, ReasonCode
+from fl_op.canonical.plan import (
+    Assignment,
+    CorrectiveAction,
+    MaterialReservation,
+    Plan,
+    UnassignedTask,
+)
 from fl_op.contracts.plan_contract import (
     _PLAN_BINDING_PATHS,
     assert_plan_conforms,
@@ -53,6 +59,13 @@ def _plan(**overrides) -> Plan:
                 canonical_unit="kg",
             )
         ],
+        score={
+            "optimization_objective": "cost",
+            "total_estimated_margin_eur": 120.0,
+            "n_dispatched": 1,
+            "n_unassigned": 1,
+            "n_clusters": 1,
+        },
     )
     base.update(overrides)
     return Plan(**base)
@@ -99,6 +112,24 @@ def test_missing_required_record_field_is_reported() -> None:
     assert any("plan.assignment.taskRef" in e for e in errors)
 
 
+def test_corrective_action_contract_fields_are_validated() -> None:
+    payload = _plan(
+        corrective_actions=[
+            CorrectiveAction(
+                action=CorrectiveActionType.SERVICE_WITHDRAWN,
+                task_id="t-service",
+                detail="new readings cleared service need",
+                evidence={"source": "observation"},
+            )
+        ]
+    ).model_dump(mode="json", by_alias=True)
+
+    assert validate_plan_payload(payload) == []
+    payload["corrective_actions"][0]["task_id"] = ""
+    errors = validate_plan_payload(payload)
+    assert any("plan.correctiveAction.taskRef" in e for e in errors)
+
+
 def test_assert_plan_conforms_raises_on_violation() -> None:
     plan = _plan(snapshot_id="")
     with pytest.raises(ValueError, match="canonical plan contract"):
@@ -140,6 +171,8 @@ class TestPlanOutputSchemas:
         assert len(decoded) == 1
         record = decoded[0]
         assert record["plan_id"] == "plan-periodic-abc"
+        assert record["score"]["optimization_objective"] == "cost"
+        assert record["quality_summary"]["n_findings"] == 0
         assert record["assignments"][0]["task_id"] == "t-1"
         assert record["unassigned_tasks"][0]["reason_code"] == (
             ReasonCode.OPTIMIZATION_TRADEOFF.value
@@ -155,11 +188,17 @@ class TestPlanOutputSchemas:
         assert descriptor["contract"] == "canonical-plan"
         by_name = {f["name"]: f for f in descriptor["fields"]}
         assert by_name["plan_id"]["arrow_type"] == "large_string"
+        assert by_name["score"]["arrow_type"].startswith("struct<")
+        assert by_name["quality_summary"]["arrow_type"].startswith("struct<")
         assert by_name["assignments"]["arrow_type"].startswith("list<struct<")
         struct_fields = {
             f["name"] for f in by_name["material_reservations"]["struct_fields"]
         }
         assert {"reservation_id", "task_id", "quantity", "status"} <= struct_fields
+        corrective_fields = {
+            f["name"] for f in by_name["corrective_actions"]["struct_fields"]
+        }
+        assert {"action", "task_id", "evidence"} <= corrective_fields
 
     def test_contracts_generate_emits_plan_schema(self, tmp_path):
         from fl_op.contracts.schema_gen import run_generate

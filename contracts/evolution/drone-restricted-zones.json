@@ -85,8 +85,217 @@
       },
       "odcsId": "restricted-zones",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "drone-restricted-zones",
+      "fields": {
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "polygon": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "restricted_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "restriction_windows": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "zone_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "ab7e524600412f8a9f08b48209ea1d04cae63650f0e92fda8ac5dcb2a9675ec2"
+      },
+      "odcsId": "restricted-zones",
+      "registryArtifact": {
+        "artifactId": "drone_logistics/restricted-zones",
+        "artifactRef": "drone_logistics/restricted-zones@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "drone_logistics",
+        "localId": "restricted-zones",
+        "mappingVersion": "1.0.0",
+        "odcsId": "restricted-zones",
+        "qualifiedId": "drone_logistics/restricted-zones",
+        "registryId": "drone-restricted-zones"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "location",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "restrictedAreas",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "restricted-zones"
+          },
+          "field:lat": {
+            "binding": "location.lat",
+            "canonicalUnit": "deg",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:latitude"
+          },
+          "field:lon": {
+            "binding": "location.lon",
+            "canonicalUnit": "deg",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:longitude"
+          },
+          "field:name": {
+            "binding": "location.name",
+            "planningUse": [
+              "classification"
+            ],
+            "semanticTerm": "urn:xopt:attribute:display-name"
+          },
+          "field:polygon": {
+            "binding": "location.polygon",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "geometry",
+            "semanticTerm": "urn:xopt:attribute:polygon"
+          },
+          "field:restricted_operations": {
+            "binding": "location.restrictedOperations",
+            "planningUse": [
+              "restriction"
+            ],
+            "quantityKind": "categorical-set",
+            "semanticTerm": "urn:xopt:restriction:prohibited-operations"
+          },
+          "field:restriction_windows": {
+            "binding": "location.restrictionWindows",
+            "planningUse": [
+              "restriction"
+            ],
+            "quantityKind": "interval-set",
+            "semanticTerm": "urn:xopt:restriction:restricted-windows"
+          },
+          "field:zone_id": {
+            "binding": "location.locationId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:location-id"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "restricted-zones",
+  "registryArtifact": {
+    "artifactId": "drone_logistics/restricted-zones",
+    "artifactRef": "drone_logistics/restricted-zones@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "drone_logistics",
+    "localId": "restricted-zones",
+    "mappingVersion": "1.0.0",
+    "odcsId": "restricted-zones",
+    "qualifiedId": "drone_logistics/restricted-zones",
+    "registryId": "drone-restricted-zones"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "canonicalEntity": "location",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "restrictedAreas",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "restricted-zones"
+      },
+      "field:lat": {
+        "binding": "location.lat",
+        "canonicalUnit": "deg",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:latitude"
+      },
+      "field:lon": {
+        "binding": "location.lon",
+        "canonicalUnit": "deg",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:longitude"
+      },
+      "field:name": {
+        "binding": "location.name",
+        "planningUse": [
+          "classification"
+        ],
+        "semanticTerm": "urn:xopt:attribute:display-name"
+      },
+      "field:polygon": {
+        "binding": "location.polygon",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "geometry",
+        "semanticTerm": "urn:xopt:attribute:polygon"
+      },
+      "field:restricted_operations": {
+        "binding": "location.restrictedOperations",
+        "planningUse": [
+          "restriction"
+        ],
+        "quantityKind": "categorical-set",
+        "semanticTerm": "urn:xopt:restriction:prohibited-operations"
+      },
+      "field:restriction_windows": {
+        "binding": "location.restrictionWindows",
+        "planningUse": [
+          "restriction"
+        ],
+        "quantityKind": "interval-set",
+        "semanticTerm": "urn:xopt:restriction:restricted-windows"
+      },
+      "field:zone_id": {
+        "binding": "location.locationId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:location-id"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

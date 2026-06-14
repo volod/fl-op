@@ -157,8 +157,257 @@
       },
       "odcsId": "signage",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "roadside-signage",
+      "fields": {
+        "installed_at": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "last_service_at": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "mobility": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "road_segment_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "service_interval_days": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "sign_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "sign_kind": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "3948257a2f5893876caf818d619bb831f0a58cc7d81e0ff6568f66e14f0471da"
+      },
+      "odcsId": "signage",
+      "registryArtifact": {
+        "artifactId": "roadside/signage",
+        "artifactRef": "roadside/signage@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "roadside",
+        "localId": "signage",
+        "mappingVersion": "1.0.0",
+        "odcsId": "signage",
+        "qualifiedId": "roadside/signage",
+        "registryId": "roadside-signage"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "assetRole": "stationary-equipment",
+            "canonicalEntity": "asset",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "stationaryEquipmentMaster",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "signage"
+          },
+          "field:last_service_at": {
+            "binding": "asset.state.lastServiceAt",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "monitoring"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:maintenance:last-service-at"
+          },
+          "field:lat": {
+            "binding": "asset.location.lat",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:latitude"
+          },
+          "field:lon": {
+            "binding": "asset.location.lon",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:longitude"
+          },
+          "field:mobility": {
+            "binding": "asset.mobility",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "classification",
+              "compatibility-filter"
+            ],
+            "semanticTerm": "urn:xopt:attribute:mobility"
+          },
+          "field:road_segment_id": {
+            "binding": "asset.homeDepotRef",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "assignment"
+            ],
+            "semanticTerm": "urn:xopt:relationship:home-depot"
+          },
+          "field:service_interval_days": {
+            "binding": "asset.state.serviceIntervalDays",
+            "canonicalUnit": "d",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "monitoring"
+            ],
+            "quantityKind": "duration",
+            "semanticTerm": "urn:xopt:maintenance:service-interval"
+          },
+          "field:sign_id": {
+            "binding": "asset.assetId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:asset-id"
+          },
+          "field:sign_kind": {
+            "binding": "asset.assetType",
+            "planningUse": [
+              "classification"
+            ],
+            "semanticTerm": "urn:xopt:attribute:asset-type"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "signage",
+  "registryArtifact": {
+    "artifactId": "roadside/signage",
+    "artifactRef": "roadside/signage@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "roadside",
+    "localId": "signage",
+    "mappingVersion": "1.0.0",
+    "odcsId": "signage",
+    "qualifiedId": "roadside/signage",
+    "registryId": "roadside-signage"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "assetRole": "stationary-equipment",
+        "canonicalEntity": "asset",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "stationaryEquipmentMaster",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "signage"
+      },
+      "field:last_service_at": {
+        "binding": "asset.state.lastServiceAt",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "monitoring"
+        ],
+        "quantityKind": "timestamp",
+        "semanticTerm": "urn:xopt:maintenance:last-service-at"
+      },
+      "field:lat": {
+        "binding": "asset.location.lat",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:latitude"
+      },
+      "field:lon": {
+        "binding": "asset.location.lon",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:longitude"
+      },
+      "field:mobility": {
+        "binding": "asset.mobility",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "classification",
+          "compatibility-filter"
+        ],
+        "semanticTerm": "urn:xopt:attribute:mobility"
+      },
+      "field:road_segment_id": {
+        "binding": "asset.homeDepotRef",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "assignment"
+        ],
+        "semanticTerm": "urn:xopt:relationship:home-depot"
+      },
+      "field:service_interval_days": {
+        "binding": "asset.state.serviceIntervalDays",
+        "canonicalUnit": "d",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "monitoring"
+        ],
+        "quantityKind": "duration",
+        "semanticTerm": "urn:xopt:maintenance:service-interval"
+      },
+      "field:sign_id": {
+        "binding": "asset.assetId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:asset-id"
+      },
+      "field:sign_kind": {
+        "binding": "asset.assetType",
+        "planningUse": [
+          "classification"
+        ],
+        "semanticTerm": "urn:xopt:attribute:asset-type"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

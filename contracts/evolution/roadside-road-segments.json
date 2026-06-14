@@ -127,8 +127,207 @@
       },
       "odcsId": "road-segments",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "roadside-road-segments",
+      "fields": {
+        "closure_windows": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "length_km": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "midpoint_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "midpoint_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "road_ref": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "segment_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "surface_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "9ef74a0dca9d64b569d25d8f18a7a2d12e383ec11c3aaacd52941b2b2235e8a0"
+      },
+      "odcsId": "road-segments",
+      "registryArtifact": {
+        "artifactId": "roadside/road-segments",
+        "artifactRef": "roadside/road-segments@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "roadside",
+        "localId": "road-segments",
+        "mappingVersion": "1.0.0",
+        "odcsId": "road-segments",
+        "qualifiedId": "roadside/road-segments",
+        "registryId": "roadside-road-segments"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "location",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "workSites",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "road-segments"
+          },
+          "field:closure_windows": {
+            "binding": "location.restrictionWindows",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "field-restriction",
+              "time-window"
+            ],
+            "quantityKind": "interval-set",
+            "semanticTerm": "urn:xopt:restriction:restricted-windows"
+          },
+          "field:midpoint_lat": {
+            "binding": "location.lat",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:latitude"
+          },
+          "field:midpoint_lon": {
+            "binding": "location.lon",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:longitude"
+          },
+          "field:road_ref": {
+            "binding": "location.name",
+            "planningUse": [
+              "display"
+            ],
+            "semanticTerm": "urn:xopt:attribute:display-name"
+          },
+          "field:segment_id": {
+            "binding": "location.locationId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:location-id"
+          },
+          "field:surface_type": {
+            "binding": "location.soilType",
+            "planningUse": [
+              "field-restriction"
+            ],
+            "semanticTerm": "urn:xopt:attribute:soil-type"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "road-segments",
+  "registryArtifact": {
+    "artifactId": "roadside/road-segments",
+    "artifactRef": "roadside/road-segments@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "roadside",
+    "localId": "road-segments",
+    "mappingVersion": "1.0.0",
+    "odcsId": "road-segments",
+    "qualifiedId": "roadside/road-segments",
+    "registryId": "roadside-road-segments"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "canonicalEntity": "location",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "workSites",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "road-segments"
+      },
+      "field:closure_windows": {
+        "binding": "location.restrictionWindows",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "field-restriction",
+          "time-window"
+        ],
+        "quantityKind": "interval-set",
+        "semanticTerm": "urn:xopt:restriction:restricted-windows"
+      },
+      "field:midpoint_lat": {
+        "binding": "location.lat",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:latitude"
+      },
+      "field:midpoint_lon": {
+        "binding": "location.lon",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:longitude"
+      },
+      "field:road_ref": {
+        "binding": "location.name",
+        "planningUse": [
+          "display"
+        ],
+        "semanticTerm": "urn:xopt:attribute:display-name"
+      },
+      "field:segment_id": {
+        "binding": "location.locationId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:location-id"
+      },
+      "field:surface_type": {
+        "binding": "location.soilType",
+        "planningUse": [
+          "field-restriction"
+        ],
+        "semanticTerm": "urn:xopt:attribute:soil-type"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

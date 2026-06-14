@@ -157,8 +157,281 @@
       },
       "odcsId": "service-vehicles",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "roadside-service-vehicles",
+      "fields": {
+        "burn_l_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "current_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "engine_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "tank_litres": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "transit_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "vehicle_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "vehicle_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "17bb7052e43caa858d4aeee63847b1796ee49cdad36ad4168fbf7c630a2a0103"
+      },
+      "odcsId": "service-vehicles",
+      "registryArtifact": {
+        "artifactId": "roadside/service-vehicles",
+        "artifactRef": "roadside/service-vehicles@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "roadside",
+        "localId": "service-vehicles",
+        "mappingVersion": "1.0.0",
+        "odcsId": "service-vehicles",
+        "qualifiedId": "roadside/service-vehicles",
+        "registryId": "roadside-service-vehicles"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "assetRole": "mobile-prime-mover",
+            "canonicalEntity": "asset",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "assetMaster",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "service-vehicles"
+          },
+          "field:burn_l_per_h": {
+            "binding": "asset.capabilities.fuelConsumptionRate",
+            "canonicalUnit": "L/h",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "flow-rate",
+            "semanticTerm": "urn:xopt:capability:fuel-consumption-rate"
+          },
+          "field:current_lat": {
+            "binding": "asset.location.lat",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:latitude"
+          },
+          "field:current_lon": {
+            "binding": "asset.location.lon",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:longitude"
+          },
+          "field:depot_id": {
+            "binding": "asset.homeDepotRef",
+            "planningUse": [
+              "assignment"
+            ],
+            "semanticTerm": "urn:xopt:relationship:home-depot"
+          },
+          "field:engine_power_kw": {
+            "binding": "asset.capabilities.ratedPower",
+            "canonicalUnit": "kW",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "capacity",
+              "compatibility-filter"
+            ],
+            "quantityKind": "power",
+            "semanticTerm": "urn:xopt:capability:rated-power"
+          },
+          "field:tank_litres": {
+            "binding": "asset.capabilities.fuelTankVolume",
+            "canonicalUnit": "L",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "capacity"
+            ],
+            "quantityKind": "volume",
+            "semanticTerm": "urn:xopt:capability:fuel-tank-volume"
+          },
+          "field:transit_speed_kmh": {
+            "binding": "asset.capabilities.travelSpeed",
+            "canonicalUnit": "km/h",
+            "missingValuePolicy": "fallback-to-conservative-value",
+            "planningUse": [
+              "routing"
+            ],
+            "quantityKind": "speed",
+            "semanticTerm": "urn:xopt:capability:travel-speed"
+          },
+          "field:vehicle_class": {
+            "binding": "asset.assetType",
+            "planningUse": [
+              "classification"
+            ],
+            "semanticTerm": "urn:xopt:attribute:asset-type"
+          },
+          "field:vehicle_id": {
+            "binding": "asset.assetId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:asset-id"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "service-vehicles",
+  "registryArtifact": {
+    "artifactId": "roadside/service-vehicles",
+    "artifactRef": "roadside/service-vehicles@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "roadside",
+    "localId": "service-vehicles",
+    "mappingVersion": "1.0.0",
+    "odcsId": "service-vehicles",
+    "qualifiedId": "roadside/service-vehicles",
+    "registryId": "roadside-service-vehicles"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "assetRole": "mobile-prime-mover",
+        "canonicalEntity": "asset",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "assetMaster",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "service-vehicles"
+      },
+      "field:burn_l_per_h": {
+        "binding": "asset.capabilities.fuelConsumptionRate",
+        "canonicalUnit": "L/h",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "cost"
+        ],
+        "quantityKind": "flow-rate",
+        "semanticTerm": "urn:xopt:capability:fuel-consumption-rate"
+      },
+      "field:current_lat": {
+        "binding": "asset.location.lat",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:latitude"
+      },
+      "field:current_lon": {
+        "binding": "asset.location.lon",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:longitude"
+      },
+      "field:depot_id": {
+        "binding": "asset.homeDepotRef",
+        "planningUse": [
+          "assignment"
+        ],
+        "semanticTerm": "urn:xopt:relationship:home-depot"
+      },
+      "field:engine_power_kw": {
+        "binding": "asset.capabilities.ratedPower",
+        "canonicalUnit": "kW",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "capacity",
+          "compatibility-filter"
+        ],
+        "quantityKind": "power",
+        "semanticTerm": "urn:xopt:capability:rated-power"
+      },
+      "field:tank_litres": {
+        "binding": "asset.capabilities.fuelTankVolume",
+        "canonicalUnit": "L",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "capacity"
+        ],
+        "quantityKind": "volume",
+        "semanticTerm": "urn:xopt:capability:fuel-tank-volume"
+      },
+      "field:transit_speed_kmh": {
+        "binding": "asset.capabilities.travelSpeed",
+        "canonicalUnit": "km/h",
+        "missingValuePolicy": "fallback-to-conservative-value",
+        "planningUse": [
+          "routing"
+        ],
+        "quantityKind": "speed",
+        "semanticTerm": "urn:xopt:capability:travel-speed"
+      },
+      "field:vehicle_class": {
+        "binding": "asset.assetType",
+        "planningUse": [
+          "classification"
+        ],
+        "semanticTerm": "urn:xopt:attribute:asset-type"
+      },
+      "field:vehicle_id": {
+        "binding": "asset.assetId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:asset-id"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

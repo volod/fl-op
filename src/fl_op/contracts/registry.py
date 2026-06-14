@@ -12,6 +12,7 @@ Fingerprint semantics:
 import logging
 import os
 import pathlib
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import yaml
@@ -38,6 +39,43 @@ class MetadataLossError(RuntimeError):
     """Raised when stored and computed optimization metadata hashes diverge."""
 
 
+@dataclass(frozen=True)
+class RegistryArtifact:
+    """Versioned artifact identity for one registered contract projection."""
+
+    registry_id: str
+    artifact_id: str
+    local_id: str
+    qualified_id: str
+    domain: Optional[str]
+    odcs_id: str
+    contract_version: str
+    mapping_version: str
+
+    @property
+    def version(self) -> str:
+        contract_version = self.contract_version or "-"
+        mapping_version = self.mapping_version or "-"
+        return f"odcs:{contract_version}+mapping:{mapping_version}"
+
+    @property
+    def ref(self) -> str:
+        return f"{self.artifact_id}@{self.version}"
+
+    def model_dump(self) -> dict[str, Any]:
+        return {
+            "registryId": self.registry_id,
+            "artifactId": self.artifact_id,
+            "artifactRef": self.ref,
+            "localId": self.local_id,
+            "qualifiedId": self.qualified_id,
+            "domain": self.domain,
+            "odcsId": self.odcs_id,
+            "contractVersion": self.contract_version,
+            "mappingVersion": self.mapping_version,
+        }
+
+
 class ContractEntry:
     def __init__(self, contract_id: str, spec: dict[str, Any]) -> None:
         self.registry_id = contract_id
@@ -49,6 +87,7 @@ class ContractEntry:
         self.domain: Optional[str] = spec.get("domain")
         self.source_file: Optional[str] = spec.get("sourceFile")
         self.source_format: str = spec.get("sourceFormat", "csv")
+        self.artifact_spec: dict[str, Any] = dict(spec.get("artifact") or {})
         self.stored_fingerprints: dict[str, str] = dict(spec.get("fingerprints") or {})
 
     @property
@@ -74,6 +113,12 @@ class FileRegistry:
 
     def list_contracts(self) -> list[str]:
         return list(self.entries)
+
+    def _split_versioned_ref(self, contract_id: str) -> tuple[str, Optional[str]]:
+        if "@" not in contract_id:
+            return contract_id, None
+        base, version = contract_id.rsplit("@", 1)
+        return base, version or None
 
     def domain_ids(self) -> list[str]:
         return sorted((self.index.get("domains") or {}).keys())
@@ -104,45 +149,74 @@ class FileRegistry:
         construction domain that points at the existing ``construction-operators``
         registry entry.
         """
-        if "/" in contract_id:
-            domain_part, local_id = contract_id.split("/", 1)
+        base_id, requested_version = self._split_versioned_ref(contract_id)
+
+        if "/" in base_id:
+            domain_part, local_id = base_id.split("/", 1)
             matches = [
                 key
                 for key, entry in self.entries.items()
-                if entry.domain == domain_part and entry.local_id == local_id
+                if (
+                    entry.domain == domain_part
+                    and entry.local_id == local_id
+                )
+                or self._contract_artifact_for_resolved(key).artifact_id == base_id
             ]
             if len(matches) == 1:
-                return matches[0]
+                return self._check_requested_artifact_version(
+                    matches[0], requested_version
+                )
             raise KeyError(f"Unknown contract id: {contract_id}")
 
         if domain is not None:
             matches = [
                 key
                 for key, entry in self.entries.items()
-                if entry.domain == domain and entry.local_id == contract_id
+                if entry.domain == domain and entry.local_id == base_id
             ]
             if len(matches) == 1:
-                return matches[0]
+                return self._check_requested_artifact_version(
+                    matches[0], requested_version
+                )
             if len(matches) > 1:
                 raise KeyError(
-                    f"Ambiguous contract id '{contract_id}' in domain '{domain}'"
+                    f"Ambiguous contract id '{base_id}' in domain '{domain}'"
                 )
-            if contract_id in self.entries:
-                return contract_id
+            if base_id in self.entries:
+                return self._check_requested_artifact_version(
+                    base_id, requested_version
+                )
 
-        if contract_id in self.entries:
-            return contract_id
+        if base_id in self.entries:
+            return self._check_requested_artifact_version(
+                base_id, requested_version
+            )
 
         matches = [
-            key for key, entry in self.entries.items() if entry.local_id == contract_id
+            key for key, entry in self.entries.items() if entry.local_id == base_id
         ]
         if len(matches) == 1:
-            return matches[0]
+            return self._check_requested_artifact_version(
+                matches[0], requested_version
+            )
         if len(matches) > 1:
             raise KeyError(
-                f"Ambiguous contract id '{contract_id}'; qualify it as domain/id"
+                f"Ambiguous contract id '{base_id}'; qualify it as domain/id"
             )
         raise KeyError(f"Unknown contract id: {contract_id}")
+
+    def _check_requested_artifact_version(
+        self, registry_id: str, requested_version: Optional[str]
+    ) -> str:
+        if requested_version is None:
+            return registry_id
+        artifact = self.contract_artifact(registry_id)
+        if artifact.version != requested_version:
+            raise KeyError(
+                f"Contract artifact '{artifact.artifact_id}' has version "
+                f"{artifact.version}, not {requested_version}"
+            )
+        return registry_id
 
     def get_entry(
         self,
@@ -151,6 +225,53 @@ class FileRegistry:
     ) -> ContractEntry:
         resolved = self.resolve_contract_id(contract_id, domain=domain)
         return self.entries[resolved]
+
+    def contract_artifact(
+        self,
+        contract_id: str,
+        domain: Optional[str] = None,
+    ) -> RegistryArtifact:
+        """Return the versioned registry artifact identity for a contract.
+
+        The artifact id is domain-local and stable (``domain/local-id``). Its
+        version carries both independently governed dimensions: physical ODCS
+        version and canonical mapping version.
+        """
+        resolved = self.resolve_contract_id(contract_id, domain=domain)
+        return self._contract_artifact_for_resolved(resolved)
+
+    def list_contract_artifacts(self) -> list[RegistryArtifact]:
+        return [
+            self._contract_artifact_for_resolved(cid)
+            for cid in self.list_contracts()
+        ]
+
+    def _contract_artifact_for_resolved(self, registry_id: str) -> RegistryArtifact:
+        entry = self.entries[registry_id]
+        odcs_id = ""
+        contract_version = ""
+        mapping_version = ""
+        if entry.odcs_ref:
+            odcs = load_odcs_contract(self.root / entry.odcs_ref)
+            odcs_id = odcs.id
+            contract_version = odcs.version
+        if entry.mapping_ref:
+            mapping = load_mapping(self.root / entry.mapping_ref)
+            mapping_version = mapping.mapping_version or ""
+        artifact_id = (
+            entry.artifact_spec.get("id")
+            or (f"{entry.domain}/{entry.local_id}" if entry.domain else entry.local_id)
+        )
+        return RegistryArtifact(
+            registry_id=registry_id,
+            artifact_id=artifact_id,
+            local_id=entry.local_id,
+            qualified_id=entry.qualified_id,
+            domain=entry.domain,
+            odcs_id=odcs_id,
+            contract_version=contract_version,
+            mapping_version=mapping_version,
+        )
 
     def get_avro(self, contract_id: str) -> AvroContractSchema:
         contract_id = self.resolve_contract_id(contract_id)

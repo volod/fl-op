@@ -97,8 +97,185 @@
       },
       "odcsId": "service-depots",
       "version": "1.0.0"
+    },
+    {
+      "contractId": "roadside-service-depots",
+      "fields": {
+        "depot_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "fuel_litres": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "b2df9ddc7d7a9b7259f56216186fe69efd4cdca2f5f2b54ebd68cc64ede85046"
+      },
+      "odcsId": "service-depots",
+      "registryArtifact": {
+        "artifactId": "roadside/service-depots",
+        "artifactRef": "roadside/service-depots@odcs:1.0.0+mapping:1.0.0",
+        "contractVersion": "1.0.0",
+        "domain": "roadside",
+        "localId": "service-depots",
+        "mappingVersion": "1.0.0",
+        "odcsId": "service-depots",
+        "qualifiedId": "roadside/service-depots",
+        "registryId": "roadside-service-depots"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "assetRole": "depot",
+            "canonicalEntity": "location",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "depots",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "service-depots"
+          },
+          "field:depot_id": {
+            "binding": "location.locationId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:location-id"
+          },
+          "field:fuel_litres": {
+            "binding": "location.inventory.fuel",
+            "canonicalUnit": "L",
+            "missingValuePolicy": "accept-with-warning",
+            "planningUse": [
+              "material-availability"
+            ],
+            "quantityKind": "volume",
+            "semanticTerm": "urn:xopt:inventory:fuel"
+          },
+          "field:lat": {
+            "binding": "location.lat",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:latitude"
+          },
+          "field:lon": {
+            "binding": "location.lon",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:longitude"
+          },
+          "field:name": {
+            "binding": "location.name",
+            "planningUse": [
+              "display"
+            ],
+            "semanticTerm": "urn:xopt:attribute:display-name"
+          }
+        },
+        "mappingVersion": "1.0.0"
+      },
+      "version": "1.0.0"
     }
   ],
   "odcsId": "service-depots",
+  "registryArtifact": {
+    "artifactId": "roadside/service-depots",
+    "artifactRef": "roadside/service-depots@odcs:1.0.0+mapping:1.0.0",
+    "contractVersion": "1.0.0",
+    "domain": "roadside",
+    "localId": "service-depots",
+    "mappingVersion": "1.0.0",
+    "odcsId": "service-depots",
+    "qualifiedId": "roadside/service-depots",
+    "registryId": "roadside-service-depots"
+  },
+  "semanticMetadata": {
+    "blocks": {
+      "contract": {
+        "assetRole": "depot",
+        "canonicalEntity": "location",
+        "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+        "dataProductRole": "depots",
+        "permittedPlanningUses": [
+          "periodic-planning",
+          "rolling-dispatch"
+        ],
+        "sourceContract": "service-depots"
+      },
+      "field:depot_id": {
+        "binding": "location.locationId",
+        "planningUse": [
+          "identity"
+        ],
+        "semanticTerm": "urn:xopt:identity:location-id"
+      },
+      "field:fuel_litres": {
+        "binding": "location.inventory.fuel",
+        "canonicalUnit": "L",
+        "missingValuePolicy": "accept-with-warning",
+        "planningUse": [
+          "material-availability"
+        ],
+        "quantityKind": "volume",
+        "semanticTerm": "urn:xopt:inventory:fuel"
+      },
+      "field:lat": {
+        "binding": "location.lat",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:latitude"
+      },
+      "field:lon": {
+        "binding": "location.lon",
+        "canonicalUnit": "deg",
+        "missingValuePolicy": "reject-for-planning",
+        "planningUse": [
+          "geospatial"
+        ],
+        "quantityKind": "angle",
+        "semanticTerm": "urn:xopt:attribute:longitude"
+      },
+      "field:name": {
+        "binding": "location.name",
+        "planningUse": [
+          "display"
+        ],
+        "semanticTerm": "urn:xopt:attribute:display-name"
+      }
+    },
+    "mappingVersion": "1.0.0"
+  },
   "version": "1.0.0"
 }

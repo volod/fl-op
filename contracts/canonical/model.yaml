@@ -203,6 +203,19 @@ semanticTerms:
   urn:xopt:plan:reservation-status: {valueType: string, quantityKind: categorical}
   urn:xopt:plan:expected-cost: {valueType: number, quantityKind: money, canonicalUnit: EUR}
   urn:xopt:plan:expected-margin: {valueType: number, quantityKind: money, canonicalUnit: EUR}
+  urn:xopt:plan:optimization-objective: {valueType: string, quantityKind: categorical}
+  urn:xopt:plan:margin-score: {valueType: number, quantityKind: money, canonicalUnit: EUR}
+  urn:xopt:plan:completion-time-score: {valueType: number, quantityKind: duration, canonicalUnit: s}
+  urn:xopt:plan:assignment-count: {valueType: integer, quantityKind: count}
+  urn:xopt:plan:cluster-count: {valueType: integer, quantityKind: count}
+  urn:xopt:plan:instability-penalty: {valueType: integer, quantityKind: count}
+  urn:xopt:plan:corrective-action: {valueType: string, quantityKind: categorical}
+  urn:xopt:plan:evidence: {valueType: object, quantityKind: evidence}
+  urn:xopt:quality:finding-count: {valueType: integer, quantityKind: count}
+  urn:xopt:quality:entities-excluded: {valueType: integer, quantityKind: count}
+  urn:xopt:quality:imputed-count: {valueType: integer, quantityKind: count}
+  urn:xopt:quality:severity-counts: {valueType: object, quantityKind: rate-map}
+  urn:xopt:quality:observation-error-rates: {valueType: object, quantityKind: rate-map}
   urn:xopt:inventory:material-type: {valueType: string, quantityKind: categorical}
   urn:xopt:inventory:quantity: {valueType: number, quantityKind: measurement}
   # -- inventory -------------------------------------------------------------
