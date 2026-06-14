@@ -12,17 +12,34 @@ serving, and integration hardening.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-1. Multi-domain staging and policy composition. Add collision-free
+1. DONE - Multi-domain staging and policy composition. Added collision-free
    mixed-domain source staging, composite profile/policy merging, and
-   generator capability metadata.
-2. Event visibility and continuous replanning. Extend ingested-at timestamps
-   and source watermarks to all mutable sources, add bounded mid-stream offset
-   commits, then run freshness/replan logic from a serving-side watcher.
-3. Temporal solver correctness. Add an operator time dimension, gap-aware
-   held-asset scoring, non-overlapping backup-operator sharing, conservative
-   unknown-weather handling, and finish-within-window enforcement.
-4. Optional time-objective validation. Add a slow/cheap vs fast/expensive
-   comparison workload and deadline-urgency calibration for `--objective time`.
+   generator capability metadata. See current-implementation.md.
+2. DONE - Event visibility and continuous replanning. Ingested-at timestamps
+   and per-source watermarks cover all mutable sources, bounded mid-stream
+   broker offset commits land per published revision, and a serving-side
+   watcher (`plan watch`) drains bounded cycles forever while `plan freshness`
+   compares a plan's visibility horizon against the data visible now. See
+   current-implementation.md.
+3. DONE - Temporal solver correctness. Conservative unknown-weather handling
+   (`requireForecastCoverage` blocks every horizon interval not proven safe by a
+   compliant forecast and drops tasks with no coverage), finish-within-window
+   enforcement (a task's whole `[start, start + service]` interval, with
+   per-vehicle service duration, must land inside one declared workable window),
+   gap-aware held-asset scoring (allocation discounts a held asset by its largest
+   contiguous free gap, penalizing fragmented calendars), non-overlapping
+   backup-operator sharing across clusters (a single idle certified operator
+   backs multiple clusters when their demand windows do not overlap), and an
+   operator time dimension in the routing model (tasks resolving to the same
+   operator across different vehicles in a cluster get vehicle-aware no-overlap
+   reified constraints, so a shared operator serializes parallel pairs). See
+   current-implementation.md.
+4. DONE - Optional time-objective validation. Added an e2e slow/cheap vs
+   fast/expensive comparison workload proving `--objective time` favors the
+   faster implement and lands an earlier completion without dropping the
+   assignment, plus deadline-slack/priority-class urgency calibration for time
+   mode (per-task urgency-scaled completion weights, env-configurable). See
+   current-implementation.md.
 5. Unit, material, and resource semantics. Add a controlled unit vocabulary
    with conversions, per-unit-kind material demand, time-windowed material
    reservations/replenishment, and productivity modifiers.
@@ -61,36 +78,27 @@ Recommended order, optimized for dependency reuse and low rework:
   monitoring policy is extended beyond the current stationary-service-task
   behavior.
 
-## Optional Time-Objective Tuning
-
-- Add an e2e comparison dataset with slow/cheap and fast/expensive resources
-  proving `--objective time` lowers completion-time KPIs without weakening
-  assignment count, hard deadlines, or safety restrictions.
-- Add deadline-slack/customer-class calibration for time mode when a deployment
-  needs stronger urgency ordering than the current hard deadlines plus
-  penalty-per-day scoring provide.
-
 ## Solver Quality
 
-- Operator time is not modelled in routing: a cluster operator (or per-task
-  backup) nominally works all routing vehicles in parallel, and a held
-  operator's calendar only discounts allocation scoring, so overlapping
-  operator work is discouraged but not prevented. Exact operator gap reuse
-  needs an operator time dimension in the routing model.
-- Hold-aware scoring discounts by the asset's free share of a fixed capacity
-  horizon (the rolling dispatch horizon), not by whether the cluster's
-  expected execution window actually fits the asset's specific gaps; a
-  timing-aware comparison would discount more precisely.
-- A backup operator is claimed by one cluster for the whole run; sharing an
-  idle operator across clusters at non-overlapping times is not modelled.
-- Weather blocking is forecast-bounded: time not covered by any forecast
-  window is optimistically treated as workable, so a deadline beyond forecast
-  coverage schedules into unknown weather. A conservative mode would treat
-  uncovered time as blocked until a compliant forecast exists.
+- Operator time is now modelled inside routing for operators shared across
+  vehicles within a single cluster (vehicle-aware no-overlap reified
+  constraints). Still open: a held operator's busy calendar is not blocked as
+  in-model breaks the way prime movers and implements are, so cross-cluster
+  operator gap reuse still relies on allocation scoring rather than exact
+  in-model time blocking.
 - Material demand is declared per hectare only (`materialDemand.perAreaHa`),
   so non-area work (`m3`, `items`) never charges material. Reservations also
   have no time dimension in feasibility: charges are horizon-cumulative, not
   windowed against replenishment.
+- Prime-mover travel speed does not affect routing travel time. When no network
+  lookup is available, `travel_time.py` derives leg duration from the centralized
+  `core/geometry.travel_time_seconds` helper at the fixed `FALLBACK_TRAVEL_SPEED_KMH`
+  fallback speed, so travel time is geometry-fixed and identical across vehicles
+  regardless of `PrimeMoverRow.travel_speed`. The only per-vehicle
+  completion-time differentiator today is service time, driven by implement
+  `working_width` and `max_speed`. Investigate threading per-vehicle travel speed
+  (and travel mode) into the fallback travel-time estimate so `--objective time`
+  can prefer genuinely faster movers, not just faster implements.
 
 ## Ontology Coverage
 
@@ -105,9 +113,6 @@ Recommended order, optimized for dependency reuse and low rework:
   locations outside that table are not yet supported.
 - Compartment-aware loading and richer pickup-and-delivery paths still need
   broader domain coverage.
-- Workable windows still bound execution start only, except for the occupancy
-  semantics on restriction and weather blocks; finishing within the declared
-  workable window is not enforced.
 - Geometric restrictions do not clip the work area, model partial overlap
   severity, or route around a restricted sub-area.
 - Driver time, machine wear, tolls, and richer service costs are still absent

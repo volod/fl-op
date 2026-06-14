@@ -11,8 +11,8 @@ _POWER_MARGIN_TIEBREAKER_WEIGHT = 0.01
 
 ScoredLookup = dict[str, dict[tuple[int, int], float]]
 
-# Asset id -> free share of the hold-capacity horizon, in [0, 1]. Assets
-# without held windows are absent and treated as fully free.
+# Asset id -> largest contiguous free-gap share of the hold-capacity horizon,
+# in [0, 1]. Assets without held windows are absent and treated as fully free.
 FreeCapacity = dict[str, float]
 
 
@@ -33,11 +33,14 @@ def build_free_capacity(
     now_epoch: int,
     horizon_s: int = HOLD_CAPACITY_HORIZON_S,
 ) -> FreeCapacity:
-    """Free share of the capacity horizon per held asset.
+    """Largest contiguous free-gap share of the capacity horizon per held asset.
 
-    A held asset's busy intervals (clamped to [now, now + horizon], merged)
-    reduce its free fraction; 0.0 means fully held for the horizon. Assets
-    without held windows are absent (treated as fully free).
+    A held asset's busy intervals (clamped to [now, now + horizon], merged) carve
+    the horizon into free gaps; the metric is the longest single gap divided by
+    the horizon. This is gap-aware: a fragmented calendar whose total free time is
+    high but whose largest gap is small cannot host a contiguous execution window,
+    so it scores lower than an equally-free asset with one long gap. 0.0 means no
+    free gap remains; assets without held windows are absent (fully free).
     """
     if not held_windows:
         return {}
@@ -46,16 +49,39 @@ def build_free_capacity(
     horizon_end = now_epoch + horizon_s
     capacity: FreeCapacity = {}
     for asset_id, windows in held_windows.items():
-        clamped = [
-            (max(int(start), now_epoch), min(int(end), horizon_end))
-            for start, end in windows
-        ]
-        busy_s = sum(
-            end - start
-            for start, end in merge_intervals([(s, e) for s, e in clamped if e > s])
+        busy = merge_intervals(
+            [
+                (max(int(start), now_epoch), min(int(end), horizon_end))
+                for start, end in windows
+                if min(int(end), horizon_end) > max(int(start), now_epoch)
+            ]
         )
-        capacity[asset_id] = max(0.0, 1.0 - busy_s / horizon_s)
+        largest_gap = _largest_free_gap(busy, now_epoch, horizon_end)
+        capacity[asset_id] = max(0.0, min(1.0, largest_gap / horizon_s))
     return capacity
+
+
+def _largest_free_gap(
+    busy: list[tuple[int, int]], start: int, end: int
+) -> int:
+    """Longest uninterrupted free interval within [start, end] given merged busy.
+
+    `busy` must be sorted and non-overlapping (as produced by `merge_intervals`).
+    Uses plain subtraction (no closed-interval +/-1 offsets) so a single block
+    flush against one edge yields the exact remaining span.
+    """
+    cursor = start
+    largest = 0
+    for b_start, b_end in busy:
+        gap = b_start - cursor
+        if gap > largest:
+            largest = gap
+        if b_end > cursor:
+            cursor = b_end
+    tail = end - cursor
+    if tail > largest:
+        largest = tail
+    return max(0, largest)
 
 
 def score_vi_pair(
@@ -71,9 +97,10 @@ def score_vi_pair(
     """Score a candidate pair for global pre-allocation.
 
     Hold-aware discount: a positive score is scaled by the pair's smallest
-    free-capacity fraction, so a cluster prefers assets whose calendars can
-    still fit its work over equally suitable but mostly-held ones (negative
-    scores stay as they are; making them less negative would invert the
+    largest-free-gap fraction, so a cluster prefers assets whose calendars still
+    have a long open stretch to fit its work over equally suitable ones that are
+    mostly held or so fragmented that no single gap can host the execution
+    (negative scores stay as they are; making them less negative would invert the
     preference).
     """
     base_score = None

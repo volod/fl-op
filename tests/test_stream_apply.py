@@ -113,6 +113,49 @@ def test_entity_corrected_appends_when_row_absent(applicator: EventApplicator) -
     assert sources["orders"][-1] == corrected
 
 
+def test_entity_corrected_advances_contract_watermark() -> None:
+    """A correction makes an entity trustworthy as of its observed time, so the
+    resolved contract's visibility horizon must move forward to that instant -
+    exactly as a fresh observation on that contract would."""
+    from datetime import datetime, timezone
+
+    applicator = EventApplicator()
+    sources = _sources()
+    corrected = {"vehicle_id": "vehicle_1", "rated_power_kw": "210.0"}
+    event = ExecutionEvent(
+        event_id="evt-corr-1",
+        event_type=EVENT_ENTITY_CORRECTED,
+        observed_at="2026-06-05T09:30:00Z",
+        entity_ref="vehicle_1",
+        payload=corrected,
+    )
+    applicator.apply(sources, event)
+    assert applicator.watermarks["vehicles"] == datetime(
+        2026, 6, 5, 9, 30, tzinfo=timezone.utc
+    )
+
+
+def test_entity_corrected_append_advances_contract_watermark() -> None:
+    """A correction that introduces a previously-invisible entity also moves the
+    watermark: the row is new to this run but trustworthy as of the correction."""
+    from datetime import datetime, timezone
+
+    applicator = EventApplicator()
+    sources = _sources()
+    corrected = {"order_id": "order_99", "status": "pending"}
+    event = ExecutionEvent(
+        event_id="evt-corr-2",
+        event_type=EVENT_ENTITY_CORRECTED,
+        observed_at="2026-06-05T10:15:00Z",
+        entity_ref="order_99",
+        payload=corrected,
+    )
+    applicator.apply(sources, event)
+    assert applicator.watermarks["orders"] == datetime(
+        2026, 6, 5, 10, 15, tzinfo=timezone.utc
+    )
+
+
 def test_task_progress_reduces_remaining_work_and_marks_started(
     applicator: EventApplicator,
 ) -> None:

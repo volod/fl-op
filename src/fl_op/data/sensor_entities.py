@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 
 from fl_op.canonical.enums import AssetMobility, HealthStatus
-from fl_op.core.constants import BATTERY_LOW_THRESHOLD_PCT
+from fl_op.core.constants import BATTERY_LOW_THRESHOLD_PCT, INGESTION_DELAY_MAX_S
 from fl_op.data.agri_enums import SensorType
 
 # One station is installed per this many fields.
@@ -48,10 +48,6 @@ _RAW_METRIC_SOIL_MOISTURE = "soil_moisture_pct"
 # Soil-moisture readings (analytical payload; the engine does not act on them).
 _SOIL_MOISTURE_MIN_PCT = 10.0
 _SOIL_MOISTURE_MAX_PCT = 90.0
-
-# Delivery delay between a reading being taken and arriving at the platform;
-# stamped as ingested_at so arrival order is explicit, not row order.
-_INGESTION_DELAY_MAX_S = 120.0
 
 _BATTERY_UNIT = "%"
 _MOISTURE_UNIT = "%"
@@ -112,7 +108,7 @@ def _generate_sensor_readings(
         drain_per_step = _BATTERY_DAILY_DRAIN_PCT / _READINGS_PER_DAY
 
         def ingested(observed: datetime) -> str:
-            delay = timedelta(seconds=float(rng.uniform(0.0, _INGESTION_DELAY_MAX_S)))
+            delay = timedelta(seconds=float(rng.uniform(0.0, INGESTION_DELAY_MAX_S)))
             return (observed + delay).isoformat()
 
         for t in range(n_steps):

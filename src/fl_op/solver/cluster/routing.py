@@ -120,7 +120,13 @@ def solve_routing_context(
         routing, manager, time_dim, context, now_epoch, service_times, nodes
     )
     _add_completion_time_costs(
-        routing, manager, time_dim, nodes, optimization_objective
+        routing,
+        manager,
+        time_dim,
+        context,
+        nodes,
+        optimization_objective,
+        now_epoch,
     )
     _add_load_capacity_dimensions(routing, manager, context, nodes)
     _add_precedence_constraints(
@@ -128,6 +134,9 @@ def solve_routing_context(
     )
     _add_held_vehicle_breaks(
         routing, time_dim, context, service_times, held_windows, now_epoch
+    )
+    _add_operator_no_overlap(
+        routing, manager, time_dim, cluster_dict, context, service_times, nodes
     )
 
     time_limit_s = (
@@ -436,6 +445,10 @@ def _add_order_windows_and_disjunctions(
         _add_occupancy_constraints(
             routing, cumul, index, node_idx, blocked_offsets, service_times
         )
+        _enforce_finish_within_windows(
+            routing, cumul, index, node_idx, order, now_epoch,
+            deadline_from_now, service_times,
+        )
         alt_group = str(getattr(order, "alternative_group_ref", "") or "")
         if alt_group:
             grouped_task_indices.setdefault(alt_group, []).append(index)
@@ -465,12 +478,59 @@ def _add_order_windows_and_disjunctions(
             routing.AddDisjunction(indices, penalty)
 
 
+def _coerce_priority_class(order: Any) -> Optional[int]:
+    """Parse a TaskRow priority_class string into an int, or None when unset.
+
+    Priority class is a free-form string field on the canonical task; only
+    numeric values participate in urgency calibration. Non-numeric or blank
+    values fall back to None so the task earns no class-based boost.
+    """
+    raw = getattr(order, "priority_class", "")
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _completion_weight_for_order(order: Any, now_epoch: int, base_weight: int) -> int:
+    """Scale the completion-time soft weight by a per-task urgency factor.
+
+    Returns ``base_weight`` unchanged unless TIME_OBJECTIVE_URGENCY_CALIBRATION
+    is enabled. When enabled, higher-priority customer classes (numerically
+    below the baseline) and tighter deadline slack add integer urgency steps so
+    those task starts are pulled earlier. The base weight is never reduced, so
+    calibration only ever strengthens the ordering, never weakens it.
+    """
+    if not constants.TIME_OBJECTIVE_URGENCY_CALIBRATION:
+        return base_weight
+    urgency_steps = 0
+    class_step = int(constants.TIME_OBJECTIVE_CLASS_WEIGHT_STEP)
+    if class_step > 0:
+        priority_class = _coerce_priority_class(order)
+        if priority_class is not None:
+            deficit = (
+                int(constants.TIME_OBJECTIVE_BASELINE_PRIORITY_CLASS) - priority_class
+            )
+            if deficit > 0:
+                urgency_steps += deficit * class_step
+    slack_bonus = int(constants.TIME_OBJECTIVE_SLACK_WEIGHT_BONUS)
+    reference = int(constants.TIME_OBJECTIVE_SLACK_REFERENCE_S)
+    if slack_bonus > 0 and reference > 0:
+        slack = _deadline_from_now_s(getattr(order, "deadline", "") or "", now_epoch)
+        if slack < reference:
+            # Linear ramp: zero slack -> full bonus, reference slack -> none.
+            urgency_steps += ((reference - slack) * slack_bonus) // reference
+    return base_weight * (1 + urgency_steps)
+
+
 def _add_completion_time_costs(
     routing: Any,
     manager: Any,
     time_dim: Any,
+    context: ClusterContext,
     nodes: list[RoutingNode],
     optimization_objective: str,
+    now_epoch: int,
 ) -> None:
     """In time mode, favor earlier task starts across the route set.
 
@@ -478,17 +538,24 @@ def _add_completion_time_costs(
     departing node, so arc costs minimize total route time. Soft cumulative
     costs at task nodes add a completion-time proxy that prefers serving work
     earlier when two solutions have similar travel/service totals.
+
+    When TIME_OBJECTIVE_URGENCY_CALIBRATION is enabled, the per-task soft weight
+    is scaled by an urgency factor derived from customer class and deadline
+    slack so more urgent work is pulled earlier; otherwise every task uses the
+    flat TIME_OBJECTIVE_COMPLETION_WEIGHT.
     """
     if not _is_time_objective(optimization_objective):
         return
-    weight = int(constants.TIME_OBJECTIVE_COMPLETION_WEIGHT)
-    if weight <= 0:
+    base_weight = int(constants.TIME_OBJECTIVE_COMPLETION_WEIGHT)
+    if base_weight <= 0:
         return
     for node_idx, node in enumerate(nodes):
         if node.kind != NODE_TASK:
             continue
         index = manager.NodeToIndex(node_idx)
         if hasattr(time_dim, "SetCumulVarSoftUpperBound"):
+            order = context.cluster_orders[node.order_idx]
+            weight = _completion_weight_for_order(order, now_epoch, base_weight)
             time_dim.SetCumulVarSoftUpperBound(index, 0, weight)
         else:
             routing.AddVariableMinimizedByFinalizer(time_dim.CumulVar(index))
@@ -590,11 +657,7 @@ def _add_occupancy_constraints(
         return
     solver = routing.solver()
     active = routing.ActiveVar(node)
-    vehicle_var = routing.VehicleVar(node)
-    service_by_vehicle = [per_vehicle[node_idx] for per_vehicle in service_times]
-    service_expr = solver.Element(
-        service_by_vehicle, solver.Max(vehicle_var, 0).Var()
-    )
+    service_expr = _vehicle_service_expr(routing, node, node_idx, service_times)
     for block_start, block_end in blocked_offsets:
         if block_start <= 0:
             # Block already runs at the horizon origin: nothing can finish
@@ -603,6 +666,131 @@ def _add_occupancy_constraints(
         finishes_before = (cumul + service_expr <= block_start).Var()
         starts_after = (cumul >= block_end + 1).Var()
         solver.Add(finishes_before + starts_after + (1 - active) >= 1)
+
+
+def _vehicle_service_expr(
+    routing: Any,
+    node: Any,
+    node_idx: int,
+    service_times: list[list[int]],
+) -> Any:
+    """Service duration of the node, resolved on the serving vehicle.
+
+    Service cost is per (vehicle, node), so the live duration depends on which
+    vehicle wins the node. An element lookup over the vehicle variable returns
+    that vehicle's service time; a dropped node has vehicle -1, clamped to 0 so
+    the element stays in range (callers gate the constraint on the active var).
+    """
+    solver = routing.solver()
+    vehicle_var = routing.VehicleVar(node)
+    service_by_vehicle = [per_vehicle[node_idx] for per_vehicle in service_times]
+    return solver.Element(service_by_vehicle, solver.Max(vehicle_var, 0).Var())
+
+
+def _enforce_finish_within_windows(
+    routing: Any,
+    cumul: Any,
+    node: Any,
+    node_idx: int,
+    order: Any,
+    now_epoch: int,
+    deadline_from_now: int,
+    service_times: list[list[int]],
+) -> None:
+    """Require both start and finish to land inside one workable window.
+
+    Start-domain pruning keeps the *start* in the union of workable windows;
+    this adds the missing half so the whole execution interval
+    [start, start + service] fits within a single declared window and work
+    cannot spill past a window end (a curfew or agronomic close). The service
+    duration is the serving vehicle's, so the fit is vehicle-aware; a dropped
+    node is exempted through the active-variable term. Orders without declared
+    workable windows are left to the deadline bound on the start alone, so this
+    is a no-op for them.
+    """
+    from fl_op.solver.restrictions import _epoch_intervals
+    from fl_op.solver.task_relations import parse_time_windows
+
+    if not service_times or not parse_time_windows(order.time_windows):
+        return
+    window_offsets = [
+        (start - now_epoch, end - now_epoch)
+        for start, end in _epoch_intervals(
+            order.time_windows, now_epoch, now_epoch + deadline_from_now
+        )
+    ]
+    if not window_offsets:
+        return
+    solver = routing.solver()
+    active = routing.ActiveVar(node)
+    service_expr = _vehicle_service_expr(routing, node, node_idx, service_times)
+    fit_terms = [
+        (
+            (cumul >= win_start).Var() + (cumul + service_expr <= win_end).Var()
+            >= 2
+        ).Var()
+        for win_start, win_end in window_offsets
+    ]
+    fit_count = fit_terms[0]
+    for term in fit_terms[1:]:
+        fit_count = fit_count + term
+    solver.Add(fit_count + (1 - active) >= 1)
+
+
+def _add_operator_no_overlap(
+    routing: Any,
+    manager: Any,
+    time_dim: Any,
+    cluster_dict: dict[str, Any],
+    context: ClusterContext,
+    service_times: list[list[int]],
+    nodes: list[RoutingNode],
+) -> None:
+    """Serialize tasks that share one operator across vehicles in the cluster.
+
+    The vehicle visit order already serializes tasks on the *same* vehicle, but
+    a cluster can run several (prime, related) pairs in parallel while a single
+    certified operator backs more than one of them. This adds the missing
+    operator time dimension: for every pair of active tasks resolved to the same
+    operator, their execution intervals [start, start + service] may not overlap
+    (one must finish before the other starts). The serving vehicle decides the
+    service duration, so the no-overlap is vehicle-aware; a dropped task is
+    exempted through its active variable. Tasks without a resolved operator (no
+    operator_ref and no backup) are left unconstrained.
+    """
+    if not service_times:
+        return
+    task_operators: dict[str, str] = cluster_dict.get("task_operators", {}) or {}
+    default_operator = str(cluster_dict.get("operator_ref", "") or "")
+    # operator_id -> list of (start cumul var, end expr, active var)
+    by_operator: dict[str, list[tuple[Any, Any, Any]]] = {}
+    for node_idx, node in enumerate(nodes):
+        if node.kind != NODE_TASK:
+            continue
+        order = context.cluster_orders[node.order_idx]
+        operator_id = str(task_operators.get(order.task_id) or default_operator)
+        if not operator_id:
+            continue
+        index = manager.NodeToIndex(node_idx)
+        cumul = time_dim.CumulVar(index)
+        service_expr = _vehicle_service_expr(routing, index, node_idx, service_times)
+        end_expr = cumul + service_expr
+        active = routing.ActiveVar(index)
+        by_operator.setdefault(operator_id, []).append((cumul, end_expr, active))
+
+    solver = routing.solver()
+    for entries in by_operator.values():
+        if len(entries) < 2:
+            continue
+        for i in range(len(entries)):
+            start_a, end_a, active_a = entries[i]
+            for j in range(i + 1, len(entries)):
+                start_b, end_b, active_b = entries[j]
+                a_before_b = (end_a <= start_b).Var()
+                b_before_a = (end_b <= start_a).Var()
+                solver.Add(
+                    a_before_b + b_before_a + (1 - active_a) + (1 - active_b) >= 1
+                )
 
 
 def _add_load_capacity_dimensions(

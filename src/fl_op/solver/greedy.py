@@ -16,13 +16,13 @@ from typing import Any, Optional
 import numpy as np
 
 from fl_op.core.constants import (
-    EARTH_RADIUS_KM,
     FALLBACK_REVENUE_EUR_PER_HA,
     FUEL_COST_EUR_PER_L,
     OBJECTIVE_MODE_TIME,
     SCORE_WEIGHT_MARGIN,
     SCORE_WEIGHT_REPOSITION,
 )
+from fl_op.core.geometry import haversine_km, haversine_km_vector
 from fl_op.solver.cost_rates import (
     ResourcePrices,
     vehicle_energy_consumption_rate,
@@ -39,18 +39,6 @@ logger = logging.getLogger(__name__)
 
 # Assumed average field operation hours per hectare for margin estimation
 _OPERATION_H_PER_HA = 1.0
-
-
-def _haversine_km(
-    lat1: float, lon1: float, lat2: float, lon2: float
-) -> float:
-    """Haversine distance in km between two lat/lon points."""
-    r = EARTH_RADIUS_KM
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
 
 
 def _estimate_gross_margin(order: Any) -> float:
@@ -91,7 +79,7 @@ def _estimate_repositioning_cost(
         if resource_prices is not None
         else fuel_price
     )
-    dist_km = _haversine_km(
+    dist_km = haversine_km(
         float(vehicle.lat),
         float(vehicle.lon),
         float(field.lat),
@@ -186,14 +174,9 @@ def vectorized_score(
         i_indices = np.array([p[1] for p in pairs])
 
         # Vectorized haversine repositioning cost for all vehicles in pairs
-        lat1 = np.radians(v_lats[v_indices])
-        lat2 = math.radians(f_lat)
-        lon1 = np.radians(v_lons[v_indices])
-        lon2 = math.radians(f_lon)
-        dphi = lat2 - lat1
-        dlambda = lon2 - lon1
-        a = np.sin(dphi / 2) ** 2 + np.cos(lat1) * math.cos(lat2) * np.sin(dlambda / 2) ** 2
-        dist_km = 2 * EARTH_RADIUS_KM * np.arcsin(np.sqrt(a.clip(0, 1)))
+        dist_km = haversine_km_vector(
+            v_lats[v_indices], v_lons[v_indices], f_lat, f_lon
+        )
         hours = dist_km / v_speeds[v_indices].clip(1)
         if travel_lookup:
             net_by_vehicle = np.array([

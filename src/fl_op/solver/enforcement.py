@@ -18,7 +18,7 @@ code; nothing is dropped silently.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
 from fl_op.canonical.enums import ReasonCode, ReservationStatus
@@ -26,6 +26,7 @@ from fl_op.core.constants import (
     MATERIAL_INVENTORY_CANONICAL_UNIT,
     ROUTING_HORIZON_S,
 )
+from fl_op.solver.task_relations import parse_time_windows
 from fl_op.solver.travel_time import operation_set
 from fl_op.solver.types import ClusterSpec, InfeasibleOrder
 
@@ -126,11 +127,24 @@ def _forecast_epoch_interval(forecast: Any) -> Optional[tuple[int, int]]:
     return start, end
 
 
+def _coverage_horizon(order: Any, now_epoch: int) -> tuple[int, int]:
+    """Closed [now, deadline] epoch-second window a task must be weather-covered
+    across. Falls back to one routing horizon past ``now`` when the order
+    carries no parseable deadline."""
+    raw = getattr(order, "deadline", None)
+    try:
+        end = int(datetime.fromisoformat(str(raw)).timestamp())
+    except (ValueError, TypeError):
+        end = now_epoch + ROUTING_HORIZON_S
+    return now_epoch, max(now_epoch, end)
+
+
 def apply_weather_filter(
     orders: list[Any],
     sites: list[Any],
     forecasts: list[Any],
     weather: Optional["WeatherPolicySpec"],
+    now: Optional[datetime] = None,
 ) -> tuple[list[Any], list[InfeasibleOrder], BlockedWindows]:
     """Split off weather-sensitive tasks without any compliant forecast window.
 
@@ -141,9 +155,18 @@ def apply_weather_filter(
     Additionally returns each kept sensitive task's *non-compliant* forecast
     windows as blocked epoch intervals, so the routing model can schedule
     execution into the compliant windows instead of merely knowing one exists.
+
+    When the policy sets ``requireForecastCoverage`` the filter is conservative:
+    any time between ``now`` and the task deadline that is *not* covered by a
+    compliant forecast window is blocked (not only the explicitly non-compliant
+    windows). A sensitive task with no compliant coverage over that horizon is
+    declared infeasible, including the case of missing forecast data entirely.
     """
     if weather is None or not weather.sensitivity or not forecasts:
         return orders, [], {}
+
+    conservative = bool(getattr(weather, "requireForecastCoverage", False))
+    now_epoch = int((now or datetime.now(tz=timezone.utc)).timestamp())
 
     by_location: dict[tuple[float, float], list[Any]] = {}
     for forecast in forecasts:
@@ -169,6 +192,11 @@ def apply_weather_filter(
             kept.append(order)
             continue
         windows = nearest_windows(order.location_ref)
+        if conservative:
+            _filter_conservative(
+                order, dims, windows, weather, now_epoch, kept, infeasible, blocked
+            )
+            continue
         if not windows or any(_window_ok(w, dims, weather) for w in windows):
             kept.append(order)
             intervals = [
@@ -193,6 +221,50 @@ def apply_weather_filter(
     return kept, infeasible, blocked
 
 
+def _filter_conservative(
+    order: Any,
+    dims: Any,
+    windows: list[Any],
+    weather: "WeatherPolicySpec",
+    now_epoch: int,
+    kept: list[Any],
+    infeasible: list[InfeasibleOrder],
+    blocked: BlockedWindows,
+) -> None:
+    """Conservative coverage: block every interval inside [now, deadline] not
+    proven safe by a compliant forecast window; drop tasks with no coverage."""
+    from fl_op.solver.restrictions import merge_intervals, subtract_intervals
+
+    horizon = _coverage_horizon(order, now_epoch)
+    compliant: list[tuple[int, int]] = []
+    for window in windows:
+        if not _window_ok(window, dims, weather):
+            continue
+        interval = _forecast_epoch_interval(window)
+        if interval is None:
+            continue
+        start = max(interval[0], horizon[0])
+        end = min(interval[1], horizon[1])
+        if end >= start:
+            compliant.append((start, end))
+    compliant = merge_intervals(compliant)
+    if not compliant:
+        infeasible.append(
+            _infeasible(
+                order.task_id,
+                "",
+                ReasonCode.NO_VALID_WEATHER_WINDOW,
+                "no compliant forecast covers "
+                f"[{horizon[0]}, {horizon[1]}] for {order.operation_type}",
+            )
+        )
+        return
+    kept.append(order)
+    gaps = subtract_intervals([horizon], compliant)
+    if gaps:
+        blocked[order.task_id] = gaps
+
+
 # -- operator-qualified ----------------------------------------------------------
 
 
@@ -201,44 +273,78 @@ def apply_operator_qualification(
     order_index: dict[str, Any],
     operators_by_id: dict[str, Any],
     free_capacity: Optional[dict[str, float]] = None,
+    now: Optional[datetime] = None,
 ) -> list[InfeasibleOrder]:
     """Drop cluster tasks no qualified operator can take.
 
     A task whose operation the cluster's allocated operator is certified for
     stays as-is. A task outside that set is paired with a backup operator
-    (unclaimed by any cluster, certified for the operation, preferring the
-    freest calendar) recorded in the cluster's ``task_operators`` map; the
-    dispatch then carries the per-task operator. Only tasks for which no
-    qualified operator exists anywhere are dropped. A backup is claimed by
-    one cluster but may cover several of its tasks, the same fidelity as the
-    cluster operator itself.
+    (certified for the operation, never a cluster's own prime operator,
+    preferring the freest calendar) recorded in the cluster's
+    ``task_operators`` map; the dispatch then carries the per-task operator.
+    Only tasks for which no qualified operator exists anywhere are dropped. A
+    backup is claimed by one cluster but may cover several of its tasks, the
+    same fidelity as the cluster operator itself.
+
+    Backup sharing is time-aware: a backup operator may serve more than one
+    cluster as long as the clusters' demand windows do not overlap. The demand
+    window for an operation is the union of the workable time windows of the
+    cluster tasks needing that operation, clamped to the routing horizon; a
+    task without an explicit window contributes the whole horizon (conservative,
+    so it cannot be silently double-booked). An operator is reusable across
+    clusters whose demand windows are disjoint, and stays single-use whenever
+    windows are unknown -- matching the prior behaviour in that degenerate case.
     """
     free_capacity = free_capacity or {}
     infeasible: list[InfeasibleOrder] = []
-    claimed: set[str] = {
+    now_dt = now or datetime.now(timezone.utc)
+    now_epoch = int(now_dt.timestamp())
+    horizon_end = now_epoch + ROUTING_HORIZON_S
+    # Cluster prime operators are never offered as backups; tracked once up front.
+    main_claimed: set[str] = {
         str(c.get("operator_ref", "")) for c in clusters if c.get("operator_ref")
     }
+    # Per backup operator, the merged windows it is already committed to.
+    backup_busy: dict[str, list[tuple[int, int]]] = {}
     for cluster in clusters:
         if not cluster.get("allocated_prime_related") and not cluster.get("operator_ref"):
             continue
         operator = operators_by_id.get(cluster.get("operator_ref", ""))
         certified = ops_set(operator.certified_operations) if operator is not None else set()
-        cluster_backups: dict[str, str] = {}
-        task_operators: dict[str, str] = {}
-        kept_ids: list[str] = []
+        # First pass: partition tasks and gather per-operation backup demand.
+        plan: list[tuple[str, Optional[str], bool]] = []
+        needs_backup: dict[str, list[str]] = {}
         for task_id in cluster["task_ids"]:
             order = order_index.get(task_id)
             operation = str(getattr(order, "operation_type", "") or "").upper() or None
-            if order is not None and operation in certified:
+            certified_here = order is not None and operation in certified
+            plan.append((task_id, operation, certified_here))
+            if not certified_here and operation:
+                needs_backup.setdefault(operation, []).append(task_id)
+        # Claim one backup per operation, honouring time-disjoint sharing.
+        cluster_backups: dict[str, str] = {}
+        for operation, task_ids in needs_backup.items():
+            demand = _operator_demand_window(
+                (order_index.get(t) for t in task_ids), now_epoch, horizon_end
+            )
+            backup_id = _claim_backup_operator(
+                operation,
+                operators_by_id,
+                main_claimed,
+                backup_busy,
+                demand,
+                free_capacity,
+            )
+            if backup_id is not None:
+                cluster_backups[operation] = backup_id
+        # Second pass: assign and record infeasible tasks.
+        task_operators: dict[str, str] = {}
+        kept_ids: list[str] = []
+        for task_id, operation, certified_here in plan:
+            if certified_here:
                 kept_ids.append(task_id)
                 continue
             backup_id = cluster_backups.get(operation) if operation else None
-            if backup_id is None and operation:
-                backup_id = _claim_backup_operator(
-                    operation, operators_by_id, claimed, free_capacity
-                )
-                if backup_id is not None:
-                    cluster_backups[operation] = backup_id
             if backup_id is not None:
                 task_operators[task_id] = backup_id
                 kept_ids.append(task_id)
@@ -261,25 +367,86 @@ def apply_operator_qualification(
     return infeasible
 
 
+def _operator_demand_window(
+    orders: Any, now_epoch: int, horizon_end: int
+) -> list[tuple[int, int]]:
+    """Merged epoch windows an operation needs a backup operator for.
+
+    The union of each task's workable windows clamped to ``[now, horizon]``. A
+    task without a usable window forces the whole horizon, so an operation whose
+    timing is unknown reserves a backup conservatively (no silent overlap).
+    """
+    intervals: list[tuple[int, int]] = []
+    for order in orders:
+        windows = (
+            parse_time_windows(getattr(order, "time_windows", None))
+            if order is not None
+            else []
+        )
+        if not windows:
+            return [(now_epoch, horizon_end)]
+        for start, end in windows:
+            start_epoch = max(now_epoch, int(start.timestamp()))
+            end_epoch = (
+                min(horizon_end, int(end.timestamp())) if end is not None else horizon_end
+            )
+            if end_epoch > start_epoch:
+                intervals.append((start_epoch, end_epoch))
+    if not intervals:
+        return [(now_epoch, horizon_end)]
+    return _merge_busy(intervals)
+
+
+def _merge_busy(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Merge overlapping/adjacent half-open epoch intervals."""
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def _intervals_overlap(
+    left: list[tuple[int, int]], right: list[tuple[int, int]]
+) -> bool:
+    """True when any half-open interval in ``left`` overlaps one in ``right``."""
+    for start_l, end_l in left:
+        for start_r, end_r in right:
+            if start_l < end_r and start_r < end_l:
+                return True
+    return False
+
+
 def _claim_backup_operator(
     operation: str,
     operators_by_id: dict[str, Any],
-    claimed: set[str],
+    main_claimed: set[str],
+    backup_busy: dict[str, list[tuple[int, int]]],
+    demand: list[tuple[int, int]],
     free_capacity: dict[str, float],
 ) -> Optional[str]:
-    """Claim the freest unclaimed operator certified for one operation type."""
+    """Claim the freest certified operator free over the demand window.
+
+    Excludes cluster prime operators and any operator already committed to an
+    overlapping window. On success the operator's busy calendar absorbs the
+    demand window so a later cluster can only reuse it over disjoint time.
+    """
     best_id: Optional[str] = None
     best_free = -1.0
     for operator_id, operator in operators_by_id.items():
-        if operator_id in claimed:
+        if operator_id in main_claimed:
             continue
         if operation not in ops_set(operator.certified_operations):
+            continue
+        if _intervals_overlap(backup_busy.get(operator_id, []), demand):
             continue
         free = free_capacity.get(operator_id, 1.0)
         if free > best_free:
             best_id, best_free = operator_id, free
     if best_id is not None:
-        claimed.add(best_id)
+        backup_busy[best_id] = _merge_busy(backup_busy.get(best_id, []) + demand)
     return best_id
 
 

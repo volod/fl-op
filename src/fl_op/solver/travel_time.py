@@ -10,15 +10,16 @@ input.
 
 import heapq
 import logging
-import math
 from collections.abc import Mapping
 from typing import Any, Optional
 
-from fl_op.core.constants import EARTH_RADIUS_KM, TRAVEL_NETWORK_MAX_COMPOSE_NODES
+from fl_op.core.constants import (
+    FALLBACK_TRAVEL_SPEED_KMH,
+    TRAVEL_NETWORK_MAX_COMPOSE_NODES,
+)
+from fl_op.core.geometry import travel_time_seconds
 
 logger = logging.getLogger(__name__)
-
-_SECONDS_PER_KM = 240  # ~15 km/h average field travel speed -> 240 s/km
 
 # Bounds and fallback for the quantity-driven service-duration estimate.
 _OP_HOURS_MIN = 0.5
@@ -150,13 +151,12 @@ def _compose_shortest_paths(direct: TravelPairLookup) -> TravelPairLookup:
 
 
 def _haversine_s(lat1: float, lon1: float, lat2: float, lon2: float) -> int:
-    """Travel time in integer seconds between two lat/lon points."""
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    km = 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(max(0.0, a)))
-    return max(1, int(km * _SECONDS_PER_KM))
+    """Travel time in integer seconds between two lat/lon points.
+
+    Geometric fallback at the engine's average ground speed; delegates to the
+    centralized geodesic helper so all distance math shares one implementation.
+    """
+    return travel_time_seconds(lat1, lon1, lat2, lon2, FALLBACK_TRAVEL_SPEED_KMH)
 
 
 def travel_seconds(

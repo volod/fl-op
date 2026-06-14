@@ -346,6 +346,12 @@ class EventApplicator:
         accepted with wrong values) re-enter planning on the next revision:
         the snapshot is rebuilt from the corrected rows and the running plan
         reconciles against it.
+
+        The resolved contract's watermark is advanced by the correction's
+        observed time: a correction makes a previously-invisible (or wrong)
+        entity trustworthy as of that instant, so it must move the visibility
+        horizon and let the freshness check trigger a replan, exactly like a
+        fresh observation on that contract would.
         """
         payload = dict(event.payload)
         candidates = [
@@ -361,15 +367,19 @@ class EventApplicator:
                 event.entity_ref,
             )
             return
+        observed = self._parse_observed(event)
         for cid in candidates:
             key = self._tables[cid].entity_key_field
             rows = sources[cid]
             for i, row in enumerate(rows):
                 if str(row.get(key)) == str(payload[key]):
                     rows[i] = payload
+                    self._bump_watermark(cid, observed)
                     return
         # No existing row anywhere: the corrected entity is new to this run.
-        sources[candidates[0]].append(payload)
+        target = candidates[0]
+        sources[target].append(payload)
+        self._bump_watermark(target, observed)
 
     def _merge_inventory(self, sources: Sources, event: ExecutionEvent) -> None:
         """Partial update of a location row (depot fuel/energy/material balances).
@@ -435,21 +445,37 @@ class EventApplicator:
     def _advance_watermarks(self, sources: Sources, event: ExecutionEvent) -> None:
         """Record the newest applied event time per mutated source contract."""
         entity = self._EVENT_ENTITY.get(event.event_type)
-        if not entity or not event.observed_at:
+        if not entity:
             return
+        observed = self._parse_observed(event)
+        if observed is None:
+            return
+        for cid in self._contracts_for(entity, sources):
+            self._bump_watermark(cid, observed)
+
+    def _bump_watermark(self, cid: str, observed: Optional[datetime]) -> None:
+        """Advance one contract's visibility horizon to a newer observed time."""
+        if observed is None:
+            return
+        current = self.watermarks.get(cid)
+        if current is None or observed > current:
+            self.watermarks[cid] = observed
+
+    @staticmethod
+    def _parse_observed(event: ExecutionEvent) -> Optional[datetime]:
+        """Parse an event's observed time; None when absent or unparseable."""
+        if not event.observed_at:
+            return None
         try:
-            observed = datetime.fromisoformat(
+            return datetime.fromisoformat(
                 str(event.observed_at).replace("Z", "+00:00")
             )
         except ValueError:
-            return
-        for cid in self._contracts_for(entity, sources):
-            current = self.watermarks.get(cid)
-            if current is None or observed > current:
-                self.watermarks[cid] = observed
+            return None
 
-    # Canonical entity each event type mutates; entity.corrected resolves its
-    # target by key column and is not watermarked.
+    # Canonical entity each event type mutates. entity.corrected is absent: it
+    # resolves its target contract dynamically by key column, so it advances
+    # that contract's watermark directly from _upsert_entity instead.
     _EVENT_ENTITY: dict[str, str] = {
         EVENT_TASK_STARTED: "task",
         EVENT_TASK_PROGRESS: "task",

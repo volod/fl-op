@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import pathlib
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -18,6 +17,7 @@ from fl_op.core.constants import (
     RATE_TYPE_FUEL,
     RATE_TYPE_MATERIAL,
 )
+from fl_op.core.geometry import haversine_km
 from fl_op.core.paths import DATA_ROOT
 from fl_op.data.drone_logistics_tuning import (
     default_drone_logistics_tuning_path,
@@ -74,12 +74,9 @@ def _point_near(
 
 
 def _distance_km(a: dict[str, Any], b: dict[str, Any]) -> float:
-    lat1 = math.radians(float(a["lat"]))
-    lat2 = math.radians(float(b["lat"]))
-    dlat = lat2 - lat1
-    dlon = math.radians(float(b["lon"]) - float(a["lon"]))
-    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
-    return 6371.0 * 2 * math.asin(math.sqrt(max(0.0, h)))
+    return haversine_km(
+        float(a["lat"]), float(a["lon"]), float(b["lat"]), float(b["lon"])
+    )
 
 
 def _polygon_around(lat: float, lon: float, radius_deg: float = 0.012) -> list[list[float]]:

@@ -47,6 +47,31 @@ def registered_generator_domains(registry: FileRegistry | None = None) -> list[s
     )
 
 
+def domain_generator_capabilities(
+    domain: str, registry: FileRegistry | None = None
+) -> dict[str, Any]:
+    """Capability metadata for one generator-bearing domain.
+
+    Wraps ``FileRegistry.generator_capabilities`` so the generate-data CLI and
+    provenance tooling can report what a domain produces (canonical entities,
+    staged contracts, source formats, declared extras) without reaching into the
+    registry internals.
+    """
+    registry = registry or FileRegistry()
+    return registry.generator_capabilities(domain)
+
+
+def all_generator_capabilities(
+    registry: FileRegistry | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Capability metadata for every domain that declares a generator."""
+    registry = registry or FileRegistry()
+    return {
+        domain: registry.generator_capabilities(domain)
+        for domain in registered_generator_domains(registry)
+    }
+
+
 def run_domain_generator(
     domain: str,
     request: GenerationRequest,

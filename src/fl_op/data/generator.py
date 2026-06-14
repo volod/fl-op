@@ -3,7 +3,8 @@
 Orchestrates entity generators and writes datasets to
 $DATA_DIR/generate-data/<ISO-timestamp>/.
 
-Sampling: NumPy-vectorised. Geographic placement: scipy BallTree haversine.
+Sampling: NumPy-vectorised. Geographic placement uses the centralized
+fl_op.core.geometry helpers (pyproj geodesics, BallTree nearest-neighbor).
 """
 
 import logging

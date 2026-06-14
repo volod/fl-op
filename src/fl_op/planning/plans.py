@@ -11,7 +11,12 @@ from fl_op.canonical.enums import PlanningMode
 from fl_op.canonical.snapshot import PlanningSnapshot
 from fl_op.contracts.plan_contract import assert_plan_conforms
 from fl_op.contracts.registry import FileRegistry
-from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION, OBJECTIVE_MODE_COST
+from fl_op.core.constants import (
+    ARTIFACT_SCHEMA_VERSION,
+    OBJECTIVE_MODE_COST,
+    PLAN_WATCH_MAX_CYCLES,
+    PLAN_WATCH_POLL_INTERVAL_S,
+)
 from fl_op.core.paths import DATA_ROOT
 from fl_op.planning.artifacts import model_json, run_timestamp, write_json
 from fl_op.snapshot.builder import SnapshotBuilder
@@ -170,29 +175,8 @@ def run_plan_rolling(
     summary = []
     for n, rev in enumerate(result.revisions):
         assert_plan_conforms(rev.plan)
-        rev_dir = out_dir / "revisions" / f"{n:03d}"
-        write_json(
-            {"schema_version": ARTIFACT_SCHEMA_VERSION, **model_json(rev.plan)},
-            rev_dir / "plan.json",
-        )
-        summary.append(
-            {
-                "revision": n,
-                "trigger": rev.event.event_type if rev.event else "baseline",
-                "trigger_entity_ref": rev.event.entity_ref if rev.event else "",
-                "trigger_event_id": rev.event.event_id if rev.event else "",
-                "n_coalesced_events": rev.n_coalesced_events,
-                "revision_id": rev.plan.revision_id,
-                "parent_revision_id": rev.plan.parent_revision_id,
-                "n_assignments": len(rev.plan.assignments),
-                "n_frozen": rev.plan.score.get("n_frozen", 0),
-                "n_carried_forward": rev.plan.score.get("n_carried_forward", 0),
-                "n_changed_after_freeze": rev.plan.score.get("n_changed_after_freeze", 0),
-                "plan_instability_penalty": rev.plan.score.get("plan_instability_penalty", 0),
-                "n_unassigned": len(rev.plan.unassigned_tasks),
-                "drone_logistics_kpis": rev.plan.score.get("drone_logistics_kpis", {}),
-            }
-        )
+        _write_revision(out_dir, n, rev)
+        summary.append(_revision_record(n, rev))
     write_json(
         {"schema_version": ARTIFACT_SCHEMA_VERSION, "revisions": summary},
         out_dir / "revisions_summary.json",
@@ -219,6 +203,141 @@ def run_plan_rolling(
             extra_tags={"n_revisions": str(len(result.revisions))},
         )
     logger.info("Rolling dispatch: %d revisions -> %s", len(result.revisions), out_dir)
+    return out_dir
+
+
+def _write_revision(out_dir: pathlib.Path, n: int, rev: Any) -> None:
+    """Persist one revision's plan under ``out_dir/revisions/NNN/plan.json``."""
+    write_json(
+        {"schema_version": ARTIFACT_SCHEMA_VERSION, **model_json(rev.plan)},
+        out_dir / "revisions" / f"{n:03d}" / "plan.json",
+    )
+
+
+def _revision_record(n: int, rev: Any) -> dict[str, Any]:
+    """One row of the rolling/watch revisions summary describing a revision."""
+    return {
+        "revision": n,
+        "trigger": rev.event.event_type if rev.event else "baseline",
+        "trigger_entity_ref": rev.event.entity_ref if rev.event else "",
+        "trigger_event_id": rev.event.event_id if rev.event else "",
+        "n_coalesced_events": rev.n_coalesced_events,
+        "revision_id": rev.plan.revision_id,
+        "parent_revision_id": rev.plan.parent_revision_id,
+        "n_assignments": len(rev.plan.assignments),
+        "n_frozen": rev.plan.score.get("n_frozen", 0),
+        "n_carried_forward": rev.plan.score.get("n_carried_forward", 0),
+        "n_changed_after_freeze": rev.plan.score.get("n_changed_after_freeze", 0),
+        "plan_instability_penalty": rev.plan.score.get("plan_instability_penalty", 0),
+        "n_unassigned": len(rev.plan.unassigned_tasks),
+        "drone_logistics_kpis": rev.plan.score.get("drone_logistics_kpis", {}),
+    }
+
+
+def run_plan_watch(
+    data_dir: str,
+    events_path: Optional[str] = None,
+    effective_at: Optional[str] = None,
+    objective: str = OBJECTIVE_MODE_COST,
+    poll_interval_s: float = PLAN_WATCH_POLL_INTERVAL_S,
+    max_cycles: Optional[int] = PLAN_WATCH_MAX_CYCLES,
+) -> pathlib.Path:
+    """Continuous serving-side watcher: one session, many bounded drain cycles.
+
+    Where :func:`run_plan_rolling` drains the visible backlog once and exits,
+    the watcher keeps a single :class:`StreamSession` alive and repeatedly
+    drains. Each cycle opens a bounded event source, applies its backlog, and
+    publishes the resulting revisions through an ``on_revision`` callback that
+    writes the artifact and records the event ids in the dedup store *before*
+    the cycle commits its broker offsets. A crash therefore redelivers only the
+    in-flight cycle (effectively-once via the dedup store), never the whole
+    session. ``max_cycles`` bounds the loop for tests and graceful shutdown;
+    pass ``None`` for an unbounded daemon. An empty cycle sleeps
+    ``poll_interval_s`` before polling again.
+    """
+    import time
+
+    from fl_op.stream.broker import open_dedup_store, open_event_source
+    from fl_op.stream.driver import StreamDriver
+
+    # PLAN_WATCH_MAX_CYCLES==0 (and an explicit None) both mean "run forever".
+    cycle_limit = None if not max_cycles else max_cycles
+
+    registry = FileRegistry()
+    builder = SnapshotBuilder(registry)
+    sources = builder.load_sources(data_dir)
+    eff = datetime.fromisoformat(effective_at) if effective_at else datetime.now(tz=timezone.utc)
+    dedup_store = open_dedup_store()
+
+    driver = StreamDriver(registry, dedup_store=dedup_store)
+    session = driver.session(sources, effective_at=eff, objective=objective)
+
+    out_dir = DATA_ROOT / "plan-watch" / run_timestamp()
+    summary: list[dict[str, Any]] = []
+    counter = 0
+
+    def publish(rev: Any) -> None:
+        nonlocal counter
+        assert_plan_conforms(rev.plan)
+        _write_revision(out_dir, counter, rev)
+        summary.append(_revision_record(counter, rev))
+        if dedup_store is not None and rev.applied_event_ids:
+            dedup_store.record_published(rev.applied_event_ids)
+        counter += 1
+
+    # The baseline is the first published revision; event-driven revisions then
+    # extend the same continuity chain across every cycle.
+    publish(session.start())
+    write_json(
+        {"schema_version": ARTIFACT_SCHEMA_VERSION, "revisions": summary},
+        out_dir / "revisions_summary.json",
+    )
+
+    cycle = 0
+    while cycle_limit is None or cycle < cycle_limit:
+        cycle += 1
+        event_source = open_event_source(events_path)
+        events = list(event_source)
+        if events:
+            before = counter
+            session.drain(events, on_revision=publish)
+            # Record-then-commit, in that order: a crash between the two
+            # redelivers events the dedup store now suppresses (no duplicate
+            # revision), a crash before either replays the cycle (nothing lost).
+            commit = getattr(event_source, "commit", None)
+            if callable(commit):
+                commit()
+            session.finalize()
+            if counter > before:
+                write_json(
+                    {"schema_version": ARTIFACT_SCHEMA_VERSION, "revisions": summary},
+                    out_dir / "revisions_summary.json",
+                )
+                # One tracking run per cycle that produced revisions: the
+                # latest plan carries the cycle's converged KPIs.
+                if session.previous_plan is not None:
+                    _log_plan_to_mlflow(
+                        session.previous_plan,
+                        extra_tags={"watch_cycle": str(cycle)},
+                    )
+            logger.info(
+                "Watch cycle %d: %d events -> %d total revisions",
+                cycle,
+                len(events),
+                counter,
+            )
+        else:
+            # Nothing visible: release the consumer and idle before re-polling
+            # so a quiet topic does not spin.
+            close = getattr(event_source, "close", None)
+            if callable(close):
+                close()
+            if cycle_limit is None or cycle < cycle_limit:
+                time.sleep(poll_interval_s)
+
+    logger.info(
+        "Watch stopped after %d cycles: %d revisions -> %s", cycle, counter, out_dir
+    )
     return out_dir
 
 

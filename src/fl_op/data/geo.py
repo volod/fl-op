@@ -1,9 +1,9 @@
 """Geographic sampling helpers for synthetic dataset generation."""
 
 import numpy as np
-from sklearn.neighbors import BallTree
 
 from fl_op.core.constants import EARTH_RADIUS_KM
+from fl_op.core.geometry import nearest_indices
 
 _REGION_CENTER_LAT = 48.5  # Central Ukraine approximate centroid
 _REGION_CENTER_LON = 32.0
@@ -37,8 +37,5 @@ def _nearest_depot_ids(
     depot_ids: list[str],
 ) -> list[str]:
     """Return the nearest depot_id for each field centroid using haversine BallTree."""
-    depot_coords = np.radians(np.column_stack([depot_lats, depot_lons]))
-    field_coords = np.radians(np.column_stack([field_lats, field_lons]))
-    tree = BallTree(depot_coords, metric="haversine")
-    _, indices = tree.query(field_coords, k=1)
-    return [depot_ids[idx[0]] for idx in indices]
+    indices = nearest_indices(field_lats, field_lons, depot_lats, depot_lons)
+    return [depot_ids[idx] for idx in indices]

@@ -157,6 +157,29 @@ class MonitoringPolicySpec(BaseModel):
         }
         return self.model_copy(update=updates)
 
+    def composed_with(
+        self, other: "MonitoringPolicySpec"
+    ) -> "MonitoringPolicySpec":
+        """Layer another domain's monitoring policy onto this primary one.
+
+        Scalar thresholds keep this (primary) profile's values; the per-asset-type
+        and per-asset override maps union, this profile winning on the rare key
+        collision. Asset-type classes are domain-disjoint in practice, so a shared
+        fleet inherits each pack's station-class tuning without either clobbering
+        the other.
+        """
+        asset_type_overrides = {
+            **other.assetTypeOverrides,
+            **self.assetTypeOverrides,
+        }
+        asset_overrides = {**other.assetOverrides, **self.assetOverrides}
+        return self.model_copy(
+            update={
+                "assetTypeOverrides": asset_type_overrides,
+                "assetOverrides": asset_overrides,
+            }
+        )
+
 
 class WeatherPolicySpec(BaseModel):
     """Weather-window limits and per-operation sensitivity.
@@ -172,6 +195,32 @@ class WeatherPolicySpec(BaseModel):
     maxRainMmPerH: float = WEATHER_RAIN_MAX_MM
     maxSoilMoisturePct: float = WEATHER_SOIL_MOISTURE_MAX_PCT
     sensitivity: dict[str, list[str]] = Field(default_factory=dict)
+    requireForecastCoverage: bool = False
+
+    def composed_with(self, other: "WeatherPolicySpec") -> "WeatherPolicySpec":
+        """Layer another domain's weather policy onto this primary one.
+
+        Limits take the stricter (lower) bound of either pack so a shared
+        weather window never violates the more cautious domain. Per-operation
+        sensitivity maps union, this profile winning on any shared operation
+        type (operation types are domain-disjoint in practice). Conservative
+        forecast coverage is OR-ed: if either pack demands it, the shared
+        policy demands it (the safer stance wins).
+        """
+        sensitivity = {**other.sensitivity, **self.sensitivity}
+        return self.model_copy(
+            update={
+                "maxWindMs": min(self.maxWindMs, other.maxWindMs),
+                "maxRainMmPerH": min(self.maxRainMmPerH, other.maxRainMmPerH),
+                "maxSoilMoisturePct": min(
+                    self.maxSoilMoisturePct, other.maxSoilMoisturePct
+                ),
+                "sensitivity": sensitivity,
+                "requireForecastCoverage": (
+                    self.requireForecastCoverage or other.requireForecastCoverage
+                ),
+            }
+        )
 
 
 class MaterialDemandSpec(BaseModel):
@@ -234,6 +283,80 @@ class OptimizationProfile(BaseModel):
 
     def enforced_constraints(self) -> list[str]:
         return [c.id for c in self.constraints if c.enforced]
+
+    def composed_with(self, other: "OptimizationProfile") -> "OptimizationProfile":
+        """Compose another domain's profile onto this primary one.
+
+        Used when a shared-fleet snapshot spans multiple active domains: this
+        profile (the first selected domain) supplies the base identity, scalar
+        defaults, and objective hierarchy, while the secondary profile's
+        domain-specific policy detail is layered in. Merge rules per section:
+
+        * ``inputContracts`` / ``outputContracts`` / ``planningModes``: union,
+          preserving this profile's order then appending unseen entries.
+        * ``constraints``: union by id, with ``enforced=True`` winning a
+          conflict so no domain's hard constraint is silently relaxed.
+        * ``monitoring`` / ``weatherPolicy``: delegated to the policy specs'
+          own ``composed_with`` (stricter limits, unioned overrides).
+        * ``materialDemand``: union, this profile winning on shared keys.
+        * ``allocationPolicy``: keeps this profile's tuning.
+
+        The merge is associative left-to-right, so folding a domain list yields a
+        deterministic composite independent of how the fold is bracketed.
+        """
+        input_contracts = _union_preserving_order(
+            self.inputContracts, other.inputContracts
+        )
+        output_contracts = _union_preserving_order(
+            self.outputContracts, other.outputContracts
+        )
+        planning_modes = list(self.planningModes)
+        seen_modes = {pm.id for pm in planning_modes}
+        for pm in other.planningModes:
+            if pm.id not in seen_modes:
+                planning_modes.append(pm)
+                seen_modes.add(pm.id)
+        constraints = _merge_constraints(self.constraints, other.constraints)
+        material_demand = {**other.materialDemand, **self.materialDemand}
+        return self.model_copy(
+            update={
+                "inputContracts": input_contracts,
+                "outputContracts": output_contracts,
+                "planningModes": planning_modes,
+                "constraints": constraints,
+                "monitoring": self.monitoring.composed_with(other.monitoring),
+                "weatherPolicy": self.weatherPolicy.composed_with(
+                    other.weatherPolicy
+                ),
+                "materialDemand": material_demand,
+            }
+        )
+
+
+def _union_preserving_order(primary: list[str], secondary: list[str]) -> list[str]:
+    merged = list(primary)
+    seen = set(primary)
+    for item in secondary:
+        if item not in seen:
+            merged.append(item)
+            seen.add(item)
+    return merged
+
+
+def _merge_constraints(
+    primary: list[ConstraintSpec], secondary: list[ConstraintSpec]
+) -> list[ConstraintSpec]:
+    """Union constraints by id; an enforced constraint wins a conflict."""
+    by_id: dict[str, ConstraintSpec] = {}
+    order: list[str] = []
+    for spec in [*primary, *secondary]:
+        existing = by_id.get(spec.id)
+        if existing is None:
+            by_id[spec.id] = spec
+            order.append(spec.id)
+        elif spec.enforced and not existing.enforced:
+            by_id[spec.id] = spec
+    return [by_id[cid] for cid in order]
 
 
 def load_profile(path: pathlib.Path) -> OptimizationProfile:

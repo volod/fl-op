@@ -31,7 +31,7 @@ from fl_op.core.constants import (
     ROLLING_HORIZON_HOURS,
     SNAPSHOT_INPUT_ENTITIES,
 )
-from fl_op.contracts.profile import MonitoringPolicySpec
+from fl_op.contracts.profile import MonitoringPolicySpec, OptimizationProfile
 from fl_op.contracts.registry import FileRegistry
 from fl_op.io import detect_format, get_codec, locate_source
 from fl_op.mapping.engine import MappingEngine, MappingResult
@@ -101,27 +101,34 @@ class SnapshotBuilder:
         self.domains: list[str] = []
         self.mapped_contracts: list[str] = []
         self.profile_id: str | None = None
+        self.composite_profile: Optional[OptimizationProfile] = None
         self.monitoring_policy = MonitoringPolicySpec()
         self._configure_domains(
             domains if domains is not None else self.registry.active_domains
         )
 
     def _configure_domains(self, domains: list[str]) -> None:
-        """Select domain mappings and profile-derived policies for this builder."""
+        """Select domain mappings and profile-derived policies for this builder.
+
+        With several active domains the engine no longer falls back to default
+        policies: every selected domain's optimization profile is composed into
+        one (``FileRegistry.composite_profile``), so a shared-fleet snapshot
+        inherits each pack's monitoring and weather tuning rather than silently
+        using engine defaults. A single domain without a declared profile still
+        honors the registry's active profile, preserving prior behavior.
+        """
         self.domains = domains
         self.mapped_contracts = mapped_contract_ids(self.registry, self.domains)
-        profile_id = None
-        if len(self.domains) == 1:
-            profile_id = (
-                self.registry.get_domain_spec(self.domains[0]).get("profile")
-                or self.registry.active_profile_id
-            )
-        self.profile_id = profile_id
-        profile_policy = (
-            self.registry.get_profile(profile_id).monitoring
-            if profile_id
-            else MonitoringPolicySpec()
-        )
+        composite = self.registry.composite_profile(self.domains)
+        profile_ids = self.registry.domain_profile_ids(self.domains)
+        if composite is None and len(self.domains) == 1:
+            fallback_id = self.registry.active_profile_id
+            if fallback_id:
+                composite = self.registry.get_profile(fallback_id)
+                profile_ids = [fallback_id]
+        self.composite_profile = composite
+        self.profile_id = profile_ids[0] if profile_ids else None
+        profile_policy = composite.monitoring if composite else MonitoringPolicySpec()
         # The guarded auto-tuning overlay layers on the reviewed profile
         # policy; deleting the overlay file reverts to the profile as is.
         from fl_op.snapshot.policy_tuning import (
@@ -186,6 +193,40 @@ class SnapshotBuilder:
             integer_scaling_policy_version=INTEGER_SCALING_POLICY_VERSION,
         )
 
+    def _staged_source_dir(
+        self, data_path: pathlib.Path, entry: Any, codec: Any
+    ) -> pathlib.Path:
+        """Directory a contract loads from, preferring a per-domain subdirectory.
+
+        Mixed-domain packs may declare the same ``sourceFile`` name (e.g. two
+        domains both staging ``operators.csv``). Staging each domain under its
+        own subdirectory (``data_dir/<domain>/operators.csv``) keeps the files
+        collision-free; when the subdirectory file is present it wins, otherwise
+        the flat layout is used so single-domain datasets load unchanged.
+        """
+        domain = entry.domain
+        if not domain:
+            return data_path
+        domain_dir = data_path / domain
+        if not domain_dir.is_dir():
+            return data_path
+        source_file = entry.source_file or ""
+        if entry.source_format in ("json", "jsonl"):
+            candidate = domain_dir / source_file
+        else:
+            candidate = locate_source(domain_dir, source_file, codec)
+        return domain_dir if candidate.exists() else data_path
+
+    def _resolved_source_path(
+        self, data_path: pathlib.Path, entry: Any, codec: Any
+    ) -> pathlib.Path:
+        """Physical path a contract resolves to after domain-subdir staging."""
+        source_dir = self._staged_source_dir(data_path, entry, codec)
+        source_file = entry.source_file or ""
+        if entry.source_format in ("json", "jsonl"):
+            return source_dir / source_file
+        return locate_source(source_dir, source_file, codec)
+
     def load_sources(self, data_dir: str | pathlib.Path) -> dict[str, list[dict[str, Any]]]:
         """Load every mapped contract's source rows from a data directory."""
         data_path = pathlib.Path(data_dir)
@@ -194,8 +235,43 @@ class SnapshotBuilder:
         sources: dict[str, list[dict[str, Any]]] = {}
         for cid in self.mapped_contracts:
             entry = self.registry.get_entry(cid)
-            sources[cid] = _load_source(data_path, entry.source_file or "", entry.source_format, codec)
+            source_dir = self._staged_source_dir(data_path, entry, codec)
+            sources[cid] = _load_source(
+                source_dir, entry.source_file or "", entry.source_format, codec
+            )
         return sources
+
+    def source_collisions(
+        self, data_dir: str | pathlib.Path
+    ) -> list[tuple[str, str, str]]:
+        """Mapped contracts from different domains resolving to one source file.
+
+        Returns (contract_id, file_name, conflicting_domains) tuples. A collision
+        means rows from a single physical file would be mapped through more than
+        one domain's contract, double-counting the entities; staging each domain
+        under its own subdirectory resolves it. The snapshot records a warning
+        finding per colliding contract so the ambiguity is visible.
+        """
+        data_path = pathlib.Path(data_dir)
+        self._configure_domains(self._domains_for_data_dir(data_path))
+        codec = get_codec(detect_format(data_path))
+        by_path: dict[str, list[Any]] = {}
+        for cid in self.mapped_contracts:
+            entry = self.registry.get_entry(cid)
+            path = self._resolved_source_path(data_path, entry, codec)
+            by_path.setdefault(str(path), []).append(entry)
+        collisions: list[tuple[str, str, str]] = []
+        for path_str, entries in by_path.items():
+            domains = {e.domain for e in entries if e.domain}
+            if len(entries) <= 1 or len(domains) <= 1:
+                continue
+            file_name = pathlib.Path(path_str).name
+            for entry in entries:
+                others = sorted(d for d in domains if d != entry.domain)
+                collisions.append(
+                    (entry.qualified_id, file_name, ",".join(others))
+                )
+        return collisions
 
     def missing_source_files(self, data_dir: str | pathlib.Path) -> list[tuple[str, str]]:
         """Mapped contracts whose declared source file is absent from data_dir.
@@ -210,11 +286,7 @@ class SnapshotBuilder:
         missing: list[tuple[str, str]] = []
         for cid in self.mapped_contracts:
             entry = self.registry.get_entry(cid)
-            source_file = entry.source_file or ""
-            if entry.source_format in ("json", "jsonl"):
-                path = data_path / source_file
-            else:
-                path = locate_source(data_path, source_file, codec)
+            path = self._resolved_source_path(data_path, entry, codec)
             if not path.exists():
                 missing.append((cid, path.name))
         return missing
@@ -232,6 +304,7 @@ class SnapshotBuilder:
             effective_at,
             lineage_ref=f"source://{data_dir}",
             missing_sources=self.missing_source_files(data_dir),
+            source_collisions=self.source_collisions(data_dir),
         )
         # Cross-run quality trending: dataset builds (not per-event rolling
         # rebuilds) append their error rates and report degrading sources.
@@ -251,6 +324,7 @@ class SnapshotBuilder:
         effective_at: Optional[datetime] = None,
         lineage_ref: str = "source://in-memory",
         missing_sources: Optional[list[tuple[str, str]]] = None,
+        source_collisions: Optional[list[tuple[str, str, str]]] = None,
         source_watermarks: Optional[dict[str, datetime]] = None,
     ) -> PlanningSnapshot:
         """Build a snapshot from already-loaded (and possibly event-mutated) rows.
@@ -269,6 +343,9 @@ class SnapshotBuilder:
             self.engine.map_dataset(cid, sources.get(cid, []), result)
         result.findings.extend(
             _missing_source_findings(missing_sources or [], generated_at)
+        )
+        result.findings.extend(
+            _source_collision_findings(source_collisions or [], generated_at)
         )
         # Statistical assessment: bound series by the retention window, exclude
         # outlier and source-flagged readings, floor the confidence of
@@ -388,4 +465,33 @@ def _missing_source_findings(
             source_ref=contract_id,
         )
         for contract_id, file_name in missing_sources
+    ]
+
+
+def _source_collision_findings(
+    collisions: list[tuple[str, str, str]], detected_at: datetime
+) -> list[QualityFinding]:
+    """One warning per contract whose source file is shared across domains.
+
+    A collision means a single physical file would be mapped through more than
+    one domain's contract, double-counting its entities. Staging each domain
+    under ``data_dir/<domain>/`` resolves it; the finding makes the ambiguity
+    visible while the flat-layout rows still load.
+    """
+    return [
+        QualityFinding(
+            quality_finding_id=f"qf-collision-{contract_id}",
+            rule_id="dq://dataset/source-file-collision",
+            severity=QualitySeverity.WARNING,
+            entity_ref=contract_id,
+            field_ref=file_name,
+            detected_at=detected_at,
+            action_applied="dataset-collision",
+            planning_impact=(
+                f"source file shared with domain(s) {others}; stage under a "
+                "per-domain subdirectory to avoid double-counting entities"
+            ),
+            source_ref=contract_id,
+        )
+        for contract_id, file_name, others in collisions
     ]

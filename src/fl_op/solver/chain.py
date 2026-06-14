@@ -225,7 +225,7 @@ def run_solver_chain(
     )
 
     orders_raw, enforcement_infeasible, weather_blocked = apply_weather_filter(
-        orders_raw, fields_raw, forecasts_raw, enforcement.weather
+        orders_raw, fields_raw, forecasts_raw, enforcement.weather, now=now
     )
     orders_raw, window_infeasible = apply_time_window_filter(orders_raw, now=now)
     enforcement_infeasible.extend(window_infeasible)
@@ -278,7 +278,7 @@ def run_solver_chain(
         operators_by_id = {op.asset_id: op for op in operators_raw}
         enforcement_infeasible.extend(
             apply_operator_qualification(
-                clusters, order_index, operators_by_id, free_capacity
+                clusters, order_index, operators_by_id, free_capacity, now
             )
         )
     material_infeasible, material_reservations = apply_material_limits(

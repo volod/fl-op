@@ -110,6 +110,39 @@ bump. Reviewed baselines carry both the normalized semantic metadata and the
 registry artifact ref, so metadata edits are classified before the hash gate is
 accepted.
 
+### Multi-domain staging and policy composition
+
+A snapshot build can span several domains at once. The registry composes the
+selected domains' optimization profiles into one effective profile
+(`FileRegistry.composite_profile`): the first domain that declares a profile is
+the primary (it supplies identity, scalar defaults, and objective hierarchy) and
+each later profile is layered on via `OptimizationProfile.composed_with`. Policy
+merges are conservative so adding a domain never silently relaxes another:
+weather limits collapse to the stricter (lower) bound and sensitivity maps union
+(primary wins on shared operation types); monitoring scalars keep the primary
+value while `assetTypeOverrides`/`assetOverrides` maps union (primary wins on key
+collisions); constraints union by id with an enforced constraint winning a
+conflict. With no profile-bearing domain selected the build falls back to engine
+defaults unchanged.
+
+Mixed-domain packs can declare the same `sourceFile` name (for example two
+domains both staging `operators.csv`). The snapshot builder stages each domain
+under its own subdirectory (`data_dir/<domain>/operators.csv`); the per-domain
+file wins when present, otherwise the flat layout is used so single-domain
+datasets load unchanged. `SnapshotBuilder.source_collisions` reports any
+contracts from different domains still resolving to one physical file (which
+would double-count entities) and `missing_source_files` reports declared
+datasets absent from the directory. Both surface as warning `QualityFinding`s on
+the snapshot (`dq://dataset/source-file-collision`,
+`dq://dataset/source-file-missing`) rather than failing silently.
+
+Every generator-bearing domain exposes capability metadata
+(`FileRegistry.generator_capabilities`, surfaced by
+`data/domain_generators.py` and the `fl-op domain-capabilities` CLI command):
+the generator callable, declared profile, the canonical entities the domain's
+contracts project, the staged contract ids, and source formats. Derived fields
+always reflect the registry, so capabilities cannot drift from the contracts.
+
 ## Planning pipeline
 
 1. Validate contracts (`fl-op contracts validate`).
@@ -182,6 +215,13 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    forecast windows as blocked intervals, which the routing model keeps
    execution out of (step 8), so weather-sensitive work is scheduled *into*
    its compliant windows, not merely admitted because one exists.
+   When `weatherPolicy.requireForecastCoverage` is set the filter switches to
+   conservative coverage: every interval inside the task's `[now, deadline]`
+   horizon that is not proven safe by a compliant forecast window is blocked
+   (not just the explicitly non-compliant windows), and a sensitive task with no
+   compliant coverage at all is dropped (`NO_VALID_WEATHER_WINDOW`). This stops
+   work from being scheduled into time beyond forecast coverage; the flag ORs on
+   composition so any contributing policy that requires coverage wins.
    Structural data semantics are filtered alongside: tasks none of whose
    workable windows can still be met (`CONTRACT_WINDOW_INFEASIBLE`,
    `solver/task_relations.py`), tasks blocked by their location's declared
@@ -273,8 +313,16 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    directed travel-link graph (Dijkstra per source, skipped past
    `TRAVEL_NETWORK_MAX_COMPOSE_NODES`) and is indexed by `networkMode`
    (`road`, `air`, or `any`), with a reverse-direction and haversine fallback
-   for pairs without any network path (`solver/travel_time.py`). Per-vehicle
-   time matrices keep road and air travel isolated. The selected objective is
+   for pairs without any network path (`solver/travel_time.py`). That fallback
+   leg duration, like every distance in the engine, routes through the
+   centralized `core/geometry.py` module: a `pyproj` geodesic engine configured
+   as a sphere of mean Earth radius reproduces the legacy haversine results to
+   floating-point noise while serving both scalar and vectorized call sites, the
+   geometric fallback speed is `FALLBACK_TRAVEL_SPEED_KMH` (env-configurable),
+   nearest-neighbor depot affinity uses a `scikit-learn` haversine `BallTree`,
+   and `shapely` point/linestring/bounding-box primitives back future map-based
+   interface control. Per-vehicle time matrices keep road and air travel
+   isolated. The selected objective is
    `SolverParameters.optimization_objective`, exposed by `plan periodic`,
    `plan rolling`, and `demo` as `--objective cost|time`; `cost` is the
    default. Cost mode prices arcs per vehicle as travel energy cost
@@ -284,7 +332,14 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    weighed against the money cost of serving it. Time mode prices arcs as
    travel plus service seconds and adds soft cumulative-time costs on task
    nodes, so served tasks are pulled earlier without changing the hard
-   deadline/window/drop-disjunction mechanics. Each
+   deadline/window/drop-disjunction mechanics. Those completion-time costs are
+   urgency-scaled per task: the base `TIME_OBJECTIVE_COMPLETION_WEIGHT` is
+   stepped up by `priority_class` distance from the baseline class
+   (`TIME_OBJECTIVE_CLASS_WEIGHT_STEP`) and by deadline slack tighter than
+   `TIME_OBJECTIVE_SLACK_REFERENCE_S` (`TIME_OBJECTIVE_SLACK_WEIGHT_BONUS`),
+   all gated by `TIME_OBJECTIVE_URGENCY_CALIBRATION` and env-configurable, so
+   higher-class and tighter-deadline tasks finish sooner when the schedule
+   forces a choice. Each
    task or pickup node is constrained to routing
    vehicles whose prime mover and related equipment can serve the task's
    operation, preventing an aerial bundle from serving a ground variant or the
@@ -295,7 +350,22 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    occupancy semantics: reified constraints require the execution to finish
    by the block start or begin after its end, with the serving vehicle's
    service duration resolved in-model, so a task cannot run into a
-   restriction or storm window it started before. `depends-on` precedence is
+   restriction or storm window it started before. Finish-within-window
+   enforcement closes the gap left by start-only window pruning: for tasks that
+   declare workable windows, a reified constraint requires the whole execution
+   interval `[start, start + service]` -- with the per-vehicle service duration
+   resolved in-model -- to land inside one declared window, so a task whose
+   service cannot fit any single window is dropped rather than started inside a
+   window it would overrun. An operator time dimension serializes tasks that
+   resolve to the same operator across different routing vehicles in a cluster:
+   the visit order already serializes same-vehicle tasks, but a cluster can run
+   several (prime, related) pairs in parallel while one certified operator (the
+   cluster `operator_ref` or a task's `task_operators` backup) backs more than
+   one of them. For each such pair of active tasks a vehicle-aware reified
+   no-overlap constraint requires one execution interval `[start, start +
+   service]` to finish before the other starts; a dropped task is exempted
+   through its active variable, so a shared operator forces parallel pairs into
+   series. `depends-on` precedence is
    enforced in-model (a dependent cannot start before its predecessor
    finishes). Service durations are quantity-driven: the generic work
    quantity plus its unit feed the duration estimate (area is the legacy
@@ -417,7 +487,10 @@ Reuses the solver chain on a filtered canonical payload:
   in-model gap reuse (the routing model blocks the union of the pair's
   intervals as vehicle breaks, so either is reused only in a real
   non-overlapping gap), while operator calendars feed hold-aware allocation
-  scoring (operators are not time-modelled inside routing). Held assets are
+  scoring. Within a cluster, operators are also time-modelled inside routing: an
+  operator shared by tasks on different routing vehicles gets vehicle-aware
+  no-overlap constraints so the shared operator's parallel tasks serialize. Held
+  assets are
   classified by solver-row section membership, not id prefixes, so the
   mechanism is domain-neutral.
 - Each event yields an immutable plan revision with churn and plan-instability
@@ -644,3 +717,20 @@ a rolling replan. Each check writes a `freshness.json` artifact under
   publication replays the backlog; a crash between record and commit
   redelivers events the store suppresses - effectively exactly-once from
   broker to published revision.
+- The serving-side watcher (`fl-op plan watch --data <dir>`,
+  `planning/plans.py:run_plan_watch`) keeps a single `StreamSession` alive and
+  drains bounded event cycles forever instead of draining once and exiting like
+  `plan rolling`. The session's `start()` publishes the baseline revision, then
+  each cycle opens a fresh bounded event source, applies its backlog, and
+  extends the same continuity chain. Offset commits are bounded per cycle:
+  after a cycle's revisions are written and its event ids recorded in the
+  dedup store, the cycle records-then-commits its source offsets
+  (`event_source.commit()`, which commits and closes) so a crash redelivers
+  just the in-flight cycle rather than the whole session. An empty cycle idles
+  `PLAN_WATCH_POLL_INTERVAL_S` before re-polling so a quiet topic does not
+  spin; `--max-cycles` (`PLAN_WATCH_MAX_CYCLES`) bounds the loop for tests and
+  graceful shutdown, and `0`/`None` runs unbounded. Revisions
+  land under `plan-watch/<timestamp>/` with a rolling `revisions_summary.json`,
+  and each cycle that produces revisions logs one MLflow tracking run tagged
+  with its `watch_cycle`. The watcher pairs with `plan freshness`
+  (see "Watermark-driven replan triggering") for a poll-and-replan loop.

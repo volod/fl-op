@@ -16,10 +16,10 @@ from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
-from sklearn.neighbors import BallTree
 
 from fl_op.core import constants
 from fl_op.core.constants import CLUSTER_TARGET_SIZE
+from fl_op.core.geometry import nearest_indices
 from fl_op.core.paths import DATA_ROOT
 from fl_op.provenance.namespace import content_hash
 from fl_op.solver.travel_time import (
@@ -201,23 +201,30 @@ def cluster_orders_by_depot(
             assignment[nearest_depot].append(order.task_id)
         return assignment
 
-    depot_coords = np.radians(
-        np.array([[float(d.lat), float(d.lon)] for d in depots])
-    )
-    tree = BallTree(depot_coords, metric="haversine")
+    depot_lats = np.array([float(d.lat) for d in depots])
+    depot_lons = np.array([float(d.lon) for d in depots])
 
     assignment = {did: [] for did in depot_ids}
+    valid_orders: list[Any] = []
+    field_lats: list[float] = []
+    field_lons: list[float] = []
     for order in orders:
         field = field_map.get(order.location_ref)
         if field is None:
             logger.warning("Order %s has no matching field; skipping", order.task_id)
             continue
-        lat = float(field.lat)
-        lon = float(field.lon)
-        coords = np.radians([[lat, lon]])
-        _, indices = tree.query(coords, k=1)
-        nearest_depot = depot_ids[indices[0][0]]
-        assignment[nearest_depot].append(order.task_id)
+        valid_orders.append(order)
+        field_lats.append(float(field.lat))
+        field_lons.append(float(field.lon))
+
+    if not valid_orders:
+        return assignment
+
+    indices = nearest_indices(
+        np.array(field_lats), np.array(field_lons), depot_lats, depot_lons
+    )
+    for order, idx in zip(valid_orders, indices):
+        assignment[depot_ids[idx]].append(order.task_id)
 
     return assignment
 
