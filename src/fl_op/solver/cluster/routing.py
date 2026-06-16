@@ -26,6 +26,7 @@ from fl_op.solver.routing_model import (
     RoutingNode,
     _build_initial_routes,
     _extract_dispatch_packages,
+    build_distance_matrix,
     build_node_table,
     build_vehicle_time_matrices,
     pickup_node_indices,
@@ -97,6 +98,13 @@ def solve_routing_context(
     time_matrices = build_vehicle_time_matrices(
         nodes, context.routing_vehicles, context.travel_lookup
     )
+    # Single geodesic distance matrix shared by every vehicle; priced only when
+    # a per-kilometre toll rate is supplied (zero by default).
+    distance_matrix = (
+        build_distance_matrix(nodes)
+        if resource_prices.toll_eur_per_km > 0
+        else None
+    )
     service_times = _vehicle_service_times(context, nodes)
     manager = pywrapcp.RoutingIndexManager(
         len(nodes),
@@ -112,6 +120,7 @@ def solve_routing_context(
         context,
         resource_prices,
         optimization_objective,
+        distance_matrix,
     )
     time_dim = _add_time_dimension(routing, manager, time_matrices, service_times)
     _add_operation_vehicle_constraints(routing, manager, context, nodes)
@@ -217,6 +226,7 @@ def solve_routing_context(
         now_epoch,
         time_matrices,
         resource_prices,
+        distance_matrix,
     )
     infeasible = unserved_orders(
         context.task_ids,
@@ -249,18 +259,33 @@ def _add_arc_costs(
     context: ClusterContext,
     resource_prices: ResourcePrices,
     optimization_objective: str,
+    distance_matrix: Optional[list[list[float]]] = None,
 ) -> None:
     """Price arcs by the selected objective.
 
-    In cost mode, arc cost = travel hours x the prime mover's consumption rate x the
-    resolved resource price, converted into the objective currency drop
-    penalties use (one EUR of business value = EUR_TO_DROP_PENALTY_SECONDS
-    units). Per-vehicle evaluators let efficient machines win long
-    repositioning legs over expensive ones on time-equal routes.
+    In cost mode, the arc cost sums every priced driver of one leg, converted
+    into the objective currency drop penalties use (one EUR of business value =
+    EUR_TO_DROP_PENALTY_SECONDS units):
+
+    - energy: travel hours x the prime mover's consumption rate x the resolved
+      resource price;
+    - operating time: travel plus on-task service hours x the operating rate
+      (driver labour plus machine wear), so a faster bundle saves wages and
+      wear, not just energy;
+    - tolls: leg distance x the per-kilometre toll rate.
+
+    The operating and toll rates default to zero, so with no cost-rate data the
+    arc cost collapses to the energy-only term. Per-vehicle evaluators let
+    efficient machines win long repositioning legs over expensive ones on
+    time-equal routes.
 
     In time mode, arc cost uses travel seconds plus service seconds at the
     departing node, matching the Time dimension scale.
     """
+    operating_cost_per_second = (
+        resource_prices.operating_eur_per_h * EUR_TO_DROP_PENALTY_SECONDS / 3600.0
+    )
+    toll_cost_per_km = resource_prices.toll_eur_per_km * EUR_TO_DROP_PENALTY_SECONDS
     for rv_idx, routing_vehicle in enumerate(context.routing_vehicles):
         if _is_time_objective(optimization_objective):
 
@@ -282,25 +307,32 @@ def _add_arc_costs(
 
         prime = routing_vehicle["prime"]
         burn_l_per_h = _nonnegative_rate(vehicle_energy_consumption_rate(prime))
-        cost_per_travel_second = (
+        energy_cost_per_travel_second = (
             burn_l_per_h
             * resource_prices.price_for(vehicle_energy_resource_type(prime))
             * EUR_TO_DROP_PENALTY_SECONDS
             / 3600.0
         )
 
-        def fuel_cost_callback(
+        def cost_callback(
             from_index: int,
             to_index: int,
-            cost_per_travel_second: float = cost_per_travel_second,
+            rv_idx: int = rv_idx,
+            energy_cost_per_travel_second: float = energy_cost_per_travel_second,
         ) -> int:
             from_node = manager.IndexToNode(from_index)
             to_node = manager.IndexToNode(to_index)
-            return int(round(
-                time_matrices[rv_idx][from_node][to_node] * cost_per_travel_second
-            ))
+            travel_s = time_matrices[rv_idx][from_node][to_node]
+            cost = travel_s * energy_cost_per_travel_second
+            if operating_cost_per_second:
+                cost += (
+                    travel_s + service_times[rv_idx][from_node]
+                ) * operating_cost_per_second
+            if distance_matrix is not None and toll_cost_per_km:
+                cost += distance_matrix[from_node][to_node] * toll_cost_per_km
+            return int(round(cost))
 
-        cost_cb_idx = routing.RegisterTransitCallback(fuel_cost_callback)
+        cost_cb_idx = routing.RegisterTransitCallback(cost_callback)
         routing.SetArcCostEvaluatorOfVehicle(cost_cb_idx, rv_idx)
 
 

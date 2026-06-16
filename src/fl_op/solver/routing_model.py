@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from fl_op.core.constants import RELATED_MATERIAL_FILL_RATIO
 from fl_op.core.constants import RATE_TYPE_FUEL
+from fl_op.core.geometry import haversine_km
 from fl_op.solver.cost_rates import (
     ResourcePrices,
     vehicle_energy_consumption_rate,
@@ -147,6 +148,22 @@ def build_vehicle_time_matrices(
     ]
 
 
+def build_distance_matrix(nodes: list[RoutingNode]) -> list[list[float]]:
+    """Pairwise arc distances (km) between node positions.
+
+    Geometric (geodesic) arc length, mode-independent and shared by every
+    vehicle, used to price per-kilometre tolls. The travel-time layer prefers
+    network links where they exist, but the network lookup carries seconds, not
+    distance, so toll distance stays the straight-line estimate (matching the
+    haversine repositioning estimate in greedy scoring); network toll distance
+    is a future refinement.
+    """
+    return [
+        [haversine_km(a.lat, a.lon, b.lat, b.lon) for b in nodes]
+        for a in nodes
+    ]
+
+
 def _build_initial_routes(
     routing_vehicles: list[dict[str, Any]],
     cluster_orders: list[dict[str, Any]],
@@ -195,18 +212,24 @@ def _extract_dispatch_packages(
     now_epoch: int,
     time_matrix: Optional[list[list[int]] | list[list[list[int]]]] = None,
     resource_prices: Optional[ResourcePrices] = None,
+    distance_matrix: Optional[list[list[float]]] = None,
 ) -> tuple[list[dict[str, Any]], set[str]]:
     """Read the OR-Tools solution and build dispatch package dicts.
 
     Returns (dispatch_packages, served_task_ids). One package per served task
     node; pickup and reload stops are not packages of their own, but their
-    travel legs accumulate into the next task's inbound fuel. The margin is
-    the order revenue net of fuel and material at the resolved prices.
+    travel legs accumulate into the next task's inbound fuel and distance. The
+    margin is the order revenue net of energy and material at the resolved
+    prices, less the operating cost of the operating hours (driver labour and
+    machine wear over travel plus on-task service time) and the tolls over the
+    inbound travel distance.
     """
     if resource_prices is None:
         resource_prices = ResourcePrices()
     dispatch_packages: list[dict[str, Any]] = []
     served_task_ids: set[str] = set()
+    operating_eur_per_h = resource_prices.operating_eur_per_h
+    toll_eur_per_km = resource_prices.toll_eur_per_km
 
     for rv_idx, rv in enumerate(routing_vehicles):
         vid = rv["prime"].asset_id
@@ -214,12 +237,18 @@ def _extract_dispatch_packages(
         index = routing.Start(rv_idx)
         prev_node = 0
         travel_s_in = 0
+        dist_km_in = 0.0
 
         while not routing.IsEnd(index):
             node_idx = manager.IndexToNode(index)
             node = nodes[node_idx]
-            if time_matrix is not None and node_idx != prev_node:
-                travel_s_in += _matrix_seconds(time_matrix, rv_idx, prev_node, node_idx)
+            if node_idx != prev_node:
+                if time_matrix is not None:
+                    travel_s_in += _matrix_seconds(
+                        time_matrix, rv_idx, prev_node, node_idx
+                    )
+                if distance_matrix is not None:
+                    dist_km_in += distance_matrix[prev_node][node_idx]
             prev_node = node_idx
             if node.kind != NODE_TASK:
                 index = solution.Value(routing.NextVar(index))
@@ -235,10 +264,9 @@ def _extract_dispatch_packages(
             end_epoch = start_epoch + op_seconds
             energy_resource_type = vehicle_energy_resource_type(rv["prime"])
             energy_unit = vehicle_energy_unit(rv["prime"])
+            operating_hours = (op_seconds + travel_s_in) / 3600.0
             energy_quantity = (
-                (op_seconds + travel_s_in)
-                / 3600.0
-                * vehicle_energy_consumption_rate(rv["prime"])
+                operating_hours * vehicle_energy_consumption_rate(rv["prime"])
             )
             energy_cost = (
                 energy_quantity * resource_prices.price_for(energy_resource_type)
@@ -246,7 +274,12 @@ def _extract_dispatch_packages(
             fuel_l = (
                 energy_quantity if energy_resource_type == RATE_TYPE_FUEL else 0.0
             )
+            labor_cost = operating_hours * resource_prices.labor_eur_per_h
+            wear_cost = operating_hours * resource_prices.machine_wear_eur_per_h
+            toll_cost = dist_km_in * toll_eur_per_km
+            travel_km = dist_km_in
             travel_s_in = 0
+            dist_km_in = 0.0
             fertilizer_kg = (
                 float(rv["related"].material_capacity) * RELATED_MATERIAL_FILL_RATIO
             )
@@ -254,6 +287,9 @@ def _extract_dispatch_packages(
                 float(order.revenue)
                 - energy_cost
                 - fertilizer_kg * resource_prices.material_eur_per_kg
+                - labor_cost
+                - wear_cost
+                - toll_cost
             )
 
             dispatch_packages.append(
@@ -277,6 +313,10 @@ def _extract_dispatch_packages(
                     "estimated_energy_unit": energy_unit,
                     "estimated_energy_cost_eur": round(energy_cost, 2),
                     "estimated_fertilizer_kg": round(fertilizer_kg, 2),
+                    "estimated_distance_km": round(travel_km, 2),
+                    "estimated_labor_cost_eur": round(labor_cost, 2),
+                    "estimated_machine_wear_cost_eur": round(wear_cost, 2),
+                    "estimated_toll_cost_eur": round(toll_cost, 2),
                     "estimated_margin_eur": round(margin_eur, 2),
                 }
             )

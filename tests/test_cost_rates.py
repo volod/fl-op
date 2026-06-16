@@ -6,7 +6,10 @@ from fl_op.core.constants import (
     ELECTRICITY_COST_EUR_PER_KWH,
     RATE_TYPE_ELECTRICITY,
     RATE_TYPE_FUEL,
+    RATE_TYPE_LABOR,
+    RATE_TYPE_MACHINE_WEAR,
     RATE_TYPE_MATERIAL,
+    RATE_TYPE_TOLL,
 )
 from fl_op.solver.cost_rates import resolve_unit_price
 from fl_op.solver.types import CostRateRow
@@ -77,6 +80,32 @@ class TestResolveUnitPrice:
             == 0.21
         )
 
+    def test_operating_rate_types_resolve_by_code(self):
+        now = _now()
+        rates = [
+            _rate("r_labor", RATE_TYPE_LABOR, 22.0),
+            _rate("r_wear", RATE_TYPE_MACHINE_WEAR, 6.0),
+            _rate("r_toll", RATE_TYPE_TOLL, 0.05),
+        ]
+        assert resolve_unit_price(rates, RATE_TYPE_LABOR, now, 0.0) == 22.0
+        assert resolve_unit_price(rates, RATE_TYPE_MACHINE_WEAR, now, 0.0) == 6.0
+        assert resolve_unit_price(rates, RATE_TYPE_TOLL, now, 0.0) == 0.05
+
+
+class TestResourcePrices:
+    def test_operating_rate_sums_labor_and_wear(self):
+        from fl_op.solver.cost_rates import ResourcePrices
+
+        prices = ResourcePrices(labor_eur_per_h=20.0, machine_wear_eur_per_h=5.0)
+        assert prices.operating_eur_per_h == 25.0
+
+    def test_operating_rates_default_to_zero(self):
+        from fl_op.solver.cost_rates import ResourcePrices
+
+        prices = ResourcePrices()
+        assert prices.operating_eur_per_h == 0.0
+        assert prices.toll_eur_per_km == 0.0
+
 
 class TestPricesMapping:
     def test_prices_rows_map_to_cost_rates(self):
@@ -121,6 +150,34 @@ class TestPricesMapping:
         assert result.cost_rates[0].valid_from is None
         assert result.cost_rates[0].valid_to is None
 
+    def test_operating_rate_types_map_through(self):
+        from fl_op.mapping.engine import MappingEngine
+
+        result = MappingEngine().map_dataset(
+            "prices",
+            [
+                {
+                    "price_id": "p_labor",
+                    "resource_type": RATE_TYPE_LABOR,
+                    "price_eur": 24.0,
+                    "per_unit": "h",
+                    "valid_from": "",
+                    "valid_to": "",
+                },
+                {
+                    "price_id": "p_toll",
+                    "resource_type": RATE_TYPE_TOLL,
+                    "price_eur": 0.04,
+                    "per_unit": "km",
+                    "valid_from": "",
+                    "valid_to": "",
+                },
+            ],
+        )
+        by_type = {r.rate_type: r for r in result.cost_rates}
+        assert by_type[RATE_TYPE_LABOR].unit_price_eur == 24.0
+        assert by_type[RATE_TYPE_TOLL].per_unit == "km"
+
 
 class TestGreedyPriceConsumption:
     def test_fuel_price_scales_repositioning_cost(self):
@@ -164,3 +221,47 @@ class TestGreedyPriceConsumption:
             resource_prices=ResourcePrices(electricity_eur_per_kwh=0.2),
         )
         assert expensive == 2 * cheap > 0
+
+    def test_labor_and_wear_add_to_repositioning_cost(self):
+        from fl_op.solver.cost_rates import ResourcePrices
+        from fl_op.solver.greedy import _estimate_repositioning_cost
+        from fl_op.solver.types import PrimeMoverRow, SiteRow
+
+        vehicle = PrimeMoverRow.from_canonical_dict({
+            "asset_id": "v0", "lat": "48.5", "lon": "32.0",
+            "travel_speed": "20", "fuel_consumption_rate": "10",
+        })
+        field = SiteRow.from_canonical_dict(
+            {"location_id": "f0", "lat": "48.9", "lon": "32.4"})
+        energy_only = _estimate_repositioning_cost(
+            vehicle, field, resource_prices=ResourcePrices(fuel_eur_per_l=1.0)
+        )
+        with_operating = _estimate_repositioning_cost(
+            vehicle,
+            field,
+            resource_prices=ResourcePrices(
+                fuel_eur_per_l=1.0, labor_eur_per_h=30.0, machine_wear_eur_per_h=10.0
+            ),
+        )
+        assert with_operating > energy_only > 0
+
+    def test_toll_adds_distance_cost_to_repositioning(self):
+        from fl_op.solver.cost_rates import ResourcePrices
+        from fl_op.solver.greedy import _estimate_repositioning_cost
+        from fl_op.solver.types import PrimeMoverRow, SiteRow
+
+        vehicle = PrimeMoverRow.from_canonical_dict({
+            "asset_id": "v0", "lat": "48.5", "lon": "32.0",
+            "travel_speed": "20", "fuel_consumption_rate": "10",
+        })
+        field = SiteRow.from_canonical_dict(
+            {"location_id": "f0", "lat": "48.9", "lon": "32.4"})
+        no_toll = _estimate_repositioning_cost(
+            vehicle, field, resource_prices=ResourcePrices(fuel_eur_per_l=1.0)
+        )
+        with_toll = _estimate_repositioning_cost(
+            vehicle,
+            field,
+            resource_prices=ResourcePrices(fuel_eur_per_l=1.0, toll_eur_per_km=0.5),
+        )
+        assert with_toll > no_toll > 0

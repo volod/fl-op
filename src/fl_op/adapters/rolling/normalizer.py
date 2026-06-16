@@ -169,6 +169,10 @@ def _build_score(
         ),
         "total_fertilizer_kg": kpis.get("total_fertilizer_kg", 0.0),
         "total_material_cost_eur": kpis.get("total_material_cost_eur", 0.0),
+        "total_distance_km": kpis.get("total_distance_km", 0.0),
+        "total_labor_cost_eur": kpis.get("total_labor_cost_eur", 0.0),
+        "total_machine_wear_cost_eur": kpis.get("total_machine_wear_cost_eur", 0.0),
+        "total_toll_cost_eur": kpis.get("total_toll_cost_eur", 0.0),
         "n_unassigned": len(unassigned),
         "n_clusters": chain.n_clusters if chain is not None else 0,
         "n_greedy_warm_start_assignments": (

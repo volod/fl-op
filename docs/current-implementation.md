@@ -234,9 +234,11 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    intersections, or restriction windows covering every admissible start
    (`RESTRICTED_ZONE`, `solver/restrictions.py`) -- and, transitively,
    dependents of any excluded predecessor
-   (`PREDECESSOR_UNSERVED`). Fuel, electricity, and material prices are
-   resolved from the snapshot's cost-rate entities (`solver/cost_rates.py`),
-   falling back to the engine cost constants for unpriced resources.
+   (`PREDECESSOR_UNSERVED`). Fuel, electricity, material, driver-labour,
+   machine-wear, and toll prices are resolved from the snapshot's cost-rate
+   entities (`solver/cost_rates.py`), falling back to the engine cost constants
+   for unpriced resources (the operating rates -- labour, wear, toll -- fall
+   back to zero, so they stay inert unless the data prices them).
    Geometric restrictions are a pre-solve filter: a task's site polygon
    (or centroid when the site has no polygon) is tested against other
    locations whose polygon declares the task's operation as prohibited. A
@@ -346,10 +348,16 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    isolated. The selected objective is
    `SolverParameters.optimization_objective`, exposed by `plan periodic`,
    `plan rolling`, and `demo` as `--objective cost|time`; `cost` is the
-   default. Cost mode prices arcs per vehicle as travel energy cost
-   (consumption rate x the resolved resource price) in the same objective
-   currency as the drop penalties (1 EUR = 600 penalty seconds), so an
-   energy-efficient machine wins time-equal legs and dropping an order is
+   default. Cost mode prices arcs per vehicle by summing every priced driver of
+   the leg in the same objective currency as the drop penalties (1 EUR = 600
+   penalty seconds): travel energy cost (consumption rate x the resolved
+   resource price), an operating surcharge for driver labour and machine wear
+   over travel plus on-task service hours, and a per-kilometre toll over the
+   leg distance. The operating and toll rates default to zero, so without
+   cost-rate data the arc cost collapses to the energy-only term; when priced,
+   they let driver time, wear, and tolls change the choice (an idle-fuel-cheap
+   but slow bundle can lose to a faster one once labour is priced). An
+   energy-efficient machine still wins time-equal legs, and dropping an order is
    weighed against the money cost of serving it. Time mode prices arcs as
    travel plus service seconds and adds soft cumulative-time costs on task
    nodes, so served tasks are pulled earlier without changing the hard
@@ -447,10 +455,15 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
 9. Aggregate dispatch packages, canonical reason codes, KPIs (priced with the
    resolved cost rates), and reports. Each dispatch package's energy estimate
    covers the operation plus the inbound travel leg, carries explicit resource
-   type and unit fields, and its `estimated_margin_eur` is the order revenue
-   net of energy and material at the resolved prices (`ResourcePrices`), so
-   per-dispatch margins and KPI aggregates are priced from the same cost-rate
-   data. A task whose predecessor
+   type and unit fields, reports the per-leg driver labour, machine wear, and
+   toll costs (the toll cost and the inbound distance it is priced from are
+   non-zero only when a toll rate is supplied, which is what builds the
+   geodesic distance matrix), and its `estimated_margin_eur` is the order
+   revenue net of energy, material, labour, wear, and tolls at the resolved
+   prices (`ResourcePrices`), so per-dispatch margins and KPI aggregates (which
+   also surface `total_labor_cost_eur`, `total_machine_wear_cost_eur`,
+   `total_toll_cost_eur`, and `total_distance_km`) are priced from the same
+   cost-rate data. A task whose predecessor
    went unserved in the solve is withdrawn post-solve
    (`PREDECESSOR_UNSERVED`), so no plan dispatches work whose precondition was
    dropped. Every cluster solve yields a machine-readable telemetry record

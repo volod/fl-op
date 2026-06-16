@@ -5,7 +5,13 @@ from typing import Any
 
 import numpy as np
 
-from fl_op.core.constants import RATE_TYPE_FUEL, RATE_TYPE_MATERIAL
+from fl_op.core.constants import (
+    RATE_TYPE_FUEL,
+    RATE_TYPE_LABOR,
+    RATE_TYPE_MACHINE_WEAR,
+    RATE_TYPE_MATERIAL,
+    RATE_TYPE_TOLL,
+)
 from fl_op.core.geometry import haversine_km
 
 # Road geometry: real road distance exceeds the geodesic line by a curvature
@@ -18,6 +24,12 @@ _ROAD_CLASSES = ("paved", "gravel", "dirt")
 # Price levels the synthetic market draws around (EUR per unit).
 _FUEL_PRICE_BASE_EUR_PER_L = 1.52
 _MATERIAL_PRICE_BASE_EUR_PER_KG = 0.58
+# Operating rates: driver labour and machine wear per operating hour, and the
+# road toll per kilometre. They price driver time, wear, and tolls into the
+# same cost-rate mechanism as fuel/material so they can change routing choices.
+_LABOR_PRICE_BASE_EUR_PER_H = 24.0
+_MACHINE_WEAR_PRICE_BASE_EUR_PER_H = 7.5
+_TOLL_PRICE_BASE_EUR_PER_KM = 0.04
 _PRICE_JITTER_LOW = 0.9
 _PRICE_JITTER_HIGH = 1.15
 # Validity horizon of the current price rows, and the age of the expired
@@ -71,7 +83,12 @@ def _generate_prices(
     rng: np.random.Generator,
     now: datetime,
 ) -> list[dict[str, Any]]:
-    """Generate current fuel/material prices plus one expired fuel row."""
+    """Generate current resource and operating prices plus one expired fuel row.
+
+    Covers the consumable rates (fuel, material) and the operating rates that
+    extend the cost model (driver labour and machine wear per hour, toll per
+    km); the expired fuel row exercises validity-window selection.
+    """
     today = datetime(now.year, now.month, now.day, tzinfo=now.tzinfo)
     current_from = today - timedelta(days=1)
     current_to = today + timedelta(days=_PRICE_VALID_DAYS)
@@ -102,6 +119,30 @@ def _generate_prices(
             "resource_type": RATE_TYPE_MATERIAL,
             "price_eur": jitter(_MATERIAL_PRICE_BASE_EUR_PER_KG),
             "per_unit": "kg",
+            "valid_from": current_from.isoformat(),
+            "valid_to": current_to.isoformat(),
+        },
+        {
+            "price_id": "price_labor_current",
+            "resource_type": RATE_TYPE_LABOR,
+            "price_eur": jitter(_LABOR_PRICE_BASE_EUR_PER_H),
+            "per_unit": "h",
+            "valid_from": current_from.isoformat(),
+            "valid_to": current_to.isoformat(),
+        },
+        {
+            "price_id": "price_machine_wear_current",
+            "resource_type": RATE_TYPE_MACHINE_WEAR,
+            "price_eur": jitter(_MACHINE_WEAR_PRICE_BASE_EUR_PER_H),
+            "per_unit": "h",
+            "valid_from": current_from.isoformat(),
+            "valid_to": current_to.isoformat(),
+        },
+        {
+            "price_id": "price_toll_current",
+            "resource_type": RATE_TYPE_TOLL,
+            "price_eur": jitter(_TOLL_PRICE_BASE_EUR_PER_KM),
+            "per_unit": "km",
             "valid_from": current_from.isoformat(),
             "valid_to": current_to.isoformat(),
         },

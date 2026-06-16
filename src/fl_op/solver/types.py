@@ -79,6 +79,10 @@ class DispatchPackage(TypedDict):
     estimated_energy_unit: str
     estimated_energy_cost_eur: float
     estimated_fertilizer_kg: float
+    estimated_distance_km: float
+    estimated_labor_cost_eur: float
+    estimated_machine_wear_cost_eur: float
+    estimated_toll_cost_eur: float
     estimated_margin_eur: float
 
 

@@ -303,9 +303,19 @@ CLUSTER_LNS_MAX_BUDGET_MULTIPLIER: float = float(
 # constants below are the engine fallback for unpriced resources.
 
 # Canonical resource codes a cost-rate row may price (cost-rate.rateType).
+# The first three price a consumable quantity (per litre / kg / kWh); the
+# operating rates below price time and distance of the dispatch itself, so they
+# extend the same arc-pricing mechanism to driver wages, machine wear, and tolls.
 RATE_TYPE_FUEL: str = "fuel"
 RATE_TYPE_MATERIAL: str = "fertilizer"
 RATE_TYPE_ELECTRICITY: str = "electricity"
+
+# Driver/operator labour, priced per operating hour (travel plus on-task time).
+RATE_TYPE_LABOR: str = "labor"
+# Machine wear / depreciation, priced per operating hour.
+RATE_TYPE_MACHINE_WEAR: str = "machine-wear"
+# Road tolls, priced per kilometre travelled.
+RATE_TYPE_TOLL: str = "toll"
 
 # Canonical unit of depot material inventory and of the material-reservation
 # quantities derived from it (urn:xopt:inventory:fertilizer is kept in kg).
@@ -322,6 +332,17 @@ FERTILIZER_COST_EUR_PER_KG: float = float(os.environ.get("FERTILIZER_COST_EUR_PE
 ELECTRICITY_COST_EUR_PER_KWH: float = float(
     os.environ.get("ELECTRICITY_COST_EUR_PER_KWH", "0.18")
 )
+
+# Operating cost-rate fallbacks. Default to zero so the extra cost terms stay
+# inert unless a cost-rate row prices them: the engine only lets driver time,
+# machine wear, and tolls change routing decisions when the data supplies them.
+# Labour and wear are EUR per operating hour (travel plus on-task service time);
+# tolls are EUR per kilometre travelled.
+LABOR_COST_EUR_PER_H: float = float(os.environ.get("LABOR_COST_EUR_PER_H", "0.0"))
+MACHINE_WEAR_COST_EUR_PER_H: float = float(
+    os.environ.get("MACHINE_WEAR_COST_EUR_PER_H", "0.0")
+)
+TOLL_COST_EUR_PER_KM: float = float(os.environ.get("TOLL_COST_EUR_PER_KM", "0.0"))
 
 # Share of a related-equipment material tank assumed consumed by one task.
 RELATED_MATERIAL_FILL_RATIO: float = 0.8

@@ -135,7 +135,16 @@ def _estimate_repositioning_cost(
     )
     speed_kmh = float(vehicle.travel_speed)
     hours = dist_km / speed_kmh if speed_kmh > 0 else 0
-    return hours * vehicle_energy_consumption_rate(vehicle) * energy_price
+    operating_eur_per_h = (
+        resource_prices.operating_eur_per_h if resource_prices is not None else 0.0
+    )
+    toll_eur_per_km = (
+        resource_prices.toll_eur_per_km if resource_prices is not None else 0.0
+    )
+    return (
+        hours * (vehicle_energy_consumption_rate(vehicle) * energy_price + operating_eur_per_h)
+        + dist_km * toll_eur_per_km
+    )
 
 
 def vectorized_score(
@@ -203,6 +212,14 @@ def vectorized_score(
         )
         for v in vehicles
     ])
+    # Fleet-level operating surcharge (driver labour plus machine wear) per
+    # hour and toll per km, zero unless cost-rate data prices them.
+    operating_eur_per_h = (
+        resource_prices.operating_eur_per_h if resource_prices is not None else 0.0
+    )
+    toll_eur_per_km = (
+        resource_prices.toll_eur_per_km if resource_prices is not None else 0.0
+    )
     v_home_refs = [str(v.home_depot_ref or "") for v in vehicles]
     v_travel_modes = [travel_mode_for_vehicle(v) for v in vehicles]
     v_access = _vehicle_network_access(vehicles, travel_lookup, location_coords)
@@ -261,7 +278,9 @@ def vectorized_score(
             travel_s = straight_line_s
         hours = travel_s / 3600.0
         reposition_cost = (
-            hours * v_consumptions[v_indices] * v_energy_prices[v_indices]
+            hours
+            * (v_consumptions[v_indices] * v_energy_prices[v_indices] + operating_eur_per_h)
+            + dist_km * toll_eur_per_km
         )
 
         # Gross margin: per-order constant for all pairs
