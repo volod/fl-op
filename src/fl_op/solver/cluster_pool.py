@@ -65,6 +65,11 @@ class PoolSizing:
     explicit_override: bool
 
 
+def available_memory_mb() -> Optional[float]:
+    """Public accessor for currently available physical memory (MB), or None."""
+    return _available_memory_mb()
+
+
 def _available_memory_mb() -> Optional[float]:
     """Currently available physical memory; None when not measurable."""
     try:
@@ -93,14 +98,22 @@ def _estimate_worker_memory_mb(clusters: list[ClusterSpec]) -> float:
         max_vehicles = max(
             max_vehicles, len(cluster.get("allocated_prime_related", {})) or 1
         )
-    model_mb = (
-        max_nodes * max_nodes * (max_vehicles + 1)
-        * constants.SOLVER_MODEL_BYTES_PER_CELL
-        / _BYTES_PER_MB
+    cells = max_nodes * max_nodes * (max_vehicles + 1)
+    from fl_op.solver.performance_feedback import (
+        calibrated_memory_model,
+        calibrated_worker_memory_mb,
     )
-    estimated_mb = constants.SOLVER_WORKER_BASE_MEMORY_MB + model_mb
-    from fl_op.solver.performance_feedback import calibrated_worker_memory_mb
 
+    model = calibrated_memory_model()
+    if model is not None:
+        # Data-driven fit (base MB plus MB per model cell) from retained worker
+        # RSS feedback supersedes the hardcoded base/per-cell constants.
+        base_mb, mb_per_cell = model
+        estimated_mb = base_mb + mb_per_cell * cells
+    else:
+        estimated_mb = constants.SOLVER_WORKER_BASE_MEMORY_MB + (
+            cells * constants.SOLVER_MODEL_BYTES_PER_CELL / _BYTES_PER_MB
+        )
     return calibrated_worker_memory_mb(estimated_mb)
 
 

@@ -256,6 +256,51 @@ class TestPoolSizing:
         assert clusters[0]["lns_time_limit_s"] == 30
 
 
+class TestWorkerMemoryFit:
+    @pytest.fixture(autouse=True)
+    def _isolated_feedback(self, tmp_path, monkeypatch):
+        from fl_op.solver import performance_feedback as pf
+
+        monkeypatch.setattr(pf, "DATA_ROOT", tmp_path)
+        monkeypatch.setattr(pf.constants, "SOLVER_FEEDBACK_ENABLED", True)
+        monkeypatch.setattr(pf.constants, "SOLVER_MEMORY_FIT_MIN_SAMPLES", 3)
+        self.pf = pf
+
+    @staticmethod
+    def _record(n_tasks: int, n_veh: int, base: float, slope: float) -> dict:
+        cells = (n_tasks + 1) ** 2 * (n_veh + 1)
+        return {
+            "n_tasks": n_tasks,
+            "n_routing_vehicles": n_veh,
+            "worker_max_rss_mb": base + slope * cells,
+        }
+
+    def test_fits_linear_memory_model_from_samples(self):
+        records = [
+            self._record(n, n // 5 + 1, base=120.0, slope=0.002)
+            for n in (10, 40, 90, 160, 250)
+        ]
+        self.pf.record_solver_feedback(records)
+        model = self.pf.calibrated_memory_model()
+        assert model is not None
+        base, slope = model
+        assert base == pytest.approx(120.0, abs=2.0)
+        assert slope == pytest.approx(0.002, rel=0.05)
+
+    def test_too_few_samples_keeps_constant_model(self):
+        self.pf.record_solver_feedback(
+            [self._record(10, 2, base=100.0, slope=0.001)]
+        )
+        assert self.pf.calibrated_memory_model() is None
+
+    def test_estimate_uses_fitted_model(self, monkeypatch):
+        monkeypatch.setattr(self.pf, "calibrated_memory_model", lambda: (100.0, 0.01))
+        monkeypatch.setattr(self.pf, "calibrated_worker_memory_mb", lambda mb: mb)
+        # cells = (9+1)^2 * (1+1) = 200 -> 100 + 0.01 * 200 = 102.
+        estimate = cluster_pool._estimate_worker_memory_mb([_cluster(9, n_vehicles=1)])
+        assert estimate == pytest.approx(102.0)
+
+
 def test_feasibility_request_cache_reuses_response(
     dataset_dir, small_entities, tmp_path, monkeypatch
 ) -> None:

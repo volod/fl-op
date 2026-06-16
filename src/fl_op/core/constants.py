@@ -272,9 +272,17 @@ SOLVER_WORKER_BASE_MEMORY_MB: float = float(
 )
 
 # Estimated bytes per routing-model matrix cell (matrix entry plus callback
-# and search-state overhead, measured order of magnitude).
+# and search-state overhead, measured order of magnitude). Used only until
+# worker RSS feedback has fit its own (base, per-cell) coefficients.
 SOLVER_MODEL_BYTES_PER_CELL: float = float(
     os.environ.get("SOLVER_MODEL_BYTES_PER_CELL", "64.0")
+)
+
+# Minimum distinct (model-cells, worker-RSS) samples before the retained
+# feedback fits its own linear memory model (base MB plus MB per model cell)
+# in place of the constants above; below it the constant estimate stands.
+SOLVER_MEMORY_FIT_MIN_SAMPLES: int = int(
+    os.environ.get("SOLVER_MEMORY_FIT_MIN_SAMPLES", "5")
 )
 
 # Share of available memory kept free for the parent process and OS.
@@ -444,9 +452,20 @@ TUNE_N_TRIALS: int = int(os.environ.get("TUNE_N_TRIALS", "20"))
 TUNE_SEED: int = int(os.environ.get("TUNE_SEED", "7"))
 # Parallel Optuna workers. Values above 1 use an RDB storage backend so trials
 # can be coordinated safely across worker threads/processes or repeated CLI
-# invocations.
+# invocations. 0 means auto: choose from CPU count and available memory versus
+# the per-dataset job footprint below.
 TUNE_N_JOBS: int = int(os.environ.get("TUNE_N_JOBS", "1"))
 TUNE_STORAGE_URI: str = os.environ.get("TUNE_STORAGE_URI", "")
+
+# Auto tuning-parallelism job footprint: one Optuna worker's resident memory is
+# estimated as a base plus a per-task term scaled by the largest dataset's task
+# count, so bigger datasets reduce parallelism under a fixed memory budget.
+TUNE_JOB_BASE_MEMORY_MB: float = float(
+    os.environ.get("TUNE_JOB_BASE_MEMORY_MB", "500.0")
+)
+TUNE_JOB_MEMORY_MB_PER_TASK: float = float(
+    os.environ.get("TUNE_JOB_MEMORY_MB_PER_TASK", "2.0")
+)
 
 # Per-cluster solve budget used for the tuning baseline and as the search
 # upper bound: trials run at experiment scale, not production scale, so the
@@ -460,6 +479,12 @@ TUNE_CLUSTER_TARGET_SIZE_MIN: int = int(os.environ.get("TUNE_CLUSTER_TARGET_SIZE
 TUNE_CLUSTER_TARGET_SIZE_MAX: int = int(os.environ.get("TUNE_CLUSTER_TARGET_SIZE_MAX", "80"))
 TUNE_SCORE_WEIGHT_MIN: float = float(os.environ.get("TUNE_SCORE_WEIGHT_MIN", "0.1"))
 TUNE_SCORE_WEIGHT_MAX: float = float(os.environ.get("TUNE_SCORE_WEIGHT_MAX", "5.0"))
+
+# Search bounds for the rolling change penalty, tuned only when instability is
+# measured (the perturbed re-solve harness); it weights avoidable plan churn
+# against business value on the instability objective.
+TUNE_CHANGE_PENALTY_MIN: int = int(os.environ.get("TUNE_CHANGE_PENALTY_MIN", "100"))
+TUNE_CHANGE_PENALTY_MAX: int = int(os.environ.get("TUNE_CHANGE_PENALTY_MAX", "5000"))
 
 # Reviewed tuned solver-parameter artifact. `fl-op tune-promote` writes this
 # under DATA_DIR/tune; plan adapters load it as an overlay on the checked-in

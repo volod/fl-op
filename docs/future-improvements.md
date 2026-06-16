@@ -12,11 +12,6 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-5. Experiment and tuning maturity. Add generic rolling replay datasets for
-   real instability measurement, holdout validation, per-domain objective
-   weights, CPU/RSS-aware worker selection, cluster-size memory coefficients,
-   per-cluster LNS budget learning, and shareable tuned overlays over
-   non-filesystem storage.
 6. Serving and integration hardening. Add OIDC/JWT validation, route-level
    authorization, token rotation, audit/rate-limit hooks, object-store
    artifact backends, and additional durable event clients.
@@ -65,26 +60,13 @@ Recommended order, optimized for dependency reuse and low rework:
    closed-loop behaviour (per-asset-type prognosis accuracy splits with per-type
    guarded tuning, lead-time-informed tuning, battery-threshold tunables, and
    mobile-asset monitoring) lives in current-implementation.md.
+25. Experiment and tuning maturity. Remaining work is incremental: holdout
+   validation and per-domain objective weights, per-cluster LNS budget learning
+   by operation type or penalty distribution, and shareable tuned overlays over
+   non-filesystem storage. The delivered maturity (perturbed-resolve real
+   instability measurement, CPU/RSS-aware tuning parallelism, and a fitted
+   worker-memory coefficient model) lives in current-implementation.md.
 
-
-## 5. Experiment and tuning maturity
-
-- Direct periodic tuning has no previous revision, so its instability objective
-  is normally zero; a rolling replay tuning harness would measure real churn
-  over event sequences.
-- Holdout validation and per-domain objective weights would further reduce
-  tuning overfit.
-- Study worker counts are still caller-selected (`--jobs` / `TUNE_N_JOBS`).
-  The runtime does not yet choose tuning parallelism from observed CPU/RSS
-  pressure per dataset.
-- Worker memory feedback does not yet fit separate coefficients by cluster
-  size, node count, load dimensions, or domain pack.
-- Per-cluster LNS budget learning, for example by operation type, cluster size,
-  or penalty distribution, would target the time where it pays off most.
-- The artifact registry now surfaces reviewed tuned-overlay selection metadata
-  (scope, source snapshot hashes, reviewer) so deployments with several active
-  profiles can inspect which overlay a scoped run selects; sharing those overlays
-  over non-filesystem storage remains open.
 
 ## 6. Serving and integration hardening
 
@@ -237,3 +219,27 @@ open work is:
   a small fitting step that separates escalated (truly needed) from withdrawn
   (not needed) prognoses, so it stays research-grade rather than a guarded
   bounded step.
+
+## 25. Experiment and tuning maturity
+
+Delivered behavior lives in current-implementation.md: real plan-instability
+measurement via a perturbed re-solve (`--measure-instability`, removing the
+busiest prime mover and counting avoidable churn x `rolling_change_penalty`);
+CPU/RSS-aware tuning parallelism (`--jobs 0`); and a fitted worker-memory
+coefficient model (base MB plus MB per routing-model cell) replacing the
+hardcoded constants once enough feedback accrues. The residual open work is:
+
+- Holdout validation and per-domain objective weights would further reduce
+  tuning overfit (tune on a train split, report the recommended parameters'
+  objective on held-out datasets; weight each case's contribution by domain
+  rather than task count alone).
+- The instability harness perturbs by removing one mover; richer generic
+  rolling replay datasets over real event sequences would measure churn over
+  many events rather than a single perturbation.
+- The worker-memory fit is a single per-cell coefficient; separate coefficients
+  by load dimension count or domain pack would refine it further, and
+  per-cluster LNS budget learning (by operation type, cluster size, or penalty
+  distribution) would target the budget where it pays off most.
+- Reviewed tuned overlays (solver-parameter and monitoring-policy) are still
+  filesystem-only; sharing them over non-filesystem (object-store) storage
+  remains open, tied to the object-store artifact backend (item 6).

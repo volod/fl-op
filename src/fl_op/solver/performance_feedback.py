@@ -28,6 +28,54 @@ def load_worker_memory_feedback() -> dict[str, Any]:
     return _read_json(_memory_path())
 
 
+# Bytes per megabyte, for converting the fitted MB-per-cell slope to and from
+# the engine's bytes-per-cell constant.
+_BYTES_PER_MB = 1024.0 * 1024.0
+
+
+def _model_cells(record: dict[str, Any]) -> Optional[float]:
+    """Routing-model cell count of one solve record (n_nodes^2 x (n_vehicles+1)).
+
+    The worker's peak RSS scales with this, so accumulated (cells, RSS) pairs
+    fit the per-cell memory coefficient. Returns None when the record lacks the
+    cluster dimensions.
+    """
+    n_tasks = _as_float(record.get("n_tasks"))
+    if n_tasks is None:
+        return None
+    n_vehicles = _as_float(record.get("n_routing_vehicles")) or 1.0
+    nodes = n_tasks + 1.0
+    return nodes * nodes * (max(1.0, n_vehicles) + 1.0)
+
+
+def calibrated_memory_model() -> Optional[tuple[float, float]]:
+    """Fitted ``(base_mb, mb_per_cell)`` from retained worker RSS feedback.
+
+    Ordinary least squares of worker RSS on routing-model cells over the
+    accumulated samples, replacing the hardcoded base/per-cell constants with a
+    data-driven fit once enough samples (and real spread in cell counts) exist.
+    Returns None below that, so the constant estimate stands.
+    """
+    if not constants.SOLVER_FEEDBACK_ENABLED:
+        return None
+    fit = load_worker_memory_feedback().get("fit") or {}
+    n = _as_float(fit.get("n")) or 0.0
+    if n < constants.SOLVER_MEMORY_FIT_MIN_SAMPLES:
+        return None
+    sum_x = _as_float(fit.get("sum_x")) or 0.0
+    sum_y = _as_float(fit.get("sum_y")) or 0.0
+    sum_xx = _as_float(fit.get("sum_xx")) or 0.0
+    sum_xy = _as_float(fit.get("sum_xy")) or 0.0
+    denom = n * sum_xx - sum_x * sum_x
+    if denom <= 0:
+        return None
+    slope = (n * sum_xy - sum_x * sum_y) / denom
+    intercept = (sum_y - slope * sum_x) / n
+    slope = max(0.0, slope)
+    intercept = max(0.0, intercept)
+    return intercept, slope
+
+
 def calibrated_worker_memory_mb(estimated_mb: float) -> float:
     """Use retained worker RSS feedback as a floor on the memory estimate."""
     if not constants.SOLVER_FEEDBACK_ENABLED:
@@ -65,8 +113,34 @@ def _record_worker_memory(records: list[dict[str, Any]]) -> None:
         "max_worker_rss_mb": round(max(previous_max, max(rss_values)), 2),
         "last_run_max_worker_rss_mb": round(max(rss_values), 2),
         "last_run_mean_worker_rss_mb": round(sum(rss_values) / len(rss_values), 2),
+        "fit": _accumulate_memory_fit(previous.get("fit"), records),
     }
     _write_json(_memory_path(), payload)
+
+
+def _accumulate_memory_fit(
+    previous_fit: Any, records: list[dict[str, Any]]
+) -> dict[str, float]:
+    """Fold this run's (model-cells, RSS) pairs into the regression sums.
+
+    Sufficient statistics (n, sum_x, sum_y, sum_xx, sum_xy) accumulate across
+    runs so the memory model is fit from the whole observed history, not one run.
+    """
+    fit = {
+        key: (_as_float((previous_fit or {}).get(key)) or 0.0)
+        for key in ("n", "sum_x", "sum_y", "sum_xx", "sum_xy")
+    }
+    for record in records:
+        rss = _as_float(record.get("worker_max_rss_mb"))
+        cells = _model_cells(record)
+        if rss is None or rss <= 0 or cells is None or cells <= 0:
+            continue
+        fit["n"] += 1.0
+        fit["sum_x"] += cells
+        fit["sum_y"] += rss
+        fit["sum_xx"] += cells * cells
+        fit["sum_xy"] += cells * rss
+    return fit
 
 
 def _record_lns(records: list[dict[str, Any]]) -> None:

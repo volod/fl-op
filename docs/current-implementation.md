@@ -333,8 +333,11 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    largest cluster's routing-model size) fit into available memory; an
    explicit `SOLVER_WORKERS` wins. Completed worker telemetry records
    `worker_max_rss_mb`; `$DATA_DIR/cache/solver-feedback/worker-memory.json`
-   retains the max observed RSS as a deployment-specific floor on future
-   auto-sizing estimates. Arc travel times come from the travel
+   retains the max observed RSS as a deployment-specific floor and accumulates
+   (model-cells, RSS) regression sums. Once enough samples exist, a fitted
+   linear memory model (base MB plus MB per routing-model cell) replaces the
+   hardcoded base/per-cell constants in the worker-footprint estimate, so
+   auto-sizing learns the deployment's real per-cell cost. Arc travel times come from the travel
    network: the lookup is the all-pairs shortest-path closure over the
    directed travel-link graph (Dijkstra per source, skipped past
    `TRAVEL_NETWORK_MAX_COMPOSE_NODES`) and is indexed by `networkMode`
@@ -681,12 +684,18 @@ a rolling replan. Each check writes a `freshness.json` artifact under
   with workload weights derived from task counts, and, by default, the study
   records a multi-objective frontier: maximize business objective (margin minus
   unassigned penalty exposure), minimize plan-instability penalty, and
-  minimize wall time. Parallel workers (`--jobs` or TUNE_N_JOBS) use Optuna
-  RDB storage; without an explicit URI, `n_jobs > 1` creates
-  `study.db` in the tuning run directory. Artifacts: `baseline.json`,
-  `trials.json`, `best_params.json` under `$DATA_DIR/tune/<ts>/`, including
-  per-dataset case scores, workload-weight contributions, and the Pareto
-  frontier.
+  minimize wall time. By default the periodic chain's instability is zero (no
+  previous revision); `--measure-instability` instead scores real plan churn by
+  re-solving each case after removing its busiest prime mover (a one-event
+  rolling perturbation) and counting avoidable assignment changes x
+  `rolling_change_penalty` (which then joins the search space). Parallel workers
+  (`--jobs` or TUNE_N_JOBS) use Optuna RDB storage; `--jobs 0` auto-selects the
+  worker count from CPU count and available memory versus a per-dataset job
+  footprint (bigger datasets reduce parallelism). Without an explicit URI,
+  `n_jobs > 1` creates `study.db` in the tuning run directory. Artifacts:
+  `baseline.json`, `trials.json`, `best_params.json` under
+  `$DATA_DIR/tune/<ts>/`, including per-dataset case scores, workload-weight
+  contributions, and the Pareto frontier.
 - `fl-op tune-promote --best-params <run>/best_params.json`
   (`tuning/solver_profile.py`) writes the reviewed tuned solver profile
   overlay. Without scope flags it writes the legacy shared artifact
