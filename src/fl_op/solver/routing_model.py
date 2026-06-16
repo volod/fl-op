@@ -1,6 +1,7 @@
 """OR-Tools routing model helpers: node table, warm-start, and solution extraction."""
 
 import dataclasses
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -28,6 +29,8 @@ NODE_TASK = "task"
 NODE_PICKUP = "pickup"
 NODE_RELOAD = "reload"
 
+logger = logging.getLogger(__name__)
+
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class RoutingNode:
@@ -51,13 +54,30 @@ def build_node_table(
     depot_lon: float,
     depot_id: str = "",
     n_reload_nodes: int = 0,
+    pickup_map: Optional[dict[str, Any]] = None,
 ) -> list[RoutingNode]:
-    """Build the routing node table: depot, pickups/tasks, reload visits."""
+    """Build the routing node table: depot, pickups/tasks, reload visits.
+
+    Pickup locations resolve against ``pickup_map`` (every known location:
+    sites and depots/hubs), falling back to ``field_map`` so single-domain
+    callers that only pass sites are unaffected. A pickup ref absent from both
+    is a supplier location outside the modelled tables: it falls back to the
+    cluster depot coordinates and is logged, since the canonical model has no
+    standalone supplier-location source yet.
+    """
+    pickup_lookup = pickup_map if pickup_map is not None else field_map
     nodes = [RoutingNode(NODE_DEPOT, -1, depot_id, depot_lat, depot_lon)]
     for order_idx, order in enumerate(cluster_orders):
         pickup_ref = str(getattr(order, "pickup_location_ref", "") or "")
         if pickup_ref:
-            pickup = field_map.get(pickup_ref)
+            pickup = pickup_lookup.get(pickup_ref) or field_map.get(pickup_ref)
+            if pickup is None:
+                logger.warning(
+                    "Pickup location %r for task %s is outside the site and "
+                    "depot tables; falling back to depot coordinates",
+                    pickup_ref,
+                    getattr(order, "task_id", "?"),
+                )
             nodes.append(
                 RoutingNode(
                     NODE_PICKUP,

@@ -6,7 +6,7 @@ metadata:
   canonicalEntity: asset
   assetRole: mobile-prime-mover
   canonicalModelRef: urn:xopt:model:canonical:0.1.0
-  mappingVersion: 1.0.0
+  mappingVersion: 1.1.0
   dataProductRole: assetMaster
   permittedPlanningUses: [periodic-planning, rolling-dispatch]
 fieldMappings:
@@ -25,4 +25,5 @@ fieldMappings:
   - {sourceField: hub_id, binding: asset.homeDepotRef, semanticTerm: urn:xopt:relationship:home-depot, planningUse: [assignment]}
   - {sourceField: travel_speed_kmh, binding: asset.capabilities.travelSpeed, semanticTerm: urn:xopt:capability:travel-speed, canonicalUnit: km/h, quantityKind: speed, planningUse: [routing]}
   - {sourceField: payload_capacity_kg, binding: asset.capabilities.loadCapacity, semanticTerm: urn:xopt:capability:load-capacity, canonicalUnit: kg, quantityKind: mass, planningUse: [capacity]}
+  - {sourceField: load_capacities_kg, binding: asset.capabilities.loadCapacities, semanticTerm: urn:xopt:capability:load-capacities, quantityKind: rate-map, planningUse: [capacity]}
   - {sourceField: compatible_operations, binding: asset.capabilities.compatibleOperations, semanticTerm: urn:xopt:capability:compatible-operations, quantityKind: categorical-set, planningUse: [compatibility-filter]}

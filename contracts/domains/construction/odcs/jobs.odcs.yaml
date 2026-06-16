@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: jobs
-version: 1.1.0
+version: 1.2.0
 status: active
 name: Construction Jobs
 domain: construction-earthworks
@@ -144,3 +144,15 @@ schema:
           - property: fieldGeneration
             value:
               proto: {fieldNumber: 12}
+      - name: pickup_location_ref
+        logicalType: string
+        physicalType: string
+        required: false
+        description: >-
+          Supply yard the crew collects equipment/materials from before the
+          site (paired pickup-and-delivery); empty means no pickup detour.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 13}

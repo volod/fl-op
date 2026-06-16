@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: ugvs
-version: 1.1.0
+version: 1.2.0
 status: active
 name: UGV Fleet
 domain: drone-logistics
@@ -32,6 +32,7 @@ schema:
       - {name: hub_id, logicalType: string, physicalType: string, required: true, description: Home logistics hub., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 9}}}]}
       - {name: travel_speed_kmh, logicalType: number, physicalType: double, required: false, description: Road speed., customProperties: [{property: fieldGeneration, value: {avro: {default: 25.0}, proto: {fieldNumber: 10}}}]}
       - {name: payload_capacity_kg, logicalType: number, physicalType: double, required: true, description: Payload capacity., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 11}}}]}
+      - {name: load_capacities_kg, logicalType: object, physicalType: string, required: false, description: "Per-material compartment capacities (material code -> kg); materials absent from the map fall back to payload_capacity_kg.", customProperties: [{property: fieldGeneration, value: {avro: {default: ""}, proto: {fieldNumber: 17}}}]}
       - {name: compatible_operations, logicalType: array, physicalType: string, required: true, description: Supported delivery operations., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 12}}}]}
       - {name: energy_resource_type, logicalType: string, physicalType: string, required: false, description: Energy resource code such as electricity., customProperties: [{property: fieldGeneration, value: {avro: {default: "electricity"}, proto: {fieldNumber: 13}}}]}
       - {name: energy_unit, logicalType: string, physicalType: string, required: false, description: Energy quantity unit., customProperties: [{property: fieldGeneration, value: {avro: {default: "kWh"}, proto: {fieldNumber: 14}}}]}

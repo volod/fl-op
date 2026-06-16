@@ -269,6 +269,25 @@ class TestSolverIntegration:
         assert {d["task_id"] for d in dispatch} == {"o0", "o1"}, infeasible
         assert infeasible == []
 
+    def test_multiple_reloads_serve_demand_beyond_two_fills(self):
+        """Three 80 kg orders on a 100 kg vehicle need two refills (three
+        trips); the extra optional reload stop lets all three be served."""
+        cd = _cluster(task_ids=["o0", "o1", "o2"], allocated={"v0": ["i0"]})
+        orders = [
+            dataclasses.replace(_order("o0", "f0"), load_demand=80.0),
+            dataclasses.replace(_order("o1", "f1"), load_demand=80.0),
+            dataclasses.replace(_order("o2", "f2"), load_demand=80.0),
+        ]
+        vehicle = dataclasses.replace(_vehicle("v0"), load_capacity=100.0)
+        dispatch, infeasible = solve_cluster(
+            cd, orders, [vehicle], [_implement("i0")],
+            [_field("f0"), _field("f1", 48.6, 32.1), _field("f2", 48.55, 32.05)],
+            [_depot()],
+            {}, {"v0": 0}, {"i0": 0},
+        )
+        assert {d["task_id"] for d in dispatch} == {"o0", "o1", "o2"}, infeasible
+        assert infeasible == []
+
     def test_load_capacity_bounds_route_load_without_reloads(self, monkeypatch):
         """Single-trip semantics (reloads disabled): one of the orders drops."""
         from fl_op.core import constants

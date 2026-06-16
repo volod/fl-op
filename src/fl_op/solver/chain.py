@@ -249,6 +249,10 @@ def run_solver_chain(
     feasible_pairs = cached_feasible_vehicle_implement_pairs(
         orders_raw, vehicles_raw, implements_raw, compat, vehicle_index, implement_index
     )
+    location_coords = {
+        loc.location_id: (float(loc.lat), float(loc.lon))
+        for loc in (*fields_raw, *depots_raw)
+    }
     scored = vectorized_score(
         orders_raw, vehicles_raw, implements_raw, fields_raw,
         feasible_pairs, vehicle_index, implement_index,
@@ -258,6 +262,7 @@ def run_solver_chain(
         score_weight_reposition=parameters.score_weight_reposition,
         travel_lookup=travel_lookup,
         optimization_objective=parameters.optimization_objective,
+        location_coords=location_coords,
     )
     clusters = cached_cluster_specs(
         orders_raw, fields_raw, depots_raw, vehicles_raw, implements_raw,

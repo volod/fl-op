@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: maintenance-jobs
-version: 1.0.0
+version: 1.1.0
 status: active
 name: Roadside Maintenance Jobs
 domain: roadside-infrastructure
@@ -99,3 +99,11 @@ schema:
         required: false
         description: Expected value of completing the job.
         customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 11}}}]
+      - name: pickup_location_ref
+        logicalType: string
+        physicalType: string
+        required: false
+        description: >-
+          Service depot the crew collects a kit/signage from before the road
+          segment (paired pickup-and-delivery); empty means no pickup detour.
+        customProperties: [{property: fieldGeneration, value: {avro: {default: ""}, proto: {fieldNumber: 12}}}]

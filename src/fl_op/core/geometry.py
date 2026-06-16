@@ -22,7 +22,8 @@ uses ``(x=lon, y=lat)`` so emitted features are GeoJSON/map friendly.
 
 import numpy as np
 from pyproj import Geod
-from shapely.geometry import LineString, Point, box
+from shapely.geometry import LineString, Point, Polygon, box
+from shapely.ops import unary_union
 from sklearn.neighbors import BallTree
 
 from fl_op.core.constants import EARTH_RADIUS_KM, FALLBACK_TRAVEL_SPEED_KMH
@@ -118,6 +119,40 @@ def to_point(lat: float, lon: float) -> Point:
 def to_linestring(latlon_coords: list[tuple[float, float]]) -> LineString:
     """Polyline from ``(lat, lon)`` pairs, emitted as map-order (lon, lat)."""
     return LineString([(lon, lat) for lat, lon in latlon_coords])
+
+
+def unrestricted_area_fraction(
+    site_polygon: list[tuple[float, float]],
+    restricted_polygons: list[list[tuple[float, float]]],
+) -> float:
+    """Fraction of a site polygon's area not covered by restricted areas.
+
+    Rings are ``(x=lon, y=lat)`` coordinate lists (as ``parse_polygon`` emits).
+    Returns 1.0 when there is no overlap (or the site has no positive area) and
+    0.0 when restricted areas fully cover the site. Planar area in degree units
+    is sufficient here because the result is a ratio over a small region, so the
+    latitude-scale distortion cancels.
+    """
+    if len(site_polygon) < 3 or not restricted_polygons:
+        return 1.0
+    site = Polygon(site_polygon)
+    if not site.is_valid:
+        site = site.buffer(0)
+    total = site.area
+    if total <= 0:
+        return 1.0
+    polys = []
+    for ring in restricted_polygons:
+        if len(ring) < 3:
+            continue
+        poly = Polygon(ring)
+        if not poly.is_valid:
+            poly = poly.buffer(0)
+        polys.append(poly)
+    if not polys:
+        return 1.0
+    covered = site.intersection(unary_union(polys)).area
+    return max(0.0, min(1.0, (total - covered) / total))
 
 
 def bounding_box(

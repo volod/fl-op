@@ -1,6 +1,7 @@
 """OR-Tools routing model construction and solve for one prepared cluster."""
 
 import logging
+import math
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -80,7 +81,7 @@ def solve_routing_context(
         resource_prices = ResourcePrices()
     has_load = any(_load_kg(o.load_demand) > 0 for o in context.cluster_orders)
     n_reloads = (
-        len(context.routing_vehicles)
+        _reload_nodes_per_vehicle(context) * len(context.routing_vehicles)
         if constants.DEPOT_RELOAD_ENABLED and has_load
         else 0
     )
@@ -91,6 +92,7 @@ def solve_routing_context(
         context.depot_lon,
         context.depot_id,
         n_reloads,
+        pickup_map=context.pickup_location_map,
     )
     time_matrices = build_vehicle_time_matrices(
         nodes, context.routing_vehicles, context.travel_lookup
@@ -118,6 +120,9 @@ def solve_routing_context(
         now_epoch = int(datetime.now(tz=timezone.utc).timestamp())
     _add_order_windows_and_disjunctions(
         routing, manager, time_dim, context, now_epoch, service_times, nodes
+    )
+    _make_reload_nodes_optional(
+        routing, manager, nodes, len(context.routing_vehicles)
     )
     _add_completion_time_costs(
         routing,
@@ -418,10 +423,10 @@ def _add_order_windows_and_disjunctions(
 
     A paired order's pickup node carries no penalty of its own: the pair is
     served or dropped together (active-variable equality), on one vehicle,
-    pickup first. Reload nodes get no disjunction: they are mandatory depot
-    stops (negligible cost when unused, since they sit at the depot), so the
-    first-solution construction always places them and serving a task behind
-    a reload stays a single insertion move for the local search.
+    pickup first. Reload nodes are handled separately
+    (``_make_reload_nodes_optional``): one stays mandatory per vehicle and any
+    extra multi-trip stops are optional, so a route reloads only as often as its
+    demand requires.
     """
     solver = routing.solver()
     pickup_nodes = pickup_node_indices(nodes)
@@ -791,6 +796,71 @@ def _add_operator_no_overlap(
                 solver.Add(
                     a_before_b + b_before_a + (1 - active_a) + (1 - active_b) >= 1
                 )
+
+
+def _reload_nodes_per_vehicle(context: ClusterContext) -> int:
+    """Optional reload stops to offer each routing vehicle.
+
+    Enough stops for one vehicle to clear the cluster's heaviest single-material
+    demand in successive fills (refills = ceil(total_demand / smallest matching
+    compartment) - 1), bounded by DEPOT_RELOAD_MAX_TRIPS_PER_VEHICLE and at
+    least one. Because reload stops are optional, offering a few extra never
+    forces unnecessary depot trips; it only widens the search for multi-trip
+    routes when demand exceeds a single fill.
+    """
+    materials = {
+        str(order.load_material or "")
+        for order in context.cluster_orders
+        if _load_kg(order.load_demand) > 0
+    }
+    refills = 1
+    for material in materials:
+        total = sum(
+            _load_kg(order.load_demand)
+            for order in context.cluster_orders
+            if str(order.load_material or "") == material
+        )
+        capacities = [
+            _compartment_capacity_kg(rv["prime"], material)
+            for rv in context.routing_vehicles
+        ]
+        min_capacity = min((c for c in capacities if c > 0), default=0.0)
+        if min_capacity > 0:
+            refills = max(refills, math.ceil(total / min_capacity) - 1)
+    return max(1, min(refills, constants.DEPOT_RELOAD_MAX_TRIPS_PER_VEHICLE))
+
+
+def _make_reload_nodes_optional(
+    routing: Any,
+    manager: Any,
+    nodes: list[RoutingNode],
+    n_mandatory: int,
+) -> None:
+    """Make reload visits beyond the first per vehicle optional.
+
+    The first ``n_mandatory`` reload stops (one per routing vehicle) stay
+    mandatory: they sit at the depot, cost only their handling time, and act as
+    an anchor that keeps serving a task behind a reload a single
+    cheapest-insertion move so the proven multi-trip routes survive. Any
+    additional reload stops offered for heavier multi-trip demand get a
+    zero-penalty disjunction, so the solver visits them only when a route
+    genuinely needs a second (or later) refill and drops the surplus otherwise.
+
+    Fully optional reloads (no mandatory anchor) regress: the greedy warm start
+    seeds only one task per implement, so the remaining tasks must be added by
+    local search, and without a reload already in the route cheapest-insertion
+    cannot perform the coupled "insert reload + insert task" move within the
+    time limit -- it drops the task instead. Removing the anchor therefore needs
+    coupled-insertion search support, which remains future work.
+    """
+    seen = 0
+    for node_idx, node in enumerate(nodes):
+        if node.kind != NODE_RELOAD:
+            continue
+        seen += 1
+        if seen <= n_mandatory:
+            continue
+        routing.AddDisjunction([manager.NodeToIndex(node_idx)], 0)
 
 
 def _add_load_capacity_dimensions(

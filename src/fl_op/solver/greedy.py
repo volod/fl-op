@@ -22,7 +22,12 @@ from fl_op.core.constants import (
     SCORE_WEIGHT_MARGIN,
     SCORE_WEIGHT_REPOSITION,
 )
-from fl_op.core.geometry import haversine_km, haversine_km_vector
+from fl_op.core.geometry import (
+    haversine_km,
+    haversine_km_vector,
+    nearest_indices,
+    travel_time_seconds,
+)
 from fl_op.solver.cost_rates import (
     ResourcePrices,
     vehicle_energy_consumption_rate,
@@ -33,6 +38,7 @@ from fl_op.solver.travel_time import (
     _estimate_operation_seconds,
     network_seconds,
     travel_mode_for_vehicle,
+    travel_network_nodes,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,6 +68,48 @@ def _network_seconds_or_nan(
         travel_lookup, to_ref, from_ref, travel_mode
     )
     return float(seconds) if seconds else math.nan
+
+
+def _vehicle_network_access(
+    vehicles: list[Any],
+    travel_lookup: Optional[TravelLookup],
+    location_coords: Optional[dict[str, tuple[float, float]]],
+) -> list[Optional[tuple[str, int]]]:
+    """Per-vehicle nearest travel-network node and the hop onto it.
+
+    Maps each vehicle's current position to the nearest network node that has
+    known coordinates, generalizing the road access point beyond the vehicle's
+    home depot: a vehicle far from its depot can still join the network at a
+    local node. Returns ``(access_ref, approach_seconds)`` per vehicle, or None
+    when no node is locatable (the caller then falls back to the home depot and
+    the straight-line estimate).
+    """
+    empty: list[Optional[tuple[str, int]]] = [None] * len(vehicles)
+    if not vehicles or not travel_lookup or not location_coords:
+        return empty
+    located = [
+        (ref, location_coords[ref])
+        for ref in travel_network_nodes(travel_lookup)
+        if ref in location_coords
+    ]
+    if not located:
+        return empty
+    node_lats = np.array([coord[0] for _ref, coord in located])
+    node_lons = np.array([coord[1] for _ref, coord in located])
+    v_lats = np.array([float(v.lat) for v in vehicles])
+    v_lons = np.array([float(v.lon) for v in vehicles])
+    nearest = nearest_indices(v_lats, v_lons, node_lats, node_lons)
+    access: list[Optional[tuple[str, int]]] = []
+    for i, vehicle in enumerate(vehicles):
+        node_idx = int(nearest[i])
+        approach_s = travel_time_seconds(
+            float(vehicle.lat),
+            float(vehicle.lon),
+            float(node_lats[node_idx]),
+            float(node_lons[node_idx]),
+        )
+        access.append((located[node_idx][0], approach_s))
+    return access
 
 
 def _estimate_repositioning_cost(
@@ -104,6 +152,7 @@ def vectorized_score(
     score_weight_reposition: Optional[float] = None,
     travel_lookup: Optional[TravelLookup] = None,
     optimization_objective: str = "cost",
+    location_coords: Optional[dict[str, tuple[float, float]]] = None,
 ) -> dict[str, list[tuple[float, int, int]]]:
     """Return {task_id: [(score, v_idx, i_idx), ...]} sorted descending by score.
 
@@ -113,10 +162,14 @@ def vectorized_score(
     score weights default to the engine constants and are tunable via
     SolverParameters.
 
-    With a travel network, repositioning hours use the network shortest path
-    from the vehicle's home depot (its road access point) to the field where
-    one exists; the straight-line estimate from the vehicle's current
-    position remains the fallback.
+    With a travel network, repositioning seconds are the best (smallest) of
+    three estimates: the straight-line hop from the vehicle's current position,
+    the network shortest path from its home depot, and the hop onto the nearest
+    network node to its current position plus that node's network path to the
+    field. ``location_coords`` (location ref -> (lat, lon)) supplies the node
+    coordinates for the nearest-node mapping; without it only the first two
+    estimates apply. The pure straight-line estimate is always available, so a
+    pair without any network path still scores.
 
     ``optimization_objective="time"`` switches warm-start scoring to estimated
     arrival-plus-service seconds so pre-allocation favors faster bundles. Cost
@@ -152,6 +205,9 @@ def vectorized_score(
     ])
     v_home_refs = [str(v.home_depot_ref or "") for v in vehicles]
     v_travel_modes = [travel_mode_for_vehicle(v) for v in vehicles]
+    v_access = _vehicle_network_access(vehicles, travel_lookup, location_coords)
+    v_access_refs = [a[0] if a else "" for a in v_access]
+    v_access_approach_s = [a[1] if a else 0 for a in v_access]
 
     results: dict[str, list[tuple[float, int, int]]] = {}
 
@@ -177,19 +233,33 @@ def vectorized_score(
         dist_km = haversine_km_vector(
             v_lats[v_indices], v_lons[v_indices], f_lat, f_lon
         )
-        hours = dist_km / v_speeds[v_indices].clip(1)
+        straight_line_s = dist_km / v_speeds[v_indices].clip(1) * 3600.0
         if travel_lookup:
-            net_by_vehicle = np.array([
+            loc_ref = str(order.location_ref or "")
+            home_net = np.array([
                 _network_seconds_or_nan(
-                    travel_lookup,
-                    home_ref,
-                    str(order.location_ref or ""),
-                    v_travel_modes[idx],
+                    travel_lookup, home_ref, loc_ref, v_travel_modes[idx]
                 )
                 for idx, home_ref in enumerate(v_home_refs)
             ])
-            net_hours = net_by_vehicle[v_indices] / 3600.0
-            hours = np.where(np.isnan(net_hours), hours, net_hours)
+            node_net = np.array([
+                v_access_approach_s[idx]
+                + _network_seconds_or_nan(
+                    travel_lookup, v_access_refs[idx], loc_ref, v_travel_modes[idx]
+                )
+                if v_access_refs[idx]
+                else math.nan
+                for idx in range(len(vehicles))
+            ])
+            candidates = np.vstack([
+                straight_line_s,
+                home_net[v_indices],
+                node_net[v_indices],
+            ])
+            travel_s = np.nanmin(candidates, axis=0)
+        else:
+            travel_s = straight_line_s
+        hours = travel_s / 3600.0
         reposition_cost = (
             hours * v_consumptions[v_indices] * v_energy_prices[v_indices]
         )

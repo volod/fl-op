@@ -69,7 +69,31 @@ class TestGeometricRestrictions:
         assert not polygons_intersect(a, c)
         assert point_in_polygon((1.0, 1.0), a)
 
-    def test_intersecting_restricted_area_excludes_task(self):
+    def test_fully_covering_restricted_area_excludes_task(self):
+        task_site = _site(
+            fid="field-1",
+            polygon="[[0, 0], [0, 2], [2, 2], [2, 0]]",
+        )
+        # The restricted area fully contains the 2x2 site, so no work area
+        # survives and the task is dropped.
+        protected_area = _site(
+            fid="wetland",
+            restricted_ops="['SPRAYING']",
+            polygon="[[-1, -1], [-1, 3], [3, 3], [3, -1]]",
+        )
+
+        kept, infeasible = apply_location_restrictions(
+            [_order("o0", fid="field-1", op="SPRAYING")],
+            [task_site, protected_area],
+            _now(),
+        )
+
+        assert kept == []
+        assert infeasible[0]["reason_code"] == ReasonCode.RESTRICTED_ZONE.value
+
+    def test_partial_overlap_clips_work_area_instead_of_dropping(self):
+        # The wetland covers a 1x1 corner of the 2x2 site: 25% restricted, so
+        # 75% of the 10 ha work area survives (7.5 ha) and the task is kept.
         task_site = _site(
             fid="field-1",
             polygon="[[0, 0], [0, 2], [2, 2], [2, 0]]",
@@ -86,9 +110,11 @@ class TestGeometricRestrictions:
             _now(),
         )
 
-        assert kept == []
-        assert infeasible[0]["reason_code"] == ReasonCode.RESTRICTED_ZONE.value
-        assert "intersects restricted area wetland" in infeasible[0]["detail"]
+        assert infeasible == []
+        assert [o.task_id for o in kept] == ["o0"]
+        assert kept[0].area == 7.5
+        # Revenue scales with the clipped area: only 75% of the field is served.
+        assert kept[0].revenue == 1500.0
 
     def test_centroid_inside_restricted_area_excludes_task_without_site_polygon(self):
         protected_area = _site(

@@ -152,7 +152,12 @@ always reflect the registry, so capabilities cannot drift from the contracts.
    domains + mapping entity); domain-local contract aliases are resolved by
    the registry, and entity dispatch is a registered emitter table
    (`mapping/builders.py:ENTITY_EMITTERS`), so new datasets and entities plug
-   in without engine changes.
+   in without engine changes. Source values are normalized to the canonical
+   unit declared in each binding through a controlled unit vocabulary with
+   conversions (`mapping/units.py:convert_to_canonical`, e.g. W↔kW, g↔kg,
+   mL↔L, m²↔ha), so compatible units are reconciled rather than matched by
+   exact unit-code string equality; an undeclared conversion fails loudly
+   (`UnitConversionError`).
 3. Statistically assess observation series (`snapshot/assessment.py`):
    order each series by observed time (never arrival order), flag
    arrival-order timestamp regressions (arrival order is the explicit
@@ -232,9 +237,17 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    (`PREDECESSOR_UNSERVED`). Fuel, electricity, and material prices are
    resolved from the snapshot's cost-rate entities (`solver/cost_rates.py`),
    falling back to the engine cost constants for unpriced resources.
-   Geometric restrictions are a pre-solve exclusion: a task's site polygon
+   Geometric restrictions are a pre-solve filter: a task's site polygon
    (or centroid when the site has no polygon) is tested against other
-   locations whose polygon declares the task's operation as prohibited.
+   locations whose polygon declares the task's operation as prohibited. A
+   partial overlap clips rather than drops: the task is kept with its work area
+   (and area-like work quantity) and its revenue scaled to the unrestricted
+   fraction of the site polygon (`core/geometry.unrestricted_area_fraction` via
+   shapely), so only the genuinely off-limits part of a field is removed and the
+   objective credits only the work that can actually be done. The task is
+   dropped only when the unrestricted fraction falls below
+   `RESTRICTION_MIN_WORKABLE_AREA_FRACTION` (effectively fully covered) or the
+   site is a point lying inside a restricted area.
 2. Build a prime-mover / related-equipment compatibility matrix from power
    capabilities (`solver/feasibility.py`). Matrices are cached by dataset
    hash (a content hash of the power capabilities and margin), so a repeated
@@ -271,10 +284,13 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    (`allocationPolicy.countPriority` through
    `SolverParameters.assignment_count_priority`: 1.0 keeps count-first, 0.0
    maximizes summed scores so a contested resource goes to the
-   highest-margin cluster). Allocation is hold-aware: each held asset's free
-   share of the capacity horizon discounts candidate scores and operator
-   rewards, so mostly-held resources are reserved only when nothing freer
-   qualifies. The penalty-ordered greedy reservation loop remains the
+   highest-margin cluster). Allocation is hold-aware and gap-aware: the
+   discount on a held asset's candidate scores and operator rewards is its
+   largest contiguous free gap in the capacity horizon, not its total free
+   time (`solver/allocation/scoring.py:build_free_capacity`), so a fragmented
+   calendar with high total free time but no single gap long enough to host a
+   contiguous execution window scores lower, and mostly-held resources are
+   reserved only when nothing freer qualifies. The penalty-ordered greedy reservation loop remains the
    fallback when the model is disabled (`GLOBAL_ASSIGNMENT_ENABLED=0`),
    oversized, or finds no solution in time.
 6. Enforce operator qualification: a task whose operation the cluster
@@ -296,11 +312,16 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    score is estimated arrival plus service duration, inverted so faster
    bundles rank first; the shared penalty-per-day urgency term still helps
    high-penalty work win scarce resources during global pre-allocation.
-   Repositioning hours use the vehicle-mode network shortest path from the
-   vehicle's home depot to the field where one exists; the straight-line
-   estimate from the vehicle's current position remains the fallback. A UGV
-   uses road-mode links, a UAV uses air-mode links, and legacy links without a
-   mode behave as `any`.
+   Repositioning seconds are the best (smallest) of three vehicle-mode
+   estimates: the straight-line hop from the vehicle's current position, the
+   network shortest path from its home depot, and the hop onto the nearest
+   travel-network node to its current position plus that node's network path to
+   the field. The nearest-node mapping (`scikit-learn` haversine `BallTree`
+   over located network nodes) generalizes the road access point beyond the
+   home depot, so a vehicle working far from its depot joins the network at a
+   local node; the pure straight-line estimate is always available as the
+   fallback. A UGV uses road-mode links, a UAV uses air-mode links, and legacy
+   links without a mode behave as `any`.
 8. Solve each cluster as an OR-Tools routing problem in a spawned process
    pool. Auto pool sizing is memory-aware: the worker count is bounded by
    CPUs and by how many estimated worker footprints (base footprint plus the
@@ -375,17 +396,41 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    quantities without a declared rate use the width-times-speed coverage
    model, other units fall back to a nominal effort. The model is built
    over a node table: the depot, a pickup node per paired task, a task node
-   per order, and one mandatory depot reload stop per routing vehicle when
-   any task demands a load. Loads are per-material capacity dimensions: a
+   per order, and depot reload stops when any task demands a load. The model
+   offers each routing vehicle enough reload stops to clear the cluster's
+   heaviest single-material demand in successive fills
+   (`ceil(total / smallest matching compartment) - 1`, capped by
+   `DEPOT_RELOAD_MAX_TRIPS_PER_VEHICLE`); the first stop per vehicle is
+   mandatory (it sits at the depot, costs only its handling time, and keeps a
+   refill a single cheapest-insertion move) while the additional multi-trip
+   stops carry a zero-penalty disjunction, so a route reloads only as often as
+   its demand requires. Loads are per-material capacity dimensions: a
    task's `load-material` charges the vehicle's matching compartment
    (`load-capacities`), falling back to the aggregate `load-capacity`
-   (vehicles declaring neither are unconstrained). Reload stops reset the
+   (vehicles declaring neither are unconstrained). The drone-logistics pack
+   exercises this end-to-end: its UAV/UGV contracts declare a
+   `load_capacities_kg` compartment map (a parcel bay at full payload plus a
+   smaller meal box) bound to `asset.capabilities.loadCapacities`, matching the
+   `parcel`/`meal` materials its delivery orders carry. The other packs declare
+   no compartment map by design: agricultural orders carry one aggregate
+   material per pass, and construction machines and roadside service vehicles
+   model no carried load (earthworks move material in-situ; roadside crews are
+   gated by operator/kit qualification), so they rely on the aggregate capacity.
+   Reload stops reset the
    load dimensions (cvrp-reload slack construction), so demand beyond one
-   vehicle fill becomes a second trip instead of dropped tasks
+   vehicle fill becomes additional trips instead of dropped tasks
    (`DEPOT_RELOAD_ENABLED=0` restores single-trip semantics). A task
    declaring `pickup-location` becomes a paired pickup-and-delivery: same
    vehicle, pickup before the task, served or dropped together, with the
-   load on board only between the pair. Tasks with the same
+   load on board only between the pair. The pickup location resolves against
+   every known location (sites plus depots/hubs), so a pickup at a hub outside
+   the cluster's site table lands at the hub's coordinates; a ref absent from
+   both tables logs a warning and falls back to the depot. All four packs
+   exercise pickup-and-delivery: drone deliveries pair a hub pickup, the
+   agricultural pack collects material at the field's nearest yard, the
+   construction pack collects equipment at the nearest yard, and the roadside
+   maintenance-jobs projection carries a `pickup_location_ref` (service depot)
+   for externally-created tasks. Tasks with the same
    `alternative_group_ref` form a grouped disjunction with max cardinality one:
    at most one UGV/UAV delivery variant is served, and if one variant is served
    sibling failures are suppressed in the published unassigned list. If all

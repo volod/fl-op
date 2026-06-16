@@ -18,6 +18,9 @@ class ClusterContext:
     depot_id: str
     cluster_orders: list[dict[str, Any]]
     field_map: dict[str, dict[str, Any]]
+    # Every known location (sites + depots/hubs) keyed by id, for resolving
+    # pickup locations that sit outside the cluster's site table.
+    pickup_location_map: dict[str, dict[str, Any]]
     routing_vehicles: list[dict[str, Any]]
     depot_lat: float
     depot_lon: float
@@ -53,6 +56,9 @@ def prepare_cluster_context(
     order_map = {o.task_id: o for o in all_orders}
     field_map = {f.location_id: f for f in all_fields}
     depot_map = {d.location_id: d for d in all_depots}
+    # Pickups may reference a depot/hub outside the site table; resolve against
+    # both. Sites win id collisions (they carry the work-area geometry).
+    pickup_location_map = {**depot_map, **field_map}
     vehicle_map = {v.asset_id: v for v in all_vehicles}
     implement_map = {im.asset_id: im for im in all_implements}
 
@@ -87,6 +93,7 @@ def prepare_cluster_context(
         depot_id=depot_id,
         cluster_orders=cluster_orders,
         field_map=field_map,
+        pickup_location_map=pickup_location_map,
         routing_vehicles=routing_vehicles,
         depot_lat=float(depot.lat),
         depot_lon=float(depot.lon),

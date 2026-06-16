@@ -231,6 +231,21 @@ DEPOT_RELOAD_ENABLED: bool = bool(int(os.environ.get("DEPOT_RELOAD_ENABLED", "1"
 # Handling time of one depot reload visit (loading at the ramp).
 DEPOT_RELOAD_SERVICE_S: int = int(os.environ.get("DEPOT_RELOAD_SERVICE_S", "900"))
 
+# Maximum optional reload stops offered to each routing vehicle. The model
+# offers enough stops for a vehicle to clear the cluster's heaviest material
+# demand in multiple fills, bounded by this cap; reload stops are optional, so
+# surplus stops are left unvisited and a route reloads only as often as needed.
+DEPOT_RELOAD_MAX_TRIPS_PER_VEHICLE: int = int(
+    os.environ.get("DEPOT_RELOAD_MAX_TRIPS_PER_VEHICLE", "3")
+)
+
+# Geometric restrictions partially overlapping a work site clip the workable
+# area by the unrestricted fraction instead of dropping the task. Below this
+# fraction the site is treated as effectively fully restricted and dropped.
+RESTRICTION_MIN_WORKABLE_AREA_FRACTION: float = float(
+    os.environ.get("RESTRICTION_MIN_WORKABLE_AREA_FRACTION", "0.02")
+)
+
 # Number of parallel solver workers. 0 = auto: min(n_clusters, cpu_count,
 # memory-derived cap). An explicit positive value always wins.
 SOLVER_WORKERS: int = int(os.environ.get("SOLVER_WORKERS", "0"))

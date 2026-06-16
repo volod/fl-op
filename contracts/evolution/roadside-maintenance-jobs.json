@@ -26,6 +26,11 @@
       "physicalType": "double",
       "required": false
     },
+    "pickup_location_ref": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
     "priority": {
       "logicalType": "integer",
       "physicalType": "int",
@@ -58,7 +63,7 @@
     }
   },
   "fingerprints": {
-    "optimizationMetadataHash": "605705037cf4a9efe63f1ef9dc0c9ed1059c08782a1307d803fff86019063a19"
+    "optimizationMetadataHash": "5b62d5459eaad78f7dba40d7d428cb2eb910ccdf63a19c21ef2bbbb85644bdb6"
   },
   "history": [
     {
@@ -374,16 +379,217 @@
         "mappingVersion": "1.0.0"
       },
       "version": "1.0.0"
+    },
+    {
+      "contractId": "roadside-maintenance-jobs",
+      "fields": {
+        "deadline": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "estimated_revenue_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "job_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "operation_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "penalty_per_day_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "pickup_location_ref": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "priority": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": false
+        },
+        "road_segment_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "service_area_ha": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "service_duration_minutes": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "status": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "work_order_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "5b62d5459eaad78f7dba40d7d428cb2eb910ccdf63a19c21ef2bbbb85644bdb6"
+      },
+      "odcsId": "maintenance-jobs",
+      "registryArtifact": {
+        "artifactId": "roadside/maintenance-jobs",
+        "artifactRef": "roadside/maintenance-jobs@odcs:1.1.0+mapping:1.1.0",
+        "contractVersion": "1.1.0",
+        "domain": "roadside",
+        "localId": "maintenance-jobs",
+        "mappingVersion": "1.1.0",
+        "odcsId": "maintenance-jobs",
+        "qualifiedId": "roadside/maintenance-jobs",
+        "registryId": "roadside-maintenance-jobs"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "task",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "serviceOrders",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "maintenance-jobs"
+          },
+          "field:deadline": {
+            "binding": "task.deadline",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "time-window",
+              "commitment"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:commitment:deadline"
+          },
+          "field:estimated_revenue_eur": {
+            "binding": "task.revenueValue",
+            "canonicalUnit": "EUR",
+            "missingValuePolicy": "fallback-to-conservative-value",
+            "planningUse": [
+              "objective"
+            ],
+            "quantityKind": "money",
+            "semanticTerm": "urn:xopt:attribute:expected-revenue"
+          },
+          "field:job_id": {
+            "binding": "task.taskId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:task-id"
+          },
+          "field:operation_type": {
+            "binding": "task.operationType",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "compatibility-filter"
+            ],
+            "semanticTerm": "urn:xopt:attribute:operation-type"
+          },
+          "field:penalty_per_day_eur": {
+            "binding": "task.penaltyPerDay",
+            "canonicalUnit": "EUR",
+            "missingValuePolicy": "fallback-to-conservative-value",
+            "planningUse": [
+              "objective",
+              "commitment"
+            ],
+            "quantityKind": "money",
+            "semanticTerm": "urn:xopt:commitment:lateness-penalty"
+          },
+          "field:pickup_location_ref": {
+            "binding": "task.pickupLocationRef",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "capacity",
+              "geospatial"
+            ],
+            "semanticTerm": "urn:xopt:relationship:pickup-location"
+          },
+          "field:priority": {
+            "binding": "task.priorityClass",
+            "missingValuePolicy": "fallback-to-conservative-value",
+            "planningUse": [
+              "objective"
+            ],
+            "semanticTerm": "urn:xopt:attribute:priority-class"
+          },
+          "field:road_segment_id": {
+            "binding": "task.locationRef",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "semanticTerm": "urn:xopt:relationship:location"
+          },
+          "field:service_area_ha": {
+            "binding": "task.areaHa",
+            "canonicalUnit": "ha",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "area",
+            "semanticTerm": "urn:xopt:attribute:service-area"
+          },
+          "field:service_duration_minutes": {
+            "binding": "task.serviceDurationMinutes",
+            "canonicalUnit": "min",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "duration",
+            "semanticTerm": "urn:xopt:attribute:service-duration"
+          },
+          "field:status": {
+            "binding": "task.status",
+            "planningUse": [
+              "freeze"
+            ],
+            "semanticTerm": "urn:xopt:attribute:task-status"
+          },
+          "field:work_order_id": {
+            "binding": "task.orderId",
+            "planningUse": [
+              "commitment"
+            ],
+            "semanticTerm": "urn:xopt:relationship:contract"
+          }
+        },
+        "mappingVersion": "1.1.0"
+      },
+      "version": "1.1.0"
     }
   ],
   "odcsId": "maintenance-jobs",
   "registryArtifact": {
     "artifactId": "roadside/maintenance-jobs",
-    "artifactRef": "roadside/maintenance-jobs@odcs:1.0.0+mapping:1.0.0",
-    "contractVersion": "1.0.0",
+    "artifactRef": "roadside/maintenance-jobs@odcs:1.1.0+mapping:1.1.0",
+    "contractVersion": "1.1.0",
     "domain": "roadside",
     "localId": "maintenance-jobs",
-    "mappingVersion": "1.0.0",
+    "mappingVersion": "1.1.0",
     "odcsId": "maintenance-jobs",
     "qualifiedId": "roadside/maintenance-jobs",
     "registryId": "roadside-maintenance-jobs"
@@ -446,6 +652,15 @@
         "quantityKind": "money",
         "semanticTerm": "urn:xopt:commitment:lateness-penalty"
       },
+      "field:pickup_location_ref": {
+        "binding": "task.pickupLocationRef",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "capacity",
+          "geospatial"
+        ],
+        "semanticTerm": "urn:xopt:relationship:pickup-location"
+      },
       "field:priority": {
         "binding": "task.priorityClass",
         "missingValuePolicy": "fallback-to-conservative-value",
@@ -497,7 +712,7 @@
         "semanticTerm": "urn:xopt:relationship:contract"
       }
     },
-    "mappingVersion": "1.0.0"
+    "mappingVersion": "1.1.0"
   },
-  "version": "1.0.0"
+  "version": "1.1.0"
 }

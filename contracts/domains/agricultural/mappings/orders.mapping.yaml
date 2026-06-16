@@ -8,7 +8,7 @@ metadata:
   sourceContract: orders
   canonicalEntity: task
   canonicalModelRef: urn:xopt:model:canonical:0.1.0
-  mappingVersion: 1.0.0
+  mappingVersion: 1.1.0
   dataProductRole: serviceOrders
   permittedPlanningUses: [periodic-planning, rolling-dispatch]
 
@@ -60,6 +60,11 @@ fieldMappings:
     canonicalUnit: kg
     quantityKind: mass
     planningUse: [capacity]
+    missingValuePolicy: accept-optional
+  - sourceField: pickup_location_ref
+    binding: task.pickupLocationRef
+    semanticTerm: urn:xopt:relationship:pickup-location
+    planningUse: [capacity, geospatial]
     missingValuePolicy: accept-optional
   - sourceField: depends_on_order_id
     binding: task.dependsOnTaskRef
