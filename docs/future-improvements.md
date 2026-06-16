@@ -12,9 +12,6 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-3. Spatial execution feedback. Capture per-pass coverage geometry and use it
-   to refine remaining work, partial-area restrictions, and rolling progress
-   explanations.
 4. Closed-loop monitoring policy. Learn composite health weights from
    prognosis outcomes, consume completion lead-time distributions, split
    auto-tuning by asset type and additional tunables such as battery
@@ -61,13 +58,14 @@ Recommended order, optimized for dependency reuse and low rework:
    delivered cost model (driver-time, machine-wear, and toll cost-rate types
    priced into arc costs, dispatch margins, and KPIs) lives in
    current-implementation.md.
+23. Spatial execution feedback. Remaining work is incremental: measuring
+   coverage against the restriction-clipped (workable) remainder and threading
+   the residual work-area polygon into the solver's partial-area clip, and
+   consuming coverage in periodic (batch) planning. The delivered per-pass
+   coverage geometry (swept-path/polygon passes accumulated into spatially
+   refined remaining work and a rolling coverage trail) lives in
+   current-implementation.md.
 
-
-## 3. Spatial execution feedback
-
-- Per-pass coverage geometry (spatially explicit progress over the work area)
-  remains open; it would refine remaining work, partial-area restrictions, and
-  rolling progress explanations.
 
 ## 4. Closed-loop monitoring policy
 
@@ -214,3 +212,23 @@ residual open work is:
   Per-vehicle wear curves and per-operator wage bands would let the objective
   prefer cheaper-to-run machines or operators, but need per-asset cost-rate
   resolution rather than the single fleet rate.
+
+## 23. Spatial execution feedback
+
+Delivered behavior (per-pass coverage geometry parsed and accumulated in
+`stream/coverage.py` over the `core/geometry.py` swath/area primitives, refining
+remaining work from the overlap-corrected covered area and logging a per-pass
+coverage trail with an aggregate rolling summary) lives in
+current-implementation.md. The residual open work is:
+
+- Coverage measures the covered geodesic area against the task's gross original
+  work area. Measuring it against the restriction-clipped *workable* remainder,
+  and threading the residual work-area polygon (site minus restricted minus
+  covered) into the solver's partial-area clip so restriction severity is
+  computed on the uncovered remainder, needs the task to carry work-area
+  geometry rather than only a scalar area.
+- Coverage feedback runs in the rolling stream only; periodic (batch) planning
+  does not yet consume per-pass coverage geometry.
+- Rolling progress explanations are the per-pass trail and its aggregate stats;
+  richer spatially-explicit explanations (remaining-geometry rendering,
+  per-cluster coverage rollups) remain open.

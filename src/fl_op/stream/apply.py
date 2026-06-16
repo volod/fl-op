@@ -13,8 +13,17 @@ from typing import Any, Callable, Optional
 
 from fl_op.canonical.enums import TaskStatus
 from fl_op.contracts.registry import FileRegistry
-from fl_op.core.constants import METRIC_WORK_PROGRESS, WORK_PROGRESS_COMPLETE_PCT
+from fl_op.core.constants import (
+    COVERAGE_COMPLETE_FRACTION,
+    METRIC_WORK_PROGRESS,
+    WORK_PROGRESS_COMPLETE_PCT,
+)
 from fl_op.mapping.bindings import BindingTable, load_binding_table
+from fl_op.stream.coverage import (
+    coverage_state,
+    has_coverage_payload,
+    pass_ring_from_payload,
+)
 from fl_op.stream.source import (
     EVENT_ASSET_UNAVAILABLE,
     EVENT_ENTITY_CORRECTED,
@@ -37,6 +46,9 @@ logger = logging.getLogger(__name__)
 _TASK_STATUS_BINDING = "task.status"
 _TASK_DEADLINE_BINDING = "task.deadline"
 _TASK_WORK_QUANTITY_BINDINGS = ("task.workQuantity", "task.areaHa")
+# Area reference for spatially-derived coverage fractions (covered geodesic
+# area vs the task's original area in hectares).
+_TASK_AREA_BINDING = "task.areaHa"
 
 # Observation bindings consulted for telemetry-derived task progress.
 _OBSERVATION_METRIC_BINDING = "observation.metric"
@@ -79,6 +91,15 @@ class EventApplicator:
         # (task id, completion time, deadline); the driver drains them into
         # the lead-time log after each batch.
         self.completions: list[dict[str, Any]] = []
+        # Per-task accumulated coverage passes: task_id -> {rings, originals,
+        # original_area_ha, n_passes}. Each covered-geometry pass unions into
+        # the prior coverage so the remaining work is refined from the
+        # overlap-corrected covered area, not a self-reported scalar.
+        self._coverage: dict[str, dict[str, Any]] = {}
+        # One record per coverage pass (covered/remaining area, fraction, pass
+        # count); the driver drains them into the coverage trail after each
+        # batch, the spatial counterpart to the completions/lead-time log.
+        self.coverage_reports: list[dict[str, Any]] = []
         for cid in self.registry.list_contracts():
             entry = self.registry.get_entry(cid)
             if not entry.mapping_ref:
@@ -117,6 +138,11 @@ class EventApplicator:
                 fields.append(binding.source_field)
         return fields
 
+    def _area_field(self, contract_id: str) -> Optional[str]:
+        """Physical column carrying the task's work area (the coverage reference)."""
+        binding = self._tables[contract_id].by_binding_path().get(_TASK_AREA_BINDING)
+        return binding.source_field if binding else None
+
     # -- event handlers ----------------------------------------------------------
 
     def _set_task_started(self, sources: Sources, event: ExecutionEvent) -> None:
@@ -131,13 +157,21 @@ class EventApplicator:
     def _apply_task_progress(self, sources: Sources, event: ExecutionEvent) -> None:
         """Partial task completion: shrink the remaining work quantity.
 
-        An absolute ``remaining_quantity`` payload (in the task's work-quantity
-        unit) overwrites the work-quantity column exactly, suiting domains
-        without a meaningful completed share; otherwise ``completed_fraction``
-        scales every work-quantity column down to the remaining share. A fully
-        completed task is removed (nothing is left to plan). Progress implies
-        the task started.
+        A coverage-geometry payload (a covered polygon or a path swept by an
+        implement width) wins when present: the pass accumulates into the
+        task's covered geometry and the remaining work is derived from the
+        overlap-corrected covered area. Otherwise an absolute
+        ``remaining_quantity`` payload (in the task's work-quantity unit)
+        overwrites the work-quantity column exactly, suiting domains without a
+        meaningful completed share, and ``completed_fraction`` scales every
+        work-quantity column down to the remaining share. A fully completed
+        task is removed (nothing is left to plan). Progress implies the task
+        started.
         """
+        if has_coverage_payload(event.payload) and self._apply_coverage_pass(
+            sources, event.entity_ref, event.payload, event.observed_at
+        ):
+            return
         remaining = self._payload_float(event, PAYLOAD_REMAINING_QUANTITY)
         fraction = 0.0
         if remaining is None:
@@ -190,6 +224,121 @@ class EventApplicator:
                             )
                             continue
                         row[work_field] = round(scaled, 2)
+                if status:
+                    row[status] = TaskStatus.STARTED.value
+
+    def _apply_coverage_pass(
+        self,
+        sources: Sources,
+        task_id: str,
+        payload: dict[str, Any],
+        observed_at: str,
+    ) -> bool:
+        """Accumulate one covered-geometry pass and refine the remaining work.
+
+        The pass geometry (an explicit covered polygon or a swept path) unions
+        into the task's prior coverage; the overlap-corrected covered area over
+        the task's original work area gives the completed fraction. Reaching
+        ``COVERAGE_COMPLETE_FRACTION`` finishes the task; otherwise every work
+        column is set to its original value times the uncovered share -- derived
+        from the cumulative geometry, so overlapping passes never over-credit
+        progress. Returns False when the payload carries no usable geometry, so
+        the caller falls back to scalar progress.
+        """
+        ring = pass_ring_from_payload(payload)
+        if ring is None:
+            return False
+        entry = self._coverage.get(task_id)
+        if entry is None:
+            originals, original_area_ha = self._capture_work_state(sources, task_id)
+            if original_area_ha <= 0:
+                logger.warning(
+                    "coverage pass for %s has no positive work area; ignoring geometry",
+                    task_id,
+                )
+                return False
+            entry = {
+                "rings": [],
+                "originals": originals,
+                "original_area_ha": original_area_ha,
+                "n_passes": 0,
+            }
+            self._coverage[task_id] = entry
+        entry["rings"].append(ring)
+        entry["n_passes"] += 1
+        state = coverage_state(entry["rings"], entry["original_area_ha"])
+        self.coverage_reports.append(
+            {
+                "task_id": task_id,
+                "observed_at": observed_at,
+                "n_passes": entry["n_passes"],
+                "original_area_ha": round(entry["original_area_ha"], 4),
+                **state,
+            }
+        )
+        if state["covered_fraction"] >= COVERAGE_COMPLETE_FRACTION:
+            self._complete_task(sources, task_id, observed_at, "coverage")
+            self._coverage.pop(task_id, None)
+        else:
+            self._set_remaining_from_originals(
+                sources, task_id, entry["originals"], state["covered_fraction"]
+            )
+        return True
+
+    def _capture_work_state(
+        self, sources: Sources, task_id: str
+    ) -> tuple[dict[str, float], float]:
+        """First-pass originals: each work column's value plus the area reference.
+
+        Captured before any scaling so cumulative coverage always reduces from
+        the original work, not from an already-shrunk value.
+        """
+        for cid in self._contracts_for("task", sources):
+            key = self._key_field(cid)
+            if not key:
+                continue
+            work_fields = self._work_fields(cid)
+            area_field = self._area_field(cid)
+            for row in sources[cid]:
+                if str(row.get(key)) != task_id:
+                    continue
+                originals: dict[str, float] = {}
+                for field in work_fields:
+                    try:
+                        originals[field] = float(row.get(field, 0.0) or 0.0)
+                    except (TypeError, ValueError):
+                        continue
+                area_ha = 0.0
+                if area_field is not None:
+                    try:
+                        area_ha = float(row.get(area_field, 0.0) or 0.0)
+                    except (TypeError, ValueError):
+                        area_ha = 0.0
+                if area_ha <= 0 and work_fields:
+                    area_ha = originals.get(work_fields[0], 0.0)
+                return originals, area_ha
+        return {}, 0.0
+
+    def _set_remaining_from_originals(
+        self,
+        sources: Sources,
+        task_id: str,
+        originals: dict[str, float],
+        covered_fraction: float,
+    ) -> None:
+        """Set each work column to its original value times the uncovered share."""
+        uncovered = max(0.0, 1.0 - covered_fraction)
+        for cid in self._contracts_for("task", sources):
+            key = self._key_field(cid)
+            status = self._status_field(cid)
+            if not key:
+                continue
+            for row in sources[cid]:
+                if str(row.get(key)) != task_id:
+                    continue
+                for field, original in originals.items():
+                    if field in row:
+                        row[field] = round(original * uncovered, 2)
                 if status:
                     row[status] = TaskStatus.STARTED.value
 
@@ -317,6 +466,10 @@ class EventApplicator:
             task_ref = str(event.payload.get(ref_binding.source_field, ""))
             if not task_ref:
                 continue
+            if has_coverage_payload(event.payload) and self._apply_coverage_pass(
+                sources, task_ref, event.payload, event.observed_at
+            ):
+                return
             try:
                 progress_pct = float(event.payload.get(value_binding.source_field))
             except (TypeError, ValueError):

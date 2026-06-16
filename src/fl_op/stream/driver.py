@@ -228,6 +228,13 @@ class StreamSession:
 
                 record_completions(driver.applicator.completions, self.previous_plan)
                 driver.applicator.completions = []
+            # Per-pass coverage geometry captured this batch: the spatial
+            # progress trail, drained alongside completions.
+            if driver.applicator.coverage_reports:
+                from fl_op.stream.coverage import record_coverage
+
+                record_coverage(driver.applicator.coverage_reports)
+                driver.applicator.coverage_reports = []
             if not any(applied):
                 continue
             applied_event_ids = [
@@ -276,6 +283,11 @@ class StreamSession:
         stats = lead_time_stats()
         if stats:
             logger.info("Completion lead times: %s", stats)
+        from fl_op.stream.coverage import coverage_stats
+
+        coverage = coverage_stats()
+        if coverage:
+            logger.info("Coverage progress: %s", coverage)
         from fl_op.core import constants as _constants
 
         if _constants.MONITORING_AUTO_TUNE_ENABLED:

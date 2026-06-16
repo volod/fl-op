@@ -190,6 +190,14 @@ MAX_PAIRS_PER_ORDER: int = int(os.environ.get("MAX_PAIRS_PER_ORDER", "30"))
 # WGS-84 mean Earth radius used for haversine distance calculations.
 EARTH_RADIUS_KM: float = 6371.0
 
+# Mean meters per degree of latitude (used to convert a swath width in meters
+# into a degree-space buffer radius for coverage geometry).
+METERS_PER_DEGREE_LAT: float = 111_320.0
+
+# Unit conversion: one square kilometre is 100 hectares. Coverage geometry is
+# measured geodesically in km2 and compared against task work areas in hectares.
+HECTARES_PER_SQUARE_KM: float = 100.0
+
 # Average ground speed (km/h) for the geometric travel-time fallback used when
 # no travel-network link connects a location pair. Env-configurable so the
 # geometry-fixed leg duration can be tuned without code changes.
@@ -918,6 +926,24 @@ PROGNOSIS_LOG_FILENAME: str = "service-prognosis.jsonl"
 # Filename (under DATA_DIR/quality) of the task-completion lead-time log:
 # one record per completed task with its deadline lead and schedule error.
 LEAD_TIME_LOG_FILENAME: str = "completion-lead-times.jsonl"
+
+# ---------------------------------------------------------------------------
+# Spatial execution feedback (per-pass coverage geometry)
+# ---------------------------------------------------------------------------
+# A task.progress event or work-progress telemetry observation may carry the
+# geometry covered in that pass (a covered polygon, or a path swept by an
+# implement width). Passes accumulate into the task's covered geometry; the
+# overlap-corrected covered area drives how much remaining work is left.
+
+# Covered share at or above which the task is treated as finished (the last
+# strip is effectively done; a tiny uncovered remainder is not worth a revisit).
+COVERAGE_COMPLETE_FRACTION: float = float(
+    os.environ.get("COVERAGE_COMPLETE_FRACTION", "0.99")
+)
+
+# Filename (under DATA_DIR/quality) of the append-only per-pass coverage trail:
+# one record per coverage pass with the covered/remaining area and pass count.
+COVERAGE_TRAIL_FILENAME: str = "coverage-passes.jsonl"
 
 # Share of withdrawn (false positive) service prognoses above which a looser
 # monitoring policy (shorter forecast horizon, lower composite threshold) is

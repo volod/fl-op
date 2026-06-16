@@ -503,12 +503,12 @@ documents (canonical entity + identity binding), so the driver knows no
 domain-specific column names. Supported triggers:
 
 - `task.started` / `task.progress` / `task.completed`: lifecycle and partial
-  completion; progress carries either a `completed_fraction` (scales every
-  work-quantity column down to the remaining share) or an absolute
-  `remaining_quantity` in the task's work unit (exact overwrite of the
-  generic work-quantity column, for domains without a meaningful fraction);
-  a fully completed task leaves planning, so re-solves dispatch only the
-  remaining effort;
+  completion; progress carries either per-pass coverage geometry (see below), a
+  `completed_fraction` (scales every work-quantity column down to the remaining
+  share), or an absolute `remaining_quantity` in the task's work unit (exact
+  overwrite of the generic work-quantity column, for domains without a
+  meaningful fraction); a fully completed task leaves planning, so re-solves
+  dispatch only the remaining effort;
 - `order.created` / `order.cancelled`;
 - `asset.unavailable`: removes any asset by id -- vehicles, implements,
   operators, and stationary equipment share one path;
@@ -519,9 +519,26 @@ domain-specific column names. Supported triggers:
 - `observation.recorded`: streamed sensor readings upserted by reading id, so
   a re-sent corrected reading replaces the earlier one; readings normalized
   to the canonical `work-progress` metric drive task progress directly from
-  telemetry and complete the task at 100 percent;
+  telemetry (carrying coverage geometry or a percent value) and complete the
+  task at 100 percent;
 - `entity.corrected`: a corrected source row upserted by its key column, so
   quality-rejected or wrongly-valued entities re-enter planning.
+
+Per-pass coverage geometry (`stream/coverage.py`, `core/geometry.py`) makes
+progress spatially explicit. A `task.progress` event or `work-progress`
+telemetry observation may carry the geometry covered in that pass instead of a
+scalar: either an explicit `covered_polygon` ([lat, lon] vertices) or a
+`covered_path` ([lat, lon] points) swept by a `swath_width_m` implement width
+(buffered in a longitude space scaled by `cos(latitude)` so the swath is
+metrically round). Passes accumulate per task and union geometrically, so two
+passes over the same strip are not double-counted; the overlap-corrected covered
+geodesic area over the task's original work area gives the completed share, which
+shrinks every work column from its original value (cumulative, never re-shrinking
+an already-reduced value). Reaching `COVERAGE_COMPLETE_FRACTION` (default 0.99)
+finishes the task. Each pass appends one record (covered/remaining area, covered
+fraction, pass count) to `$DATA_DIR/quality/coverage-passes.jsonl`, and
+`coverage_stats` aggregates the rolling spatial-progress summary logged after
+stream runs.
 
 Event application is idempotent by `event-id`: at-least-once delivery may
 replay an event, and a replay mutates nothing and produces no revision.
