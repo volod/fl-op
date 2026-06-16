@@ -267,7 +267,10 @@ class StreamSession:
                 applied_event_ids=applied_event_ids,
             )
             revisions.append(revision)
-            record_prognosis_outcomes(plan)
+            record_prognosis_outcomes(
+                plan,
+                asset_types={a.asset_id: a.asset_type for a in snapshot.assets},
+            )
             self.previous_plan = plan
             self.previous_service_reasons = _service_reasons(snapshot)
             if on_revision is not None:
@@ -293,7 +296,9 @@ class StreamSession:
         if _constants.MONITORING_AUTO_TUNE_ENABLED:
             from fl_op.snapshot.policy_tuning import auto_tune_monitoring_policy
 
-            auto_tune_monitoring_policy(accuracy, self._driver.builder.monitoring_policy)
+            auto_tune_monitoring_policy(
+                accuracy, self._driver.builder.monitoring_policy, lead_time=stats
+            )
 
 
 def _coalesce(

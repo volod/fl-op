@@ -27,6 +27,7 @@ from fl_op.core.constants import (
     EQUIPMENT_SERVICE_OPERATION,
     GLOBAL_ASSIGNMENT_COUNT_PRIORITY,
     MIN_OBSERVATION_CONFIDENCE,
+    MONITOR_MOBILE_ASSETS,
     SERVICE_TASK_DEADLINE_DAYS,
     SERVICE_TASK_DURATION_MINUTES,
     SERVICE_TASK_ESCALATED_DEADLINE_DAYS,
@@ -93,6 +94,7 @@ class MonitoringPolicyOverride(BaseModel):
     serviceDurationMinutes: Optional[float] = None
     escalatedPriorityClass: Optional[int] = None
     escalatedDeadlineDays: Optional[int] = None
+    monitorMobileAssets: Optional[bool] = None
 
 
 class MonitoringPolicySpec(BaseModel):
@@ -125,6 +127,9 @@ class MonitoringPolicySpec(BaseModel):
     serviceDurationMinutes: float = SERVICE_TASK_DURATION_MINUTES
     escalatedPriorityClass: int = SERVICE_TASK_ESCALATED_PRIORITY_CLASS
     escalatedDeadlineDays: int = SERVICE_TASK_ESCALATED_DEADLINE_DAYS
+    # Whether predictive monitoring also covers mobile assets (prime movers,
+    # drones); stationary equipment is always monitored. Tunable per asset type.
+    monitorMobileAssets: bool = MONITOR_MOBILE_ASSETS
     assetTypeOverrides: dict[str, MonitoringPolicyOverride] = Field(default_factory=dict)
     # Instance-level overrides keyed by asset id (a single critical station),
     # layered on top of the per-asset-type overrides.

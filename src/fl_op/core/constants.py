@@ -709,16 +709,22 @@ SNAPSHOT_INPUT_ENTITIES: tuple[str, ...] = (
 )
 
 # ---------------------------------------------------------------------------
-# Stationary-equipment monitoring policy
+# Equipment monitoring policy
 # ---------------------------------------------------------------------------
-# Thresholds the monitoring policy applies to derive service tasks for
-# stationary assets (sensor stations, fixed road/field equipment) from their
-# latest observations and maintenance state.
+# Thresholds the monitoring policy applies to derive service tasks for assets
+# (sensor stations, fixed road/field equipment, and -- when enabled -- mobile
+# prime movers and drones) from their latest observations and maintenance state.
 
 # Canonical metric codes observations must carry for the engine to interpret
 # them; domain sources normalize their metric vocabulary to these values.
 METRIC_BATTERY_LEVEL: str = "battery-level"
 METRIC_HEALTH_STATUS: str = "health-status"
+
+# Whether predictive monitoring also derives service tasks for mobile assets
+# (prime movers, drones), not just stationary equipment. Off by default so the
+# established stationary-only behaviour is unchanged; a domain profile opts in
+# globally or per asset type via the monitoring policy.
+MONITOR_MOBILE_ASSETS: bool = bool(int(os.environ.get("MONITOR_MOBILE_ASSETS", "0")))
 
 # Telemetry-derived task progress: an observation carrying this canonical
 # metric for a task id reports the completed share of the task's work in
@@ -981,6 +987,19 @@ MONITORING_TUNE_HORIZON_MIN_DAYS: float = 1.0
 MONITORING_TUNE_HORIZON_MAX_DAYS: float = 14.0
 MONITORING_TUNE_COMPOSITE_MIN: float = 0.1
 MONITORING_TUNE_COMPOSITE_MAX: float = 0.6
+MONITORING_TUNE_BATTERY_LOW_MIN: float = 5.0
+MONITORING_TUNE_BATTERY_LOW_MAX: float = 40.0
+
+# Completion lead-time feedback into guarded tuning: a high share of service
+# tasks finishing after their deadline means the policy fired too late, so it
+# loosens (the same direction as a high false-negative rate). Trusted only once
+# enough service completions have accumulated.
+MONITORING_LATE_SHARE_ALERT: float = float(
+    os.environ.get("MONITORING_LATE_SHARE_ALERT", "0.3")
+)
+MONITORING_LEAD_TIME_MIN_SAMPLES: int = int(
+    os.environ.get("MONITORING_LEAD_TIME_MIN_SAMPLES", "3")
+)
 
 # Overlay and audit-trail filenames under DATA_DIR/quality.
 MONITORING_TUNED_POLICY_FILENAME: str = "monitoring-policy-tuned.json"

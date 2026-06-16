@@ -42,21 +42,67 @@ def _service_task_ids(plan: "Plan") -> set[str]:
     }
 
 
+def _action_task_ids(plan: "Plan", action: CorrectiveActionType) -> list[str]:
+    return [ca.task_id for ca in plan.corrective_actions if ca.action == action]
+
+
+def _split_by_asset_type(
+    active_ids: set[str],
+    withdrawn_ids: list[str],
+    escalated_ids: list[str],
+    asset_types: dict[str, str],
+) -> dict[str, dict[str, int]]:
+    """Per-asset-type active/withdrawn/escalated counts for one revision.
+
+    The asset type is resolved from the service task id (``service-<asset>``)
+    through the snapshot's asset->type map; tasks whose asset type is unknown
+    are left out of the split (they still count in the global totals).
+    """
+    from fl_op.adapters.rolling.corrective import SERVICE_TASK_PREFIX
+
+    by_type: dict[str, dict[str, int]] = {}
+    for ids, key in (
+        (active_ids, "active"),
+        (withdrawn_ids, "withdrawn"),
+        (escalated_ids, "escalated"),
+    ):
+        for task_id in ids:
+            asset_type = asset_types.get(task_id[len(SERVICE_TASK_PREFIX):], "")
+            if not asset_type:
+                continue
+            by_type.setdefault(
+                asset_type, {"active": 0, "withdrawn": 0, "escalated": 0}
+            )[key] += 1
+    return by_type
+
+
 def record_prognosis_outcomes(
-    plan: "Plan", path: Optional[pathlib.Path] = None
+    plan: "Plan",
+    path: Optional[pathlib.Path] = None,
+    asset_types: Optional[dict[str, str]] = None,
 ) -> dict[str, Any]:
-    """Append one revision's service-task outcome record; return the record."""
-    by_action = {
-        action_type: sum(1 for ca in plan.corrective_actions if ca.action == action_type)
-        for action_type in CorrectiveActionType
-    }
-    record = {
+    """Append one revision's service-task outcome record; return the record.
+
+    ``asset_types`` (asset id -> asset type, from the snapshot) adds a
+    per-asset-type breakdown to the record so accuracy can be split by station
+    class; without it only the global totals are recorded.
+    """
+    active_ids = _service_task_ids(plan)
+    withdrawn_ids = _action_task_ids(plan, CorrectiveActionType.SERVICE_WITHDRAWN)
+    escalated_ids = _action_task_ids(plan, CorrectiveActionType.SERVICE_ESCALATED)
+    record: dict[str, Any] = {
         "generated_at": plan.generated_at.isoformat(),
         "revision_id": plan.revision_id,
-        "n_service_active": len(_service_task_ids(plan)),
-        "n_service_withdrawn": by_action[CorrectiveActionType.SERVICE_WITHDRAWN],
-        "n_service_escalated": by_action[CorrectiveActionType.SERVICE_ESCALATED],
+        "n_service_active": len(active_ids),
+        "n_service_withdrawn": len(withdrawn_ids),
+        "n_service_escalated": len(escalated_ids),
     }
+    if asset_types:
+        by_type = _split_by_asset_type(
+            active_ids, withdrawn_ids, escalated_ids, asset_types
+        )
+        if by_type:
+            record["by_asset_type"] = by_type
     target = _log_path(path)
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -78,6 +124,7 @@ def prognosis_accuracy(path: Optional[pathlib.Path] = None) -> dict[str, float]:
     if not target.exists():
         return {}
     active = withdrawn = escalated = 0
+    by_type: dict[str, dict[str, int]] = {}
     for line in target.read_text().splitlines():
         line = line.strip()
         if not line:
@@ -89,33 +136,73 @@ def prognosis_accuracy(path: Optional[pathlib.Path] = None) -> dict[str, float]:
         active += int(record.get("n_service_active", 0))
         withdrawn += int(record.get("n_service_withdrawn", 0))
         escalated += int(record.get("n_service_escalated", 0))
+        for asset_type, counts in (record.get("by_asset_type") or {}).items():
+            agg = by_type.setdefault(
+                asset_type, {"active": 0, "withdrawn": 0, "escalated": 0}
+            )
+            for key in agg:
+                agg[key] += int(counts.get(key, 0))
     observed = active + withdrawn
     if observed == 0:
         return {}
-    return {
+    result = {
         "n_observed": float(observed),
         "false_positive_rate": withdrawn / observed,
         "false_negative_rate": escalated / observed,
     }
+    type_rates = {
+        asset_type: rates
+        for asset_type, counts in by_type.items()
+        if (rates := _rates(counts)) is not None
+    }
+    if type_rates:
+        result["by_asset_type"] = type_rates
+    return result
 
 
-def log_threshold_recommendations(accuracy: dict[str, float]) -> None:
-    """Translate accumulated accuracy into monitoring-threshold suggestions."""
+def _rates(counts: dict[str, int]) -> Optional[dict[str, float]]:
+    """False-positive/negative rates for one asset type's accumulated counts."""
+    observed = counts["active"] + counts["withdrawn"]
+    if observed == 0:
+        return None
+    return {
+        "n_observed": float(observed),
+        "false_positive_rate": counts["withdrawn"] / observed,
+        "false_negative_rate": counts["escalated"] / observed,
+    }
+
+
+def log_threshold_recommendations(accuracy: dict[str, Any]) -> None:
+    """Translate accumulated accuracy into monitoring-threshold suggestions.
+
+    Logs a global recommendation and, where per-asset-type accuracy splits are
+    present, one per station class so a single noisy asset type can be tuned
+    without disturbing the rest of the fleet.
+    """
     if not accuracy:
         return
-    fp_rate = accuracy.get("false_positive_rate", 0.0)
-    fn_rate = accuracy.get("false_negative_rate", 0.0)
+    _log_recommendation("", accuracy)
+    for asset_type, rates in (accuracy.get("by_asset_type") or {}).items():
+        _log_recommendation(asset_type, rates)
+
+
+def _log_recommendation(scope: str, rates: dict[str, float]) -> None:
+    label = f" for asset type {scope}" if scope else ""
+    fp_rate = rates.get("false_positive_rate", 0.0)
+    fn_rate = rates.get("false_negative_rate", 0.0)
     if fp_rate > PROGNOSIS_FALSE_POSITIVE_ALERT:
         logger.warning(
-            "Service prognoses withdrawn at %.0f%%: consider lowering "
+            "Service prognoses withdrawn at %.0f%%%s: consider lowering "
             "batteryForecastHorizonDays or compositeHealthThreshold in the "
             "domain monitoring policy",
             fp_rate * 100.0,
+            label,
         )
     if fn_rate > PROGNOSIS_FALSE_NEGATIVE_ALERT:
         logger.warning(
-            "Service prognoses escalated at %.0f%%: consider raising "
+            "Service prognoses escalated at %.0f%%%s: consider raising "
             "batteryLowThresholdPct or batteryForecastHorizonDays in the "
             "domain monitoring policy",
             fn_rate * 100.0,
+            label,
         )

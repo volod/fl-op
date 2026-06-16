@@ -12,11 +12,6 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-4. Closed-loop monitoring policy. Learn composite health weights from
-   prognosis outcomes, consume completion lead-time distributions, split
-   auto-tuning by asset type and additional tunables such as battery
-   thresholds, and extend monitoring beyond stationary service tasks to mobile
-   assets.
 5. Experiment and tuning maturity. Add generic rolling replay datasets for
    real instability measurement, holdout validation, per-domain objective
    weights, CPU/RSS-aware worker selection, cluster-size memory coefficients,
@@ -65,20 +60,12 @@ Recommended order, optimized for dependency reuse and low rework:
    coverage geometry (swept-path/polygon passes accumulated into spatially
    refined remaining work and a rolling coverage trail) lives in
    current-implementation.md.
+24. Closed-loop monitoring policy. Remaining work is research-grade: learning
+   the composite health-score weights from prognosis outcomes. The delivered
+   closed-loop behaviour (per-asset-type prognosis accuracy splits with per-type
+   guarded tuning, lead-time-informed tuning, battery-threshold tunables, and
+   mobile-asset monitoring) lives in current-implementation.md.
 
-
-## 4. Closed-loop monitoring policy
-
-- Learning composite health weights from prognosis outcomes, the way thresholds
-  are auto-tuned, remains open.
-- Per-asset-type tuning and additional tunables such as battery thresholds need
-  per-type accuracy splits in the prognosis log.
-- No policy currently consumes the lead-time distribution for automatic
-  threshold changes. Folding lead-time error into guarded tuning would be the
-  next closed-loop step after the reviewed tuned-profile flow.
-- Mobile drone predictive maintenance remains future monitoring work unless
-  monitoring policy is extended beyond the current stationary-service-task
-  behavior.
 
 ## 5. Experiment and tuning maturity
 
@@ -232,3 +219,21 @@ current-implementation.md. The residual open work is:
 - Rolling progress explanations are the per-pass trail and its aggregate stats;
   richer spatially-explicit explanations (remaining-geometry rendering,
   per-cluster coverage rollups) remain open.
+
+## 24. Closed-loop monitoring policy
+
+Delivered behavior lives in current-implementation.md: per-asset-type prognosis
+accuracy splits in the outcome log with per-type guarded tuning into the
+overlay's `assetTypeOverrides`; lead-time-informed tuning (a high service-task
+late share loosens the policy); battery-threshold tunables; and mobile-asset
+predictive monitoring via the `monitorMobileAssets` policy flag. The residual
+open work is:
+
+- Learning the composite health-score weights (`compositeWeightBattery`,
+  `compositeWeightHealth`, `compositeWeightService`, `compositeWeightDrift`)
+  from prognosis outcomes. Unlike the monotonic thresholds, four normalized
+  weights cannot be directed by a scalar false-positive/false-negative rate;
+  principled learning needs per-signal subscores logged at derivation time and
+  a small fitting step that separates escalated (truly needed) from withdrawn
+  (not needed) prognoses, so it stays research-grade rather than a guarded
+  bounded step.

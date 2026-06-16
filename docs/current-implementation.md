@@ -177,17 +177,20 @@ always reflect the registry, so capabilities cannot drift from the contracts.
    observed time per contract) are stamped onto the snapshot
    (`source_watermarks`). Degraded sources are reported per build and trended
    across runs (`snapshot/quality_trend.py`).
-4. Apply the stationary-equipment monitoring policy
-   (`snapshot/monitoring.py`): stationary assets (sensor stations, fixed
-   road/field equipment) with low battery, a battery drain trend projected
-   below threshold within the forecast horizon, degraded health, an overdue
-   service interval, a drifting metric (calibration), or a low composite
+4. Apply the equipment monitoring policy
+   (`snapshot/monitoring.py`): assets with low battery, a battery drain trend
+   projected below threshold within the forecast horizon, degraded health, an
+   overdue service interval, a drifting metric (calibration), or a low composite
    health score (weighted battery/health/service-due/drift signals; the
    weights and headrooms are profile-tunable next to the thresholds) yield
-   canonical service tasks anchored at their home location. Readings below
-   the policy's minimum confidence are ignored. Thresholds and task
-   attributes come from the profile's `monitoring` section, with
-   constant-backed defaults, per-asset-type overrides
+   canonical service tasks anchored at their home location. Stationary equipment
+   (sensor stations, fixed road/field equipment) is always covered; mobile
+   assets (prime movers, drones) are covered when the effective policy sets
+   `monitorMobileAssets` (globally or per asset type), so predictive maintenance
+   can extend to the fleet without disturbing domains that only monitor fixed
+   equipment. Readings below the policy's minimum confidence are ignored.
+   Thresholds and task attributes come from the profile's `monitoring` section,
+   with constant-backed defaults, per-asset-type overrides
    (`assetTypeOverrides`), and instance-level overrides by asset id
    (`assetOverrides`, a single critical station) layered on top; the
    guarded auto-tuning overlay (see corrective rescheduling) layers above
@@ -596,21 +599,29 @@ is recorded as a `CorrectiveAction` on the revision and counted in its score:
   (`service-escalated`).
 - **Prognosis accuracy feedback** (`stream/prognosis.py`): every revision
   appends its service-task outcomes to
-  `$DATA_DIR/quality/service-prognosis.jsonl`; accumulated false-positive /
-  false-negative rates above thresholds log monitoring-policy tuning
-  recommendations. With `MONITORING_AUTO_TUNE_ENABLED=1` the loop closes:
-  `snapshot/policy_tuning.py` adjusts `batteryForecastHorizonDays` and
-  `compositeHealthThreshold` in bounded steps (max relative step, absolute
-  clamps), written to a tuned-policy overlay under `$DATA_DIR/quality` with
-  a JSONL audit trail; the reviewed profile document is never modified and
-  deleting the overlay reverts to it. Conflicting signals (both rates above
-  alert) skip the adjustment but still audit.
+  `$DATA_DIR/quality/service-prognosis.jsonl`, with a per-asset-type breakdown
+  (`by_asset_type`) so accuracy can be split by station class. Accumulated
+  false-positive / false-negative rates above thresholds log monitoring-policy
+  tuning recommendations, globally and per asset type. With
+  `MONITORING_AUTO_TUNE_ENABLED=1` the loop closes: `snapshot/policy_tuning.py`
+  adjusts `batteryForecastHorizonDays`, `compositeHealthThreshold`, and
+  `batteryLowThresholdPct` in bounded steps (max relative step, absolute
+  clamps). The global rates plus the service-completion lead-time distribution
+  (a high share of service tasks finishing after their deadline loosens the
+  policy, the same direction as escalations) drive the global step; per-type
+  accuracy splits additionally tune each station class into the overlay's
+  `assetTypeOverrides`. All steps are written to a tuned-policy overlay under
+  `$DATA_DIR/quality` with a JSONL audit trail (one record per scope); the
+  reviewed profile document is never modified and deleting the overlay reverts
+  to it. Conflicting signals (a tighten and a loosen at once) skip that scope's
+  adjustment but still audit.
 - **Completion lead-time feedback** (`stream/lead_time.py`): `task.completed`
   events, fully complete `task.progress` events, and complete
   `work-progress` telemetry append one record per finished task to
   `$DATA_DIR/quality/completion-lead-times.jsonl`. Each record measures
   deadline lead and schedule error against the plan the task was executing
-  under; distribution stats are logged after stream runs.
+  under; distribution stats (including the service-task late share consumed by
+  guarded monitoring tuning) are logged after stream runs.
 
 Periodic plans get the same withdrawal/escalation record-keeping: each
 periodic run reconciles against its predecessor

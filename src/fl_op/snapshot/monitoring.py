@@ -239,10 +239,13 @@ def derive_service_tasks(
     policy: Optional[MonitoringPolicySpec] = None,
     calibration_needs: Optional[dict[str, list[str]]] = None,
 ) -> list[Task]:
-    """Derive one service task per stationary asset that needs attention.
+    """Derive one service task per asset that needs attention.
 
-    A stationary asset needs a service visit when any rule fires: battery at or
-    below threshold, battery drain trend projected below threshold within the
+    Stationary equipment is always covered; mobile assets (prime movers, drones)
+    are covered when the effective policy sets ``monitorMobileAssets`` (globally
+    or per asset type). An asset needs a service visit when any rule fires:
+    battery at or below threshold, battery drain trend projected below threshold
+    within the
     forecast horizon, unhealthy status, planned service interval exceeded, a
     drifting metric reported by the observation assessment
     (``calibration_needs``: asset id -> drifting metrics), or a composite
@@ -260,9 +263,16 @@ def derive_service_tasks(
     history = observation_history(observations)
     tasks: list[Task] = []
     for asset in assets:
-        if asset.mobility != AssetMobility.STATIONARY.value:
-            continue
         effective = policy.for_asset(asset.asset_type, asset.asset_id)
+        # Stationary equipment is always monitored; mobile assets (prime movers,
+        # drones) only when the effective policy opts in, so predictive
+        # maintenance can extend to the fleet without disturbing domains that
+        # only monitor fixed equipment.
+        if (
+            asset.mobility != AssetMobility.STATIONARY.value
+            and not effective.monitorMobileAssets
+        ):
+            continue
         drifting = calibration_needs.get(asset.asset_id, [])
         battery_now = _battery_reason(asset, history, effective)
         reasons = [
@@ -284,7 +294,7 @@ def derive_service_tasks(
             continue
         if not asset.home_depot_ref:
             logger.warning(
-                "Stationary asset %s needs service (%s) but has no anchor location; skipped",
+                "Asset %s needs service (%s) but has no anchor location; skipped",
                 asset.asset_id,
                 ",".join(reasons),
             )
@@ -312,5 +322,5 @@ def derive_service_tasks(
             )
         )
     if tasks:
-        logger.info("Monitoring derived %d service tasks for stationary assets", len(tasks))
+        logger.info("Monitoring derived %d service tasks", len(tasks))
     return tasks

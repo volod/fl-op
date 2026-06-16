@@ -69,3 +69,34 @@ def test_outcome_records_and_rates(tmp_path: pathlib.Path) -> None:
 
 def test_no_history_yields_empty_accuracy(tmp_path: pathlib.Path) -> None:
     assert prognosis_accuracy(tmp_path / "missing.jsonl") == {}
+
+
+def test_per_asset_type_splits_recorded_and_aggregated(tmp_path: pathlib.Path) -> None:
+    log = tmp_path / "prognosis.jsonl"
+    plan = _plan("rev-1", service_assignments=2, withdrawn=2, escalated=0)
+    # Active: service-sensor_0/1; withdrawn: service-withdrawn_0/1.
+    asset_types = {
+        "sensor_0": "PROBE",
+        "sensor_1": "PROBE",
+        "withdrawn_0": "PROBE",
+        "withdrawn_1": "GATE",
+    }
+    record = record_prognosis_outcomes(plan, log, asset_types)
+    assert record["by_asset_type"]["PROBE"] == {"active": 2, "withdrawn": 1, "escalated": 0}
+    assert record["by_asset_type"]["GATE"] == {"active": 0, "withdrawn": 1, "escalated": 0}
+
+    accuracy = prognosis_accuracy(log)
+    # PROBE: 2 active + 1 withdrawn observed -> fp 1/3; GATE: 1 withdrawn -> fp 1.0.
+    assert accuracy["by_asset_type"]["PROBE"]["false_positive_rate"] == pytest.approx(1 / 3)
+    assert accuracy["by_asset_type"]["GATE"]["false_positive_rate"] == pytest.approx(1.0)
+    # Global totals still present and unaffected by the split.
+    assert accuracy["n_observed"] == 4.0
+
+
+def test_no_asset_types_omits_the_split(tmp_path: pathlib.Path) -> None:
+    log = tmp_path / "prognosis.jsonl"
+    record = record_prognosis_outcomes(
+        _plan("rev-1", service_assignments=1, withdrawn=0, escalated=0), log
+    )
+    assert "by_asset_type" not in record
+    assert "by_asset_type" not in prognosis_accuracy(log)
