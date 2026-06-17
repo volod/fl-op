@@ -297,6 +297,11 @@ reproducibly-hashed planning snapshot, and optimizes it in both batch
 (periodic) and stream (rolling) mode.
 See [`docs/current-implementation.md`](current-implementation.md).
 
+To author a brand-new domain pack end to end (feasibility study, domain
+description methodology, mappings, profile, registry wiring, costing, and the
+validation ladder), follow the manual in
+[`docs/authoring-domain-contracts.md`](authoring-domain-contracts.md).
+
 ```bash
 # Check ODCS contracts have complete generation hints for a given format.
 .venv/bin/fl-op contracts check-generation --format avro   # or proto, es, parquet

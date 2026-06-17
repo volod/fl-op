@@ -131,6 +131,12 @@ rather than a semver-classified structural delta.
 
 ## Adding a New Domain
 
+For a complete, step-by-step authoring manual (feasibility study, domain
+description methodology, costing methods, glossary/thesaurus, and the full
+validation ladder), see
+[../authoring-domain-contracts.md](../authoring-domain-contracts.md). The summary
+below is the quick version.
+
 `contracts/domains/drone_logistics/` is the default runnable pack. It maps UGVs,
 UAVs, payload modules, drone operators, logistics hubs, delivery locations,
 restricted zones, delivery orders, mode-tagged travel links, weather, and cost
