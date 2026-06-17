@@ -1,0 +1,28 @@
+# Optional local infrastructure for fl-op integration.
+#
+# Redis backs the Redis Streams execution-event source
+# (EVENT_SOURCE_KIND=redis). Start it with:
+#
+#   docker compose up -d redis
+#
+# Then point the engine at the endpoint (and, optionally, run the test suite
+# against the real server instead of the in-memory fakeredis):
+#
+#   export EVENT_SOURCE_KIND=redis
+#   export EVENT_REDIS_URL=redis://localhost:6379/0
+#   export FL_OP_TEST_REDIS_URL=redis://localhost:6379/0   # tests on real Redis
+#
+# Persistence is disabled: this is a development event bus, not a store of
+# record (published plan/run artifacts remain the durable output).
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: fl-op-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

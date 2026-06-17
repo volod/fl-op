@@ -54,6 +54,9 @@ _TASK_AREA_BINDING = "task.areaHa"
 _OBSERVATION_METRIC_BINDING = "observation.metric"
 _OBSERVATION_VALUE_BINDING = "observation.value"
 _OBSERVATION_ENTITY_REF_BINDING = "observation.entityRef"
+# Arrival-time binding: event-derived observations are stamped with it so their
+# series orders by ingestion instead of falling back to source row order.
+_OBSERVATION_INGESTED_BINDING = "observation.ingestedAt"
 
 # task.progress payload fields: the absolute remaining work in the task's
 # work-quantity unit (exact, wins when present), or the completed share of the
@@ -407,12 +410,20 @@ class EventApplicator:
     def _remove_asset(self, sources: Sources, event: ExecutionEvent) -> None:
         self._remove_by_key(sources, event.entity_ref, "asset")
 
-    def _append_payload(self, sources: Sources, event: ExecutionEvent, entity: str) -> None:
+    def _append_payload(
+        self,
+        sources: Sources,
+        event: ExecutionEvent,
+        entity: str,
+        extra: Optional[dict[str, Any]] = None,
+    ) -> None:
         """Add (or correct) one row in the entity's source collection.
 
         Rows are upserted by the contract's key column: a later report with the
         same identifier replaces the earlier one, so out-of-order corrections
         (a re-sent reading with a fixed value) converge instead of duplicating.
+        ``extra`` fields are filled in only where the producer left them blank,
+        so a producer-supplied value always wins.
         """
         contracts = self._contracts_for(entity, sources)
         if not contracts:
@@ -423,6 +434,9 @@ class EventApplicator:
             )
             return
         payload = dict(event.payload)
+        for field, value in (extra or {}).items():
+            if not str(payload.get(field, "")):
+                payload[field] = value
         contract_id = contracts[0]
         key = self._key_field(contract_id)
         if key and key in payload:
@@ -437,8 +451,35 @@ class EventApplicator:
         self._append_payload(sources, event, "task")
 
     def _append_observation(self, sources: Sources, event: ExecutionEvent) -> None:
-        self._append_payload(sources, event, "observation")
+        self._append_payload(
+            sources, event, "observation",
+            extra=self._observation_ingested_extra(sources, event),
+        )
         self._derive_progress_from_telemetry(sources, event)
+
+    def _observation_ingested_extra(
+        self, sources: Sources, event: ExecutionEvent
+    ) -> Optional[dict[str, Any]]:
+        """Arrival timestamp to stamp on an event-derived observation row.
+
+        Keyed by the observation contract's ``ingestedAt`` source field so the
+        series orders by ingestion, not source row order. A producer that sets
+        the field in the payload keeps it (``_append_payload`` only fills blanks);
+        otherwise the event's ingested time, or its observed time as the
+        deterministic arrival proxy, is used.
+        """
+        ingested = event.ingested_at or event.observed_at
+        if not ingested:
+            return None
+        contracts = self._contracts_for("observation", sources)
+        if not contracts:
+            return None
+        binding = self._tables[contracts[0]].by_binding_path().get(
+            _OBSERVATION_INGESTED_BINDING
+        )
+        if binding is None:
+            return None
+        return {binding.source_field: ingested}
 
     def _derive_progress_from_telemetry(
         self, sources: Sources, event: ExecutionEvent

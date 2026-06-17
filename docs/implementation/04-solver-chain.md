@@ -92,7 +92,26 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    operator is not certified for is paired with a free qualified backup
    operator (recorded in the cluster's `task_operators` map and carried into
    its dispatch packages); only tasks no qualified operator can take are
-   dropped (`NO_AVAILABLE_OPERATOR`). Enforce material availability
+   dropped (`NO_AVAILABLE_OPERATOR`). A backup operator may serve several
+   clusters whose demand windows (the union of a cluster's task workable
+   windows) are time-disjoint, so one operator covers more work without
+   double-booking. When `OPERATOR_SHARING_SEQUENTIAL` is set and no free
+   (disjoint) backup remains, a scarce backup is instead shared across an
+   *overlapping* window: the contending clusters are stamped
+   (`shared_backup_operators`) and the pool solves them sequentially in value
+   order (`cluster_pool.py:_solve_sequential_groups`), feeding each the operator
+   intervals the earlier clusters actually committed as in-model operator breaks,
+   so the shared operator stays single-tasking. Each sharing group is a
+   connected component of clusters linked by a shared operator;
+   `OPERATOR_SHARING_GROUP_TIME_LIMIT_S` bounds a group's total solve time (split
+   across its clusters by a value x difficulty weight -- total penalty times a
+   model-size proxy of task count by vehicle count, floored -- so the search lands
+   on the clusters that are both valuable and hard rather than a trivially solved
+   one carrying a high penalty) so a large group cannot run unboundedly, and
+   independent groups (sharing no operator) run concurrently in the pool rather
+   than one after another. Off by default (clusters solve in
+   parallel and overlapping shares are refused); independent clusters are never
+   serialized. Enforce material availability
    (cumulative per-operation demand from the profile's `materialDemand`
    charged against depot inventory, highest penalty first ->
    `INSUFFICIENT_MATERIAL`). Material charging and reservations are one
@@ -137,11 +156,20 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    centralized `core/geometry.py` module: a `pyproj` geodesic engine configured
    as a sphere of mean Earth radius reproduces the legacy haversine results to
    floating-point noise while serving both scalar and vectorized call sites, the
-   geometric fallback speed is `FALLBACK_TRAVEL_SPEED_KMH` (env-configurable),
-   nearest-neighbor depot affinity uses a `scikit-learn` haversine `BallTree`,
-   and `shapely` point/linestring/bounding-box primitives back future map-based
-   interface control. Per-vehicle time matrices keep road and air travel
-   isolated. The selected objective is
+   geometric fallback speed is each prime mover's declared `travel_speed`
+   (defaulting to `FALLBACK_TRAVEL_SPEED_KMH`, env-configurable) so a genuinely
+   faster mover gets shorter no-network legs and `--objective time` can prefer it
+   -- network legs keep their declared, vehicle-independent times, so per-vehicle
+   speed differentiates exactly where the engine has no measured time to defer
+   to. The fallback leg also carries a per-mode circuity multiplier
+   (`travel_time.mode_circuity`): a ground mover (road or the unspecified `any`
+   default) scales the straight-line estimate by `GROUND_TRAVEL_CIRCUITY`
+   (env-configurable, default 1.3) to reflect real detours, while an air mover
+   (drone) flies direct at 1.0. Nearest-neighbor depot affinity uses a
+   `scikit-learn` haversine `BallTree`, and `shapely`
+   point/linestring/bounding-box primitives back future map-based interface
+   control. Per-vehicle time matrices keep road and air travel isolated and
+   price each mover's fallback legs at its own speed and mode circuity. The selected objective is
    `SolverParameters.optimization_objective`, exposed by `plan periodic`,
    `plan rolling`, and `demo` as `--objective cost|time`; `cost` is the
    default. Cost mode prices arcs per vehicle by summing every priced driver of
@@ -190,7 +218,14 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    no-overlap constraint requires one execution interval `[start, start +
    service]` to finish before the other starts; a dropped task is exempted
    through its active variable, so a shared operator forces parallel pairs into
-   series. `depends-on` precedence is
+   series. A *held* operator (carried/frozen on another assignment of a rolling
+   plan) also blocks its own tasks in-model: each of that operator's task
+   intervals must avoid the operator's busy windows, so a held operator is reused
+   only in a genuine gap -- the exact in-model time blocking prime movers and
+   implements already get as vehicle breaks (`SetBreakIntervalsOfVehicle`),
+   rather than the hold-aware allocation scoring alone it relied on before. (Two
+   clusters in the *same* solve contending for one operator are still scored, not
+   time-modelled, since clusters solve independently.) `depends-on` precedence is
    enforced in-model (a dependent cannot start before its predecessor
    finishes). Service durations are quantity-driven: the generic work
    quantity plus its unit feed the duration estimate (area is the legacy
@@ -264,8 +299,10 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    (`PREDECESSOR_UNSERVED`), so no plan dispatches work whose precondition was
    dropped. Every cluster solve yields a machine-readable telemetry record
    (`solver/solve_telemetry.py`: status, wall time, OR-Tools search status,
-   time-limit flag, objective values, LNS budget/delta, worker RSS); batch
-   runs write `solve_telemetry.json` and plan scores carry the summary.
+   time-limit flag, objective values, LNS budget/delta, worker RSS, and the
+   resource-conflict signal below); batch runs write `solve_telemetry.json` and
+   plan scores carry the summary (including a `binding_resources` tally over the
+   clusters that dropped tasks).
    Plan scores also record the selected `optimization_objective` plus
    completion-time KPIs (`total_completion_time_s`,
    `avg_completion_time_s`, `p95_completion_time_s`,
@@ -279,6 +316,22 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    conflicts; unassigned tasks record their cluster status and normalized
    infeasibility detail. Rolling revision diffs consume these maps for
    post-hoc explanations.
+   Each cluster also carries a primal resource-conflict attribution
+   (`solver/cluster/conflict.py`): OR-Tools' CP routing exposes no LP duals or
+   shadow prices, so instead of a marginal value the solve reads how hard each
+   routing dimension is pushed on the solved routes -- the Time dimension's
+   route-end cumulative over the horizon, each Load dimension's peak fill, and
+   the share of the fleet used -- and names the `binding_resource` behind any
+   dropped tasks by a fixed priority: `capacity:<material>` (a load dimension at
+   or above `RESOURCE_CONFLICT_TIGHT_UTILIZATION`), then `time` (routes at the
+   horizon), then `fleet` (every vehicle committed, no per-route dimension
+   tight), else `other` (a spare vehicle remains, so the drop is a
+   window/cost trade-off). A cluster with no solution attributes to
+   `solve_budget` (timed out) or `model_infeasible`. Capacity is ranked above the
+   always-saturated single-vehicle fleet count so the real physical limit is not
+   masked. The signal flows into the per-task attribution maps and the
+   revision-diff explanation. It is a heuristic over the primal solution, not an
+   exact dual; exact marginal attribution remains future research.
 
 Enforcement activates only through the adapters (an `EnforcementPolicy` built
 from the profile's enforced constraints); the raw batch `solve` pipeline is

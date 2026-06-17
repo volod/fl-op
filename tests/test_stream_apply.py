@@ -95,7 +95,40 @@ def test_observation_recorded_appends_reading(applicator: EventApplicator) -> No
         "observed_at": "2026-06-05T08:00:00+00:00",
     }
     applicator.apply(sources, _event(EVENT_OBSERVATION_RECORDED, entity_ref="sensor_1", payload=reading))
-    assert sources["sensor-readings"] == [reading]
+    # The reading is appended, stamped with an arrival time so its series orders
+    # by ingestion instead of source row order; the observed time is the proxy
+    # when the producer supplies none.
+    appended = sources["sensor-readings"][0]
+    assert {k: appended[k] for k in reading} == reading
+    assert appended["ingested_at"] == "2026-06-05T08:00:00Z"
+
+
+def test_observation_event_keeps_producer_ingested_at(applicator: EventApplicator) -> None:
+    sources = _sources()
+    reading = {
+        "reading_id": "reading_10", "sensor_id": "sensor_1", "metric": "battery-level",
+        "value": 12.0, "observed_at": "2026-06-05T08:00:00+00:00",
+        "ingested_at": "2026-06-05T08:00:30+00:00",  # producer-supplied arrival
+    }
+    applicator.apply(sources, _event(EVENT_OBSERVATION_RECORDED, entity_ref="sensor_1", payload=reading))
+    # A producer arrival time is never overwritten by the proxy.
+    assert sources["sensor-readings"][0]["ingested_at"] == "2026-06-05T08:00:30+00:00"
+
+
+def test_observation_event_uses_event_level_ingested_at(applicator: EventApplicator) -> None:
+    sources = _sources()
+    reading = {
+        "reading_id": "reading_11", "sensor_id": "sensor_1", "metric": "battery-level",
+        "value": 12.0, "observed_at": "2026-06-05T08:00:00+00:00",
+    }
+    event = ExecutionEvent(
+        event_id="evt-ingest", event_type=EVENT_OBSERVATION_RECORDED,
+        observed_at="2026-06-05T08:00:00+00:00", entity_ref="sensor_1",
+        payload=reading, ingested_at="2026-06-05T08:01:00+00:00",
+    )
+    applicator.apply(sources, event)
+    # The event's ingestion time wins over the observed-time proxy.
+    assert sources["sensor-readings"][0]["ingested_at"] == "2026-06-05T08:01:00+00:00"
 
 
 def test_entity_corrected_replaces_row_by_key(applicator: EventApplicator) -> None:

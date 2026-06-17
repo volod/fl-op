@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from fl_op.canonical.enums import ReasonCode
 from fl_op.core import constants
+from fl_op.solver.cluster.conflict import build_resource_conflict, no_solution_conflict
 from fl_op.solver.cluster.context import ClusterContext
 from fl_op.solver.cluster.infeasible import mark_all_infeasible, unserved_orders
 from fl_op.solver.cluster.penalties import (
@@ -47,8 +48,9 @@ _ROUTING_HORIZON_S = constants.ROUTING_HORIZON_S
 # Asset id -> [(start_epoch_s, end_epoch_s), ...] busy intervals from held
 # (frozen / carried-forward) assignments of a rolling plan. Covers prime
 # movers and related equipment (a routing vehicle is blocked by the union of
-# its pair's intervals) plus operators (consumed by hold-aware allocation
-# scoring, not by the routing model).
+# its pair's intervals as vehicle breaks) plus operators (each held operator's
+# windows block that operator's own tasks in-model; see
+# _block_held_operator_windows). Hold-aware allocation scoring also reads them.
 HeldWindows = dict[str, list[tuple[int, int]]]
 
 
@@ -150,7 +152,8 @@ def solve_routing_context(
         routing, time_dim, context, service_times, held_windows, now_epoch
     )
     _add_operator_no_overlap(
-        routing, manager, time_dim, cluster_dict, context, service_times, nodes
+        routing, manager, time_dim, cluster_dict, context, service_times, nodes,
+        held_windows, now_epoch,
     )
 
     time_limit_s = (
@@ -201,6 +204,10 @@ def solve_routing_context(
                 "detail": "OR-Tools found no feasible solution within time limit",
             }
         )
+        telemetry["resource_conflict"] = no_solution_conflict(
+            hit_time_limit=bool(telemetry["hit_time_limit"]),
+            n_unserved=len(context.task_ids),
+        )
         dispatch, infeasible = mark_all_infeasible(
             cluster_dict,
             ReasonCode.OPTIMIZATION_TRADEOFF,
@@ -247,6 +254,9 @@ def solve_routing_context(
             "n_unserved": len(infeasible),
             **lns_info,
         }
+    )
+    telemetry["resource_conflict"] = _extract_resource_conflict(
+        solution, routing, manager, time_dim, context, len(infeasible)
     )
     return dispatch_packages, infeasible, telemetry
 
@@ -782,8 +792,10 @@ def _add_operator_no_overlap(
     context: ClusterContext,
     service_times: list[list[int]],
     nodes: list[RoutingNode],
+    held_windows: Optional[HeldWindows] = None,
+    now_epoch: int = 0,
 ) -> None:
-    """Serialize tasks that share one operator across vehicles in the cluster.
+    """Serialize tasks that share one operator and block held operator calendars.
 
     The vehicle visit order already serializes tasks on the *same* vehicle, but
     a cluster can run several (prime, related) pairs in parallel while a single
@@ -794,6 +806,13 @@ def _add_operator_no_overlap(
     service duration, so the no-overlap is vehicle-aware; a dropped task is
     exempted through its active variable. Tasks without a resolved operator (no
     operator_ref and no backup) are left unconstrained.
+
+    A *held* operator (carried/frozen on another assignment of a rolling plan)
+    also blocks its own tasks in this cluster: each of that operator's task
+    intervals may not overlap the operator's busy windows, so a held operator is
+    reused only in a genuine gap -- the same exact in-model time blocking prime
+    movers and implements already get as vehicle breaks, rather than relying on
+    hold-aware allocation scoring alone.
     """
     if not service_times:
         return
@@ -828,6 +847,33 @@ def _add_operator_no_overlap(
                 solver.Add(
                     a_before_b + b_before_a + (1 - active_a) + (1 - active_b) >= 1
                 )
+
+    _block_held_operator_windows(solver, by_operator, held_windows, now_epoch)
+
+
+def _block_held_operator_windows(
+    solver: Any,
+    by_operator: dict[str, list[tuple[Any, Any, Any]]],
+    held_windows: Optional[HeldWindows],
+    now_epoch: int,
+) -> None:
+    """Forbid each held operator's tasks from running during its busy windows.
+
+    For every operator carrying held windows, each of its (active) task
+    intervals must finish before a window starts or start after it ends. A
+    single task still gets blocked (unlike the pairwise no-overlap, which needs
+    two), so a held operator's calendar is honoured even when it backs one task.
+    """
+    if not held_windows:
+        return
+    for operator_id, entries in by_operator.items():
+        for start_off, end_off in _held_window_offsets(
+            held_windows.get(operator_id, []), now_epoch
+        ):
+            for start_cumul, end_expr, active in entries:
+                before = (end_expr <= start_off).Var()
+                after = (start_cumul >= end_off).Var()
+                solver.Add(before + after + (1 - active) >= 1)
 
 
 def _reload_nodes_per_vehicle(context: ClusterContext) -> int:
@@ -895,6 +941,86 @@ def _make_reload_nodes_optional(
         routing.AddDisjunction([manager.NodeToIndex(node_idx)], 0)
 
 
+def _cluster_load_materials(context: ClusterContext) -> set[str]:
+    """The load materials any cluster task demands (one capacity dimension each)."""
+    return {
+        str(order.load_material or "")
+        for order in context.cluster_orders
+        if _load_kg(order.load_demand) > 0
+    }
+
+
+def _load_dimension_name(material: str) -> str:
+    return f"Load_{material}" if material else "Load"
+
+
+def _extract_resource_conflict(
+    solution: Any,
+    routing: Any,
+    manager: Any,
+    time_dim: Any,
+    context: ClusterContext,
+    n_unserved: int,
+) -> dict[str, Any]:
+    """Measure primal resource utilization off the solved routes (never raises).
+
+    Walks each used vehicle's route once, reading the Time dimension's route-end
+    cumulative and each Load dimension's peak cumulative, and normalizes them
+    into time / per-material capacity / fleet utilization for
+    ``build_resource_conflict``. Diagnostics must never fail a solve, so any
+    error yields an empty record.
+    """
+    try:
+        scale = constants.SCALE_MASS_UNITS_PER_KG
+        load_dims: dict[str, Any] = {}
+        for material in _cluster_load_materials(context):
+            try:
+                load_dims[material] = routing.GetDimensionOrDie(
+                    _load_dimension_name(material)
+                )
+            except Exception:  # noqa: BLE001 - a missing dimension just drops out
+                continue
+        n_used = 0
+        max_end_s = 0
+        capacity_utilization: dict[str, float] = {}
+        for rv_idx, rv in enumerate(context.routing_vehicles):
+            if not routing.IsVehicleUsed(solution, rv_idx):
+                continue
+            n_used += 1
+            index = routing.Start(rv_idx)
+            peak_load = {material: 0 for material in load_dims}
+            # Read the load cumulatives at every node, the end node included:
+            # for a depot-carried delivery the on-board mass lands on the leg
+            # into the end node, so stopping before it would read a flat zero.
+            while True:
+                for material, dim in load_dims.items():
+                    peak_load[material] = max(
+                        peak_load[material], solution.Value(dim.CumulVar(index))
+                    )
+                if routing.IsEnd(index):
+                    break
+                index = solution.Value(routing.NextVar(index))
+            max_end_s = max(max_end_s, solution.Value(time_dim.CumulVar(index)))
+            for material, dim in load_dims.items():
+                capacity_units = _compartment_capacity_kg(rv["prime"], material) * scale
+                if capacity_units > 0:
+                    capacity_utilization[material] = max(
+                        capacity_utilization.get(material, 0.0),
+                        peak_load[material] / capacity_units,
+                    )
+        time_util = max_end_s / _ROUTING_HORIZON_S if _ROUTING_HORIZON_S else 0.0
+        return build_resource_conflict(
+            n_unserved=n_unserved,
+            n_vehicles=len(context.routing_vehicles),
+            n_vehicles_used=n_used,
+            time_utilization=time_util,
+            capacity_utilization=capacity_utilization,
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostics must never fail a solve
+        logger.debug("Resource-conflict extraction failed: %s", exc)
+        return {}
+
+
 def _add_load_capacity_dimensions(
     routing: Any,
     manager: Any,
@@ -913,11 +1039,7 @@ def _add_load_capacity_dimensions(
     fixed to zero everywhere else - the cvrp-reload construction), so demand
     beyond one vehicle fill becomes extra trips instead of dropped tasks.
     """
-    materials = {
-        str(order.load_material or "")
-        for order in context.cluster_orders
-        if _load_kg(order.load_demand) > 0
-    }
+    materials = _cluster_load_materials(context)
     if not materials:
         return
     scale = constants.SCALE_MASS_UNITS_PER_KG
@@ -952,7 +1074,7 @@ def _add_load_capacity_dimensions(
             return demands[manager.IndexToNode(from_index)]
 
         demand_cb_idx = routing.RegisterUnaryTransitCallback(demand_callback)
-        name = f"Load_{material}" if material else "Load"
+        name = _load_dimension_name(material)
         routing.AddDimensionWithVehicleCapacity(
             demand_cb_idx,
             max_capacity if reload_node_idxs else 0,
@@ -1034,6 +1156,28 @@ def _add_precedence_constraints(
         )
 
 
+def _held_window_offsets(
+    raw_windows: list[tuple[int, int]],
+    now_epoch: int,
+) -> list[tuple[int, int]]:
+    """Clamp held busy intervals to horizon offsets and merge overlaps.
+
+    Shared by held prime-mover/implement breaks and held-operator no-overlap:
+    epoch-second windows become [start_off, end_off) offsets from the planning
+    origin, clipped to [0, horizon], with empty/out-of-range windows dropped.
+    """
+    from fl_op.solver.restrictions import merge_intervals
+
+    offsets = []
+    for start_epoch, end_epoch in raw_windows:
+        start_off = max(0, int(start_epoch) - now_epoch)
+        end_off = min(int(end_epoch) - now_epoch, _ROUTING_HORIZON_S)
+        if end_off <= 0 or start_off >= _ROUTING_HORIZON_S or end_off <= start_off:
+            continue
+        offsets.append((start_off, end_off))
+    return merge_intervals(offsets)
+
+
 def _add_held_vehicle_breaks(
     routing: Any,
     time_dim: Any,
@@ -1052,22 +1196,20 @@ def _add_held_vehicle_breaks(
     """
     if not held_windows:
         return
-    from fl_op.solver.restrictions import merge_intervals
 
     solver = routing.solver()
     for rv_idx, routing_vehicle in enumerate(context.routing_vehicles):
         vehicle_id = routing_vehicle["prime"].asset_id
         related_id = routing_vehicle["related"].asset_id
-        offsets = []
-        for start_epoch, end_epoch in [
-            *held_windows.get(vehicle_id, []),
-            *held_windows.get(related_id, []),
-        ]:
-            start_off = max(0, int(start_epoch) - now_epoch)
-            end_off = min(int(end_epoch) - now_epoch, _ROUTING_HORIZON_S)
-            if end_off <= 0 or start_off >= _ROUTING_HORIZON_S or end_off <= start_off:
-                continue
-            offsets.append((start_off, end_off))
+        # Overlapping holds (the pair held by one assignment) merge into one
+        # break each, so the dimension never sees duplicate breaks.
+        merged = _held_window_offsets(
+            [
+                *held_windows.get(vehicle_id, []),
+                *held_windows.get(related_id, []),
+            ],
+            now_epoch,
+        )
         intervals = [
             solver.FixedDurationIntervalVar(
                 start_off,
@@ -1076,9 +1218,7 @@ def _add_held_vehicle_breaks(
                 False,
                 f"held_{vehicle_id}_{seq}",
             )
-            # Overlapping holds (the pair held by one assignment) merge into
-            # one break each, so the dimension never sees duplicate breaks.
-            for seq, (start_off, end_off) in enumerate(merge_intervals(offsets))
+            for seq, (start_off, end_off) in enumerate(merged)
         ]
         if intervals:
             time_dim.SetBreakIntervalsOfVehicle(

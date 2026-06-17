@@ -216,3 +216,9 @@ register_event_source(
     _kafka_event_source,
     uses_dedup_store=True,
 )
+
+# Import built-in optional adapters last so their factories self-register. The
+# import is cheap (each defers its client library to first use), and importing
+# here (rather than from each module's top) avoids a partial-module cycle. New
+# event clients register the same way.
+from fl_op.stream import redis_stream as _redis_stream  # noqa: E402,F401  (registration)

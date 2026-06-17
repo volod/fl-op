@@ -45,6 +45,10 @@ class ClusterSpec(TypedDict, total=False):
     # task_id -> backup operator asset_id for tasks the cluster operator is
     # not certified for (filled by qualification enforcement)
     task_operators: dict[str, str]
+    # backup operator ids this cluster shares with another cluster over an
+    # overlapping window (OPERATOR_SHARING_SEQUENTIAL only); the pool serializes
+    # clusters that share one and feeds forward the committed operator intervals.
+    shared_backup_operators: list[str]
     # sum of task penalty_per_day for priority-ordering
     total_penalty_per_day: Required[float]
 

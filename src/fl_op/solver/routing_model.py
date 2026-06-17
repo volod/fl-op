@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fl_op.core.constants import RELATED_MATERIAL_FILL_RATIO
+from fl_op.core.constants import FALLBACK_TRAVEL_SPEED_KMH
 from fl_op.core.constants import RATE_TYPE_FUEL
 from fl_op.core.geometry import haversine_km
 from fl_op.solver.cost_rates import (
@@ -20,6 +21,7 @@ from fl_op.solver.travel_time import (
     _estimate_operation_seconds,
     travel_seconds,
     travel_mode_for_vehicle,
+    vehicle_fallback_speed_kmh,
 )
 
 # Routing node kinds. The depot is always node 0; each order contributes its
@@ -117,14 +119,15 @@ def build_time_matrix(
     nodes: list[RoutingNode],
     travel_lookup: Optional[TravelLookup] = None,
     travel_mode: Optional[str] = None,
+    fallback_speed_kmh: float = FALLBACK_TRAVEL_SPEED_KMH,
 ) -> list[list[int]]:
     """Pairwise arc times: network shortest path where one exists, haversine
-    otherwise."""
+    otherwise. ``fallback_speed_kmh`` prices the haversine leg per vehicle."""
     return [
         [
             travel_seconds(
                 a.location_ref, b.location_ref, a.lat, a.lon, b.lat, b.lon,
-                travel_lookup, travel_mode,
+                travel_lookup, travel_mode, fallback_speed_kmh,
             )
             for b in nodes
         ]
@@ -137,12 +140,19 @@ def build_vehicle_time_matrices(
     routing_vehicles: list[dict[str, Any]],
     travel_lookup: Optional[TravelLookup] = None,
 ) -> list[list[list[int]]]:
-    """Pairwise arc times per routing vehicle mode."""
+    """Pairwise arc times per routing vehicle.
+
+    Each vehicle's matrix uses its own travel mode (selecting the matching
+    network) and its own declared travel speed for the no-network haversine
+    legs, so a genuinely faster mover gets shorter fallback legs and
+    ``--objective time`` can prefer it.
+    """
     return [
         build_time_matrix(
             nodes,
             travel_lookup,
             travel_mode_for_vehicle(rv["prime"]),
+            vehicle_fallback_speed_kmh(rv["prime"]),
         )
         for rv in routing_vehicles
     ]

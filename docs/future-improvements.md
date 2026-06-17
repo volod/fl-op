@@ -12,20 +12,13 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-6. Serving and integration hardening. Add OIDC/JWT validation, route-level
-   authorization, token rotation, audit/rate-limit hooks, object-store
-   artifact backends, and additional durable event clients.
-7. Solver explanation research. Investigate exact resource-conflict
-   attribution through richer solver instrumentation or an alternative model
-   that exposes dual/shadow-price signals.
-8. Solver model fidelity. Block a held operator's busy calendar as in-model
-   breaks across clusters (as prime movers and implements already are), and
-   thread per-vehicle travel speed and travel mode into the fallback
-   travel-time estimate so `--objective time` can prefer genuinely faster
-   movers.
-9. Event visibility completeness. Emit `ingested-at` from every source and
-   domain pack (a series missing it on any reading falls back to row order
-   today) and extend event watermarks to cover `entity.corrected`.
+9. Event visibility completeness. Remaining work is incremental: producers
+   stamping a true `ingested-at` on events (the event path falls back to the
+   observed time as the arrival proxy today), with the source-row-order fallback
+   staying as the defensive net for any observation source that does not declare
+   the `ingestedAt` binding. The delivered visibility (file and event sources
+   emitting `ingested-at`, and `entity.corrected` advancing its contract's
+   watermark) lives in current-implementation.md.
 10. Multi-domain extensibility and packaging. Add plugin discovery, versioned
     generator packaging, and generator capability declaration, and key
     generated schema and evolution-baseline filenames off versioned
@@ -66,55 +59,45 @@ Recommended order, optimized for dependency reuse and low rework:
    non-filesystem storage. The delivered maturity (perturbed-resolve real
    instability measurement, CPU/RSS-aware tuning parallelism, and a fitted
    worker-memory coefficient model) lives in current-implementation.md.
+26. Serving and integration hardening. Remaining work is incremental, not a
+   blocking gap: durable cross-instance rate limiting and a shared audit sink at
+   the ingress layer, JWT revocation (a `jti` denylist), wiring publishers to
+   write newly published runs through the object-store commit marker (and a
+   networked object-store client behind the existing protocol), and further
+   event-client adapter packages.
+27. Solver explanation research. Remaining work is research-grade: exact marginal
+   (shadow-price) attribution via a finite-difference resource-relaxation
+   re-solve probe or an LP/MIP relaxation that exposes duals, and per-task
+   conflict attribution for window/precedence-driven drops. The delivered primal
+   resource-conflict attribution (a binding-resource signal from
+   routing-dimension utilization) lives in current-implementation.md.
 
 
-## 6. Serving and integration hardening
-
-- Serving does not yet provide OIDC/JWT validation, per-route authorization,
-  token rotation, audit logging, or rate limiting; those still belong at an
-  ingress/proxy layer or in a future auth provider.
-- Artifact manifests and namespace-versioned cache invalidation now exist
-  (`fl_op/provenance/`), and the read-only artifact registry indexes runs and
-  caches under the data root. A true object-store backend with cross-writer
-  consistency semantics for newly published runs remains open.
-- Additional production event clients still need small adapter packages that
-  register their factory and opt into deduplication when the source can
-  redeliver.
-
-## 7. Solver explanation research
-
-- Solver attribution is still the routing conflict surface: cluster status,
-  objective, LNS delta, time-limit state, and same-cluster unserved tasks.
-  OR-Tools routing does not expose LP-style duals or exact shadow prices, so
-  exact resource-conflict attribution remains approximate.
-
-## 8. Solver model fidelity
-
-- Operator time is now modelled inside routing for operators shared across
-  vehicles within a single cluster (vehicle-aware no-overlap reified
-  constraints). Still open: a held operator's busy calendar is not blocked as
-  in-model breaks the way prime movers and implements are, so cross-cluster
-  operator gap reuse still relies on allocation scoring rather than exact
-  in-model time blocking.
-- Prime-mover travel speed does not affect routing travel time. When no network
-  lookup is available, `travel_time.py` derives leg duration from the centralized
-  `core/geometry.travel_time_seconds` helper at the fixed `FALLBACK_TRAVEL_SPEED_KMH`
-  fallback speed, so travel time is geometry-fixed and identical across vehicles
-  regardless of `PrimeMoverRow.travel_speed`. The only per-vehicle
-  completion-time differentiator today is service time, driven by implement
-  `working_width` and `max_speed`. Investigate threading per-vehicle travel speed
-  (and travel mode) into the fallback travel-time estimate so `--objective time`
-  can prefer genuinely faster movers, not just faster implements.
 
 ## 9. Event visibility completeness
 
 Effect catalog:
 [reference/model-world-divergence.md](reference/model-world-divergence.md).
 
-- Other sources and other domain packs do not emit `ingested-at`, and a series
-  with any reading missing it falls back to row order. Event watermarks skip
-  `entity.corrected` because its target contract is resolved by key column,
-  not declared.
+Delivered behavior lives in current-implementation.md: both observation source
+packs (agricultural sensor-readings, roadside inspection-rounds) bind
+`ingestedAt`, and event-derived observations (`observation.recorded`) are now
+stamped with the observation contract's `ingestedAt` source field -- the
+producer payload value, else the event's `ingested_at`, else its observed time
+as the deterministic arrival proxy -- so a series mixing file readings and live
+events orders by ingestion instead of source row order
+(`stream/apply.py:_observation_ingested_extra`). Event watermarks already cover
+`entity.corrected`: absent from the declared event-to-entity map, it resolves
+its target contract by key column and advances that contract's watermark from
+`_upsert_entity`. The residual open work is:
+
+- The event-derived arrival time falls back to the observed time when neither
+  the producer payload nor the event carries an explicit `ingested_at`; a true
+  arrival timestamp (and arrival-regression detection for purely event-fed
+  series) needs producers to stamp it.
+- A new domain pack's observation source must declare the `ingestedAt` binding;
+  the source-row-order fallback remains the defensive net for any source that
+  does not.
 
 ## 10. Multi-domain extensibility and packaging
 
@@ -243,3 +226,52 @@ hardcoded constants once enough feedback accrues. The residual open work is:
 - Reviewed tuned overlays (solver-parameter and monitoring-policy) are still
   filesystem-only; sharing them over non-filesystem (object-store) storage
   remains open, tied to the object-store artifact backend (item 6).
+
+## 26. Serving and integration hardening
+
+Delivered behavior lives in current-implementation.md: the serving security
+gateway (static-token rotation and OIDC/JWT authentication, per-route scope
+authorization, an opt-in in-process rate limiter, and per-request audit
+logging), the commit-marker object-store artifact backend with run
+materialization, and the Redis Streams event-client adapter. The residual open
+work is:
+
+- Auth is per-instance and additive. The in-process rate limiter and the audit
+  sink are local to one process, so durable cross-instance rate quotas and a
+  shared audit store still belong at an ingress/proxy or external service. The
+  static authenticator's accept-set rotation cannot revoke a token before its
+  natural expiry, and JWT validation has no `jti` denylist.
+- The object-store backend is read-side: it serves commit-marked runs and
+  materializes them locally, but the planning/publication pipeline still writes
+  runs to the filesystem. The built-in client is the filesystem-backed
+  reference; a networked client still has to be added behind the
+  `ObjectStoreClient` protocol (no vendor SDK is bundled). Wiring publishers to
+  write through `publish_run` (so newly published runs land in the object store
+  behind the marker) remains open, as do materialization eviction/TTL and
+  large-object streaming.
+- More production event clients (NATS, RabbitMQ, a cloud pub/sub, ...) still
+  need their own adapter packages following the broker SPI, and poison messages
+  are acknowledged-and-skipped rather than routed to a
+  dead-letter queue.
+
+## 27. Solver explanation research
+
+Delivered behavior lives in current-implementation.md: per-cluster primal
+resource-conflict attribution (`solver/cluster/conflict.py`) that reads the
+solved routes' Time/Load dimension utilization and fleet usage and names the
+`binding_resource` behind dropped tasks (`capacity:<material>` / `time` /
+`fleet` / `other`, or `solve_budget` / `model_infeasible` when no solution is
+found), threaded into the per-task attribution maps, the revision-diff
+explanation, and a `binding_resources` telemetry tally. The residual open work
+is research-grade:
+
+- The attribution is a heuristic over aggregate primal utilization, not an exact
+  marginal value. Exact resource-conflict attribution needs either a
+  finite-difference probe (re-solve the cluster with one resource marginally
+  relaxed -- an added vehicle, an extended horizon, more capacity -- and read the
+  served-count/objective delta as the empirical shadow price) or an alternative
+  LP/MIP relaxation whose dual values expose shadow prices directly. OR-Tools' CP
+  routing exposes neither, so both remain open.
+- Drops that no aggregate dimension explains are attributed to `other`; pinning
+  the specific binding constraint (a particular time window or precedence edge)
+  for an individual dropped task is not modelled.

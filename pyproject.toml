@@ -30,6 +30,14 @@ dependencies = [
 broker = [
     "confluent-kafka>=2.5",
 ]
+# Redis Streams event-bus ingestion (EVENT_SOURCE_KIND=redis).
+redis = [
+    "redis>=5.0",
+]
+# OIDC/JWT validation for the serving API (SERVE_AUTH_MODE=oidc).
+auth = [
+    "pyjwt[crypto]>=2.8",
+]
 
 [project.scripts]
 fl-op = "fl_op.main:main"
@@ -46,4 +54,10 @@ dev = [
     "pytest>=8.0",
     "pytest-timeout>=2.3",
     "httpx2>=0.1",
+    # Exercises the OIDC/JWT serving auth path (the [auth] extra) in tests.
+    "pyjwt[crypto]>=2.8",
+    # Exercises the Redis Streams event client (the [redis] extra) against an
+    # in-memory fakeredis server; set FL_OP_TEST_REDIS_URL to test a real one.
+    "redis>=5.0",
+    "fakeredis>=2.21",
 ]

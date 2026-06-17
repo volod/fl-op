@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from fl_op.canonical.enums import ReasonCode, ReservationStatus
 from fl_op.core.constants import (
     MATERIAL_INVENTORY_CANONICAL_UNIT,
+    OPERATOR_SHARING_SEQUENTIAL,
     ROUTING_HORIZON_S,
 )
 from fl_op.solver.task_relations import parse_time_windows
@@ -294,6 +295,13 @@ def apply_operator_qualification(
     so it cannot be silently double-booked). An operator is reusable across
     clusters whose demand windows are disjoint, and stays single-use whenever
     windows are unknown -- matching the prior behaviour in that degenerate case.
+
+    With ``OPERATOR_SHARING_SEQUENTIAL`` a scarce backup operator with no free
+    (disjoint) candidate may instead be shared across an *overlapping* window;
+    the contending clusters are stamped (``shared_backup_operators``) so the pool
+    serializes them and the routing blocks each one with the intervals the
+    earlier clusters actually committed, keeping the operator single-tasking
+    without losing the share.
     """
     free_capacity = free_capacity or {}
     infeasible: list[InfeasibleOrder] = []
@@ -306,6 +314,13 @@ def apply_operator_qualification(
     }
     # Per backup operator, the merged windows it is already committed to.
     backup_busy: dict[str, list[tuple[int, int]]] = {}
+    allow_overlap = OPERATOR_SHARING_SEQUENTIAL
+    # Backup operator -> clusters claiming it, and the subset claimed across an
+    # overlapping window. Clusters that share an overlap-claimed operator must
+    # solve sequentially (see cluster_pool), so they are stamped after the pass.
+    operator_claimants: dict[str, list[str]] = {}
+    operator_overlap: set[str] = set()
+    clusters_by_id = {c["cluster_id"]: c for c in clusters}
     for cluster in clusters:
         if not cluster.get("allocated_prime_related") and not cluster.get("operator_ref"):
             continue
@@ -323,20 +338,27 @@ def apply_operator_qualification(
                 needs_backup.setdefault(operation, []).append(task_id)
         # Claim one backup per operation, honouring time-disjoint sharing.
         cluster_backups: dict[str, str] = {}
+        cluster_id = cluster["cluster_id"]
         for operation, task_ids in needs_backup.items():
             demand = _operator_demand_window(
                 (order_index.get(t) for t in task_ids), now_epoch, horizon_end
             )
-            backup_id = _claim_backup_operator(
+            backup_id, is_overlap = _claim_backup_operator(
                 operation,
                 operators_by_id,
                 main_claimed,
                 backup_busy,
                 demand,
                 free_capacity,
+                allow_overlap,
             )
             if backup_id is not None:
                 cluster_backups[operation] = backup_id
+                claimants = operator_claimants.setdefault(backup_id, [])
+                if cluster_id not in claimants:
+                    claimants.append(cluster_id)
+                if is_overlap:
+                    operator_overlap.add(backup_id)
         # Second pass: assign and record infeasible tasks.
         task_operators: dict[str, str] = {}
         kept_ids: list[str] = []
@@ -362,6 +384,17 @@ def apply_operator_qualification(
         cluster["task_ids"] = kept_ids
         if task_operators:
             cluster["task_operators"] = task_operators
+    # Stamp every cluster contending for an overlap-shared backup operator with
+    # that operator id, so the pool serializes the contending clusters and feeds
+    # each the operator intervals the earlier ones actually committed.
+    for operator_id in operator_overlap:
+        for claimant_id in operator_claimants.get(operator_id, []):
+            claimant = clusters_by_id.get(claimant_id)
+            if claimant is None:
+                continue
+            shared = claimant.setdefault("shared_backup_operators", [])
+            if operator_id not in shared:
+                shared.append(operator_id)
     if infeasible:
         logger.info("Operator qualification excluded %d tasks", len(infeasible))
     return infeasible
@@ -426,28 +459,40 @@ def _claim_backup_operator(
     backup_busy: dict[str, list[tuple[int, int]]],
     demand: list[tuple[int, int]],
     free_capacity: dict[str, float],
-) -> Optional[str]:
-    """Claim the freest certified operator free over the demand window.
+    allow_overlap: bool = False,
+) -> tuple[Optional[str], bool]:
+    """Claim the freest certified operator for the demand window.
 
-    Excludes cluster prime operators and any operator already committed to an
-    overlapping window. On success the operator's busy calendar absorbs the
-    demand window so a later cluster can only reuse it over disjoint time.
+    Excludes cluster prime operators. Prefers an operator free over the demand
+    window (disjoint from its existing commitments); the freest such wins. When
+    none is free and ``allow_overlap`` is set, falls back to the freest operator
+    already committed to an overlapping window -- an *overlap share*, valid only
+    because the contending clusters are then solved sequentially so the routing
+    blocks the actual committed intervals. The operator's busy calendar absorbs
+    the demand window either way. Returns ``(operator_id, is_overlap_share)``.
     """
-    best_id: Optional[str] = None
-    best_free = -1.0
+    free_best: Optional[str] = None
+    free_best_score = -1.0
+    overlap_best: Optional[str] = None
+    overlap_best_score = -1.0
     for operator_id, operator in operators_by_id.items():
         if operator_id in main_claimed:
             continue
         if operation not in ops_set(operator.certified_operations):
             continue
-        if _intervals_overlap(backup_busy.get(operator_id, []), demand):
-            continue
         free = free_capacity.get(operator_id, 1.0)
-        if free > best_free:
-            best_id, best_free = operator_id, free
-    if best_id is not None:
-        backup_busy[best_id] = _merge_busy(backup_busy.get(best_id, []) + demand)
-    return best_id
+        if _intervals_overlap(backup_busy.get(operator_id, []), demand):
+            if free > overlap_best_score:
+                overlap_best, overlap_best_score = operator_id, free
+        elif free > free_best_score:
+            free_best, free_best_score = operator_id, free
+
+    chosen, is_overlap = (free_best, False)
+    if chosen is None and allow_overlap:
+        chosen, is_overlap = (overlap_best, True)
+    if chosen is not None:
+        backup_busy[chosen] = _merge_busy(backup_busy.get(chosen, []) + demand)
+    return chosen, is_overlap
 
 
 # -- required-material-available ---------------------------------------------------

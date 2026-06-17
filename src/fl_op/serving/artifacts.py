@@ -59,5 +59,18 @@ class FilesystemArtifactStore:
         return path
 
 
-def default_artifact_store() -> FilesystemArtifactStore:
-    return FilesystemArtifactStore()
+def default_artifact_store() -> ArtifactStore:
+    """Build the configured artifact backend.
+
+    ``filesystem`` (default) reads runs straight off SERVE_ARTIFACT_ROOT/DATA_DIR;
+    ``object-store`` reads through an object store and serves only commit-marked
+    runs (see ``serving/objectstore.py``).
+    """
+    backend = (constants.SERVE_ARTIFACT_BACKEND or "filesystem").strip().lower()
+    if backend == "filesystem":
+        return FilesystemArtifactStore()
+    if backend == "object-store":
+        from fl_op.serving.objectstore import build_object_store_from_constants
+
+        return build_object_store_from_constants()
+    raise ValueError(f"unknown SERVE_ARTIFACT_BACKEND '{backend}'")

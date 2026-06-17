@@ -258,7 +258,12 @@ def test_observation_correction_upserts_by_reading_id() -> None:
         payload=corrected,
     )
     applicator.apply(sources, event)
-    assert sources["sensor-readings"] == [corrected]
+    # Upserted by reading_id (one row, corrected value) and stamped with an
+    # arrival time so the series orders by ingestion, not source row order.
+    assert len(sources["sensor-readings"]) == 1
+    row = sources["sensor-readings"][0]
+    assert row["reading_id"] == "r-1" and row["value"] == 30.0
+    assert row["ingested_at"] == "2026-06-05T08:00:00Z"
 
 
 def test_events_within_convergence_window_coalesce() -> None:

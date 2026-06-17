@@ -49,6 +49,10 @@ class ExecutionEvent:
     observed_at: str
     entity_ref: str
     payload: dict[str, Any]
+    # When the platform saw the event, distinct from observed_at (when it
+    # happened). Optional: producers that stamp it let event-derived
+    # observations order by arrival; absent, the observed time is the proxy.
+    ingested_at: str = ""
 
 
 def parse_event(record: dict[str, Any]) -> ExecutionEvent:
@@ -68,6 +72,7 @@ def parse_event(record: dict[str, Any]) -> ExecutionEvent:
         observed_at=record.get("observed_at", ""),
         entity_ref=record.get("entity_ref", ""),
         payload=payload,
+        ingested_at=record.get("ingested_at", ""),
     )
 
 

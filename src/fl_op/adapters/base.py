@@ -110,9 +110,11 @@ def build_solver_attribution(
 
     OR-Tools routing does not expose LP duals for the CP routing model, so the
     actionable attribution comes from the solver's conflict surface: cluster
-    status, routing objective, LNS delta, time-limit state, and tasks dropped in
-    the same cluster. Revision-diff reporting consumes this map to explain why
-    a changed assignment moved without scraping logs.
+    status, routing objective, LNS delta, time-limit state, tasks dropped in the
+    same cluster, and the primal resource-conflict signal naming the routing
+    dimension running tightest behind those drops (time horizon, load capacity,
+    or fleet; see solver/cluster/conflict.py). Revision-diff reporting consumes
+    this map to explain why a changed assignment moved without scraping logs.
     """
     telemetry_by_cluster = {
         str(record.get("cluster_id", "")): record for record in cluster_telemetry
@@ -132,6 +134,7 @@ def build_solver_attribution(
         task_id = str(record.get("task_id", ""))
         cluster_id = str(record.get("cluster_id", ""))
         telemetry = telemetry_by_cluster.get(cluster_id, {})
+        resource_conflict = telemetry.get("resource_conflict") or {}
         conflicts = [
             item
             for item in unserved_by_cluster.get(cluster_id, [])
@@ -149,6 +152,8 @@ def build_solver_attribution(
             "n_cluster_tasks": telemetry.get("n_tasks", 0),
             "n_unserved_in_cluster": telemetry.get("n_unserved", 0),
             "estimated_margin_eur": record.get("estimated_margin_eur", 0.0),
+            "binding_resource": resource_conflict.get("binding_resource"),
+            "resource_conflict": resource_conflict,
             "conflicts": conflicts,
         }
 
@@ -157,6 +162,7 @@ def build_solver_attribution(
         task_id = str(record.get("task_id", ""))
         cluster_id = str(record.get("cluster_id", ""))
         telemetry = telemetry_by_cluster.get(cluster_id, {})
+        resource_conflict = telemetry.get("resource_conflict") or {}
         unassigned[task_id] = {
             "source": "ortools-routing",
             "cluster_id": cluster_id,
@@ -166,6 +172,8 @@ def build_solver_attribution(
             "hit_time_limit": bool(telemetry.get("hit_time_limit", False)),
             "reason_code": record.get("reason_code", ""),
             "detail": record.get("detail", ""),
+            "binding_resource": resource_conflict.get("binding_resource"),
+            "resource_conflict": resource_conflict,
         }
     return assignments, unassigned
 

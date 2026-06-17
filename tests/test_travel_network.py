@@ -2,9 +2,21 @@
 
 import pathlib
 
+from fl_op.core.constants import AIR_TRAVEL_CIRCUITY, GROUND_TRAVEL_CIRCUITY
 from fl_op.solver.routing_model import build_node_table, build_time_matrix
-from fl_op.solver.travel_time import _haversine_s, build_travel_lookup, travel_seconds
+from fl_op.solver.travel_time import (
+    _haversine_s,
+    build_travel_lookup,
+    mode_circuity,
+    travel_seconds,
+)
 from fl_op.solver.types import SiteRow, TaskRow, TravelLinkRow
+
+
+def test_mode_circuity_air_is_direct_ground_detours():
+    assert mode_circuity("air") == AIR_TRAVEL_CIRCUITY
+    for ground in ("road", "any", None, "", "unknown"):
+        assert mode_circuity(ground) == GROUND_TRAVEL_CIRCUITY
 
 
 def _link(from_ref: str, to_ref: str, seconds: float, link_id: str = "l0") -> TravelLinkRow:
@@ -49,12 +61,22 @@ class TestTravelLookup:
 
     def test_unknown_pair_falls_back_to_haversine(self):
         lookup = {("d0", "f0"): 1234}
-        expected = _haversine_s(48.5, 32.0, 48.9, 32.4)
+        # An unknown pair takes the geometric fallback with ground circuity (the
+        # default no-mode leg follows roads/tracks, not a straight line).
+        expected = _haversine_s(48.5, 32.0, 48.9, 32.4, circuity=GROUND_TRAVEL_CIRCUITY)
         assert travel_seconds("d0", "f1", 48.5, 32.0, 48.9, 32.4, lookup) == expected
 
-    def test_no_lookup_is_pure_haversine(self):
-        expected = _haversine_s(48.5, 32.0, 48.9, 32.4)
+    def test_no_lookup_falls_back_to_ground_circuity_haversine(self):
+        expected = _haversine_s(48.5, 32.0, 48.9, 32.4, circuity=GROUND_TRAVEL_CIRCUITY)
         assert travel_seconds("d0", "f0", 48.5, 32.0, 48.9, 32.4, None) == expected
+
+    def test_air_mode_fallback_flies_direct(self):
+        # An air leg with no network link is straight-line (circuity 1.0), so a
+        # drone's fallback is shorter than a ground mover's over the same span.
+        ground = travel_seconds("d0", "f0", 48.5, 32.0, 48.9, 32.4, None, "any")
+        air = travel_seconds("d0", "f0", 48.5, 32.0, 48.9, 32.4, None, "air")
+        assert air == _haversine_s(48.5, 32.0, 48.9, 32.4)
+        assert air < ground
 
     def test_mode_specific_links_do_not_leak_between_road_and_air(self):
         lookup = build_travel_lookup(
@@ -262,7 +284,10 @@ class TestNodeGeometry:
         field_map = {"f0": self._field("f0", 48.9, 32.4)}
         nodes = build_node_table(orders, field_map, 48.5, 32.0, "d0")
         matrix = build_time_matrix(nodes, {})
-        assert matrix[0][1] == _haversine_s(48.5, 32.0, 48.9, 32.4)
+        # No mode given -> ground circuity on the geometric fallback leg.
+        assert matrix[0][1] == _haversine_s(
+            48.5, 32.0, 48.9, 32.4, circuity=GROUND_TRAVEL_CIRCUITY
+        )
 
     def test_pickup_resolves_against_location_outside_site_table(self):
         """A pickup at a hub/depot resolves to that hub's coordinates, not the

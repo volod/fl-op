@@ -19,15 +19,19 @@ import ipaddress
 import json
 import logging
 import pathlib
-import secrets
 from enum import Enum
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from fl_op.core import constants
 from fl_op.serving.artifacts import ArtifactStore, default_artifact_store
+from fl_op.serving.security import (
+    SCOPE_FEASIBILITY,
+    SCOPE_PLANS_READ,
+    SecurityGateway,
+    build_gateway,
+)
 from fl_op.solver.query_pipeline import evaluate_query
 
 logger = logging.getLogger(__name__)
@@ -144,36 +148,17 @@ def _resolve_latest_artifact_dir(
     return store.local_path(candidate)
 
 
-def _auth_dependency(token: str):
-    async def require_auth(
-        authorization: str | None = Header(default=None),
-    ) -> None:
-        if not token:
-            return
-        scheme, _, supplied = (authorization or "").partition(" ")
-        if scheme.lower() != "bearer" or not supplied:
-            raise HTTPException(
-                status_code=401,
-                detail="missing bearer token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        if not secrets.compare_digest(supplied, token):
-            raise HTTPException(
-                status_code=401,
-                detail="invalid bearer token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-    return require_auth
-
-
 def create_app(
     artifact_store: ArtifactStore | None = None,
     auth_token: str | None = None,
+    security: SecurityGateway | None = None,
 ) -> FastAPI:
     store = artifact_store or default_artifact_store()
-    token = constants.SERVE_AUTH_TOKEN if auth_token is None else auth_token
-    protected = [Depends(_auth_dependency(token))]
+    gateway = security or build_gateway(auth_token)
+    # Plan retrieval requires plans:read; feasibility evaluation requires its own
+    # scope so a read-only client cannot drive solves. Health stays public.
+    plans_read = [Depends(gateway.requires(SCOPE_PLANS_READ))]
+    feasibility_write = [Depends(gateway.requires(SCOPE_FEASIBILITY))]
     app = FastAPI(
         title="fl-op serving API",
         description=(
@@ -185,11 +170,11 @@ def create_app(
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.get("/plans/{mode}", dependencies=protected)
+    @app.get("/plans/{mode}", dependencies=plans_read)
     async def list_plans(mode: PlanMode) -> dict[str, Any]:
         return {"mode": mode.value, "runs": _list_runs(store, mode)}
 
-    @app.get("/plans/{mode}/{run_id}", dependencies=protected)
+    @app.get("/plans/{mode}/{run_id}", dependencies=plans_read)
     async def get_plan(mode: PlanMode, run_id: str) -> dict[str, Any]:
         run_rel = _resolve_run_rel(store, mode, run_id)
         if mode is PlanMode.PERIODIC:
@@ -203,12 +188,12 @@ def create_app(
             store, run_rel / _REVISIONS_DIRNAME / revisions[-1] / _PLAN_FILENAME
         )
 
-    @app.get("/plans/rolling/{run_id}/revisions", dependencies=protected)
+    @app.get("/plans/rolling/{run_id}/revisions", dependencies=plans_read)
     async def list_revisions(run_id: str) -> dict[str, Any]:
         run_rel = _resolve_run_rel(store, PlanMode.ROLLING, run_id)
         return _read_json(store, run_rel / _REVISIONS_SUMMARY_FILENAME)
 
-    @app.get("/plans/rolling/{run_id}/revisions/{number}", dependencies=protected)
+    @app.get("/plans/rolling/{run_id}/revisions/{number}", dependencies=plans_read)
     async def get_revision(run_id: str, number: int) -> dict[str, Any]:
         run_rel = _resolve_run_rel(store, PlanMode.ROLLING, run_id)
         revisions = _rolling_revision_ids(store, run_rel)
@@ -221,7 +206,7 @@ def create_app(
             store, run_rel / _REVISIONS_DIRNAME / revisions[number] / _PLAN_FILENAME
         )
 
-    @app.post("/feasibility", dependencies=protected)
+    @app.post("/feasibility", dependencies=feasibility_write)
     async def feasibility(request: FeasibilityRequest) -> dict[str, Any]:
         try:
             data_dir = _resolve_latest_artifact_dir(
@@ -254,11 +239,14 @@ def _is_nonlocal_host(host: str) -> bool:
 
 def run_serve(host: str, port: int) -> None:
     """Run the service API with uvicorn (blocking)."""
-    if _is_nonlocal_host(host) and not constants.SERVE_AUTH_TOKEN:
+    gateway = build_gateway()
+    if _is_nonlocal_host(host) and not gateway.auth_configured:
         raise ValueError(
-            "SERVE_AUTH_TOKEN is required when binding fl-op serve outside loopback"
+            "An auth provider is required when binding fl-op serve outside "
+            "loopback: set SERVE_AUTH_TOKEN/SERVE_AUTH_TOKENS (static tokens) "
+            "or SERVE_OIDC_ISSUER (OIDC/JWT)."
         )
     import uvicorn
 
     logger.info("Serving fl-op API on http://%s:%d", host, port)
-    uvicorn.run(create_app(), host=host, port=port, log_config=None)
+    uvicorn.run(create_app(security=gateway), host=host, port=port, log_config=None)
