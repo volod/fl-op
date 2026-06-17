@@ -264,8 +264,10 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    (`PREDECESSOR_UNSERVED`), so no plan dispatches work whose precondition was
    dropped. Every cluster solve yields a machine-readable telemetry record
    (`solver/solve_telemetry.py`: status, wall time, OR-Tools search status,
-   time-limit flag, objective values, LNS budget/delta, worker RSS); batch
-   runs write `solve_telemetry.json` and plan scores carry the summary.
+   time-limit flag, objective values, LNS budget/delta, worker RSS, and the
+   resource-conflict signal below); batch runs write `solve_telemetry.json` and
+   plan scores carry the summary (including a `binding_resources` tally over the
+   clusters that dropped tasks).
    Plan scores also record the selected `optimization_objective` plus
    completion-time KPIs (`total_completion_time_s`,
    `avg_completion_time_s`, `p95_completion_time_s`,
@@ -279,6 +281,22 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    conflicts; unassigned tasks record their cluster status and normalized
    infeasibility detail. Rolling revision diffs consume these maps for
    post-hoc explanations.
+   Each cluster also carries a primal resource-conflict attribution
+   (`solver/cluster/conflict.py`): OR-Tools' CP routing exposes no LP duals or
+   shadow prices, so instead of a marginal value the solve reads how hard each
+   routing dimension is pushed on the solved routes -- the Time dimension's
+   route-end cumulative over the horizon, each Load dimension's peak fill, and
+   the share of the fleet used -- and names the `binding_resource` behind any
+   dropped tasks by a fixed priority: `capacity:<material>` (a load dimension at
+   or above `RESOURCE_CONFLICT_TIGHT_UTILIZATION`), then `time` (routes at the
+   horizon), then `fleet` (every vehicle committed, no per-route dimension
+   tight), else `other` (a spare vehicle remains, so the drop is a
+   window/cost trade-off). A cluster with no solution attributes to
+   `solve_budget` (timed out) or `model_infeasible`. Capacity is ranked above the
+   always-saturated single-vehicle fleet count so the real physical limit is not
+   masked. The signal flows into the per-task attribution maps and the
+   revision-diff explanation. It is a heuristic over the primal solution, not an
+   exact dual; exact marginal attribution remains future research.
 
 Enforcement activates only through the adapters (an `EnforcementPolicy` built
 from the profile's enforced constraints); the raw batch `solve` pipeline is

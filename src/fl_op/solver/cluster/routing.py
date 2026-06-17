@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from fl_op.canonical.enums import ReasonCode
 from fl_op.core import constants
+from fl_op.solver.cluster.conflict import build_resource_conflict, no_solution_conflict
 from fl_op.solver.cluster.context import ClusterContext
 from fl_op.solver.cluster.infeasible import mark_all_infeasible, unserved_orders
 from fl_op.solver.cluster.penalties import (
@@ -201,6 +202,10 @@ def solve_routing_context(
                 "detail": "OR-Tools found no feasible solution within time limit",
             }
         )
+        telemetry["resource_conflict"] = no_solution_conflict(
+            hit_time_limit=bool(telemetry["hit_time_limit"]),
+            n_unserved=len(context.task_ids),
+        )
         dispatch, infeasible = mark_all_infeasible(
             cluster_dict,
             ReasonCode.OPTIMIZATION_TRADEOFF,
@@ -247,6 +252,9 @@ def solve_routing_context(
             "n_unserved": len(infeasible),
             **lns_info,
         }
+    )
+    telemetry["resource_conflict"] = _extract_resource_conflict(
+        solution, routing, manager, time_dim, context, len(infeasible)
     )
     return dispatch_packages, infeasible, telemetry
 
@@ -895,6 +903,86 @@ def _make_reload_nodes_optional(
         routing.AddDisjunction([manager.NodeToIndex(node_idx)], 0)
 
 
+def _cluster_load_materials(context: ClusterContext) -> set[str]:
+    """The load materials any cluster task demands (one capacity dimension each)."""
+    return {
+        str(order.load_material or "")
+        for order in context.cluster_orders
+        if _load_kg(order.load_demand) > 0
+    }
+
+
+def _load_dimension_name(material: str) -> str:
+    return f"Load_{material}" if material else "Load"
+
+
+def _extract_resource_conflict(
+    solution: Any,
+    routing: Any,
+    manager: Any,
+    time_dim: Any,
+    context: ClusterContext,
+    n_unserved: int,
+) -> dict[str, Any]:
+    """Measure primal resource utilization off the solved routes (never raises).
+
+    Walks each used vehicle's route once, reading the Time dimension's route-end
+    cumulative and each Load dimension's peak cumulative, and normalizes them
+    into time / per-material capacity / fleet utilization for
+    ``build_resource_conflict``. Diagnostics must never fail a solve, so any
+    error yields an empty record.
+    """
+    try:
+        scale = constants.SCALE_MASS_UNITS_PER_KG
+        load_dims: dict[str, Any] = {}
+        for material in _cluster_load_materials(context):
+            try:
+                load_dims[material] = routing.GetDimensionOrDie(
+                    _load_dimension_name(material)
+                )
+            except Exception:  # noqa: BLE001 - a missing dimension just drops out
+                continue
+        n_used = 0
+        max_end_s = 0
+        capacity_utilization: dict[str, float] = {}
+        for rv_idx, rv in enumerate(context.routing_vehicles):
+            if not routing.IsVehicleUsed(solution, rv_idx):
+                continue
+            n_used += 1
+            index = routing.Start(rv_idx)
+            peak_load = {material: 0 for material in load_dims}
+            # Read the load cumulatives at every node, the end node included:
+            # for a depot-carried delivery the on-board mass lands on the leg
+            # into the end node, so stopping before it would read a flat zero.
+            while True:
+                for material, dim in load_dims.items():
+                    peak_load[material] = max(
+                        peak_load[material], solution.Value(dim.CumulVar(index))
+                    )
+                if routing.IsEnd(index):
+                    break
+                index = solution.Value(routing.NextVar(index))
+            max_end_s = max(max_end_s, solution.Value(time_dim.CumulVar(index)))
+            for material, dim in load_dims.items():
+                capacity_units = _compartment_capacity_kg(rv["prime"], material) * scale
+                if capacity_units > 0:
+                    capacity_utilization[material] = max(
+                        capacity_utilization.get(material, 0.0),
+                        peak_load[material] / capacity_units,
+                    )
+        time_util = max_end_s / _ROUTING_HORIZON_S if _ROUTING_HORIZON_S else 0.0
+        return build_resource_conflict(
+            n_unserved=n_unserved,
+            n_vehicles=len(context.routing_vehicles),
+            n_vehicles_used=n_used,
+            time_utilization=time_util,
+            capacity_utilization=capacity_utilization,
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostics must never fail a solve
+        logger.debug("Resource-conflict extraction failed: %s", exc)
+        return {}
+
+
 def _add_load_capacity_dimensions(
     routing: Any,
     manager: Any,
@@ -913,11 +1001,7 @@ def _add_load_capacity_dimensions(
     fixed to zero everywhere else - the cvrp-reload construction), so demand
     beyond one vehicle fill becomes extra trips instead of dropped tasks.
     """
-    materials = {
-        str(order.load_material or "")
-        for order in context.cluster_orders
-        if _load_kg(order.load_demand) > 0
-    }
+    materials = _cluster_load_materials(context)
     if not materials:
         return
     scale = constants.SCALE_MASS_UNITS_PER_KG
@@ -952,7 +1036,7 @@ def _add_load_capacity_dimensions(
             return demands[manager.IndexToNode(from_index)]
 
         demand_cb_idx = routing.RegisterUnaryTransitCallback(demand_callback)
-        name = f"Load_{material}" if material else "Load"
+        name = _load_dimension_name(material)
         routing.AddDimensionWithVehicleCapacity(
             demand_cb_idx,
             max_capacity if reload_node_idxs else 0,

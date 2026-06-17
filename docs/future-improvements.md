@@ -12,9 +12,12 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-7. Solver explanation research. Investigate exact resource-conflict
-   attribution through richer solver instrumentation or an alternative model
-   that exposes dual/shadow-price signals.
+7. Solver explanation research. Remaining work is research-grade: exact marginal
+   (shadow-price) attribution via a finite-difference resource-relaxation
+   re-solve probe or an LP/MIP relaxation that exposes duals, and per-task
+   conflict attribution for window/precedence-driven drops. The delivered primal
+   resource-conflict attribution (a binding-resource signal from
+   routing-dimension utilization) lives in current-implementation.md.
 8. Solver model fidelity. Block a held operator's busy calendar as in-model
    breaks across clusters (as prime movers and implements already are), and
    thread per-vehicle travel speed and travel mode into the fallback
@@ -73,10 +76,25 @@ Recommended order, optimized for dependency reuse and low rework:
 
 ## 7. Solver explanation research
 
-- Solver attribution is still the routing conflict surface: cluster status,
-  objective, LNS delta, time-limit state, and same-cluster unserved tasks.
-  OR-Tools routing does not expose LP-style duals or exact shadow prices, so
-  exact resource-conflict attribution remains approximate.
+Delivered behavior lives in current-implementation.md: per-cluster primal
+resource-conflict attribution (`solver/cluster/conflict.py`) that reads the
+solved routes' Time/Load dimension utilization and fleet usage and names the
+`binding_resource` behind dropped tasks (`capacity:<material>` / `time` /
+`fleet` / `other`, or `solve_budget` / `model_infeasible` when no solution is
+found), threaded into the per-task attribution maps, the revision-diff
+explanation, and a `binding_resources` telemetry tally. The residual open work
+is research-grade:
+
+- The attribution is a heuristic over aggregate primal utilization, not an exact
+  marginal value. Exact resource-conflict attribution needs either a
+  finite-difference probe (re-solve the cluster with one resource marginally
+  relaxed -- an added vehicle, an extended horizon, more capacity -- and read the
+  served-count/objective delta as the empirical shadow price) or an alternative
+  LP/MIP relaxation whose dual values expose shadow prices directly. OR-Tools' CP
+  routing exposes neither, so both remain open.
+- Drops that no aggregate dimension explains are attributed to `other`; pinning
+  the specific binding constraint (a particular time window or precedence edge)
+  for an individual dropped task is not modelled.
 
 ## 8. Solver model fidelity
 

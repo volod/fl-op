@@ -226,6 +226,16 @@ CLUSTER_SOLVE_TIME_LIMIT_S: int = int(os.environ.get("CLUSTER_SOLVE_TIME_LIMIT_S
 # restriction windows are clamped to this many seconds from now.
 ROUTING_HORIZON_S: int = 30 * 24 * 3600
 
+# Resource-conflict attribution: a routing dimension (time horizon, load
+# capacity, or fleet) counts as the binding resource behind a cluster's dropped
+# tasks once its primal utilization on the solved routes reaches this fraction.
+# Below it, drops are attributed to "other" (time-window/cost trade-offs no
+# single aggregate dimension explains). A read-only diagnostic; it never changes
+# the solve.
+RESOURCE_CONFLICT_TIGHT_UTILIZATION: float = float(
+    os.environ.get("RESOURCE_CONFLICT_TIGHT_UTILIZATION", "0.85")
+)
+
 # Vehicle route-load capacity assigned when a prime mover declares none
 # (capacity dimension upper bound that can never bind).
 VEHICLE_LOAD_UNLIMITED_KG: float = 1.0e9

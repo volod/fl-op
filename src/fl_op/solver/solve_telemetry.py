@@ -45,6 +45,9 @@ class ClusterSolveTelemetry(TypedDict, total=False):
     worker_max_rss_mb: float
     n_dispatched: int
     n_unserved: int
+    # Primal resource-conflict attribution: the routing dimension running
+    # tightest behind any dropped tasks (see solver/cluster/conflict.py).
+    resource_conflict: dict[str, Any]
     detail: str
 
 
@@ -74,9 +77,15 @@ def summarize_cluster_telemetry(
 ) -> dict[str, Any]:
     """Aggregate per-cluster records into a plan-score-sized summary."""
     statuses: dict[str, int] = {}
+    binding_resources: dict[str, int] = {}
     for record in records:
         status = record.get("status", "unknown")
         statuses[status] = statuses.get(status, 0) + 1
+        binding = (record.get("resource_conflict") or {}).get("binding_resource")
+        # Only count clusters that actually dropped tasks, so the tally surfaces
+        # where capacity was the constraint, not how often nothing bound.
+        if binding and binding != "none":
+            binding_resources[binding] = binding_resources.get(binding, 0) + 1
     rss_values = [
         float(r.get("worker_max_rss_mb", 0.0))
         for r in records
@@ -85,6 +94,7 @@ def summarize_cluster_telemetry(
     return {
         "n_clusters": len(records),
         "statuses": statuses,
+        "binding_resources": binding_resources,
         "n_hit_time_limit": sum(1 for r in records if r.get("hit_time_limit")),
         "total_solve_wall_s": round(
             sum(float(r.get("solve_wall_s", 0.0)) for r in records), 3

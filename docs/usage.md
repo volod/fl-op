@@ -341,7 +341,8 @@ validation ladder), follow the manual in
 .venv/bin/fl-op plan rolling --data latest --events events.jsonl --objective time
 
 # Explain why every changed assignment moved between rolling revisions. Plain
-# re-solve changes include solver attribution from plan scores when available.
+# re-solve changes include solver attribution from plan scores when available,
+# naming the binding resource (capacity / time / fleet) behind dropped tasks.
 .venv/bin/fl-op plan diff-revisions --plan latest
 
 # Full story end to end (contracts -> snapshot -> batch -> stream).

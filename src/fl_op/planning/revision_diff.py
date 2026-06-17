@@ -94,6 +94,17 @@ def _solver_explanation(
         parts.append(f"LNS delta {lns_delta}")
     if new_attr.get("hit_time_limit"):
         parts.append("cluster hit the time limit")
+    binding = new_attr.get("binding_resource") or (
+        new_attr.get("resource_conflict") or {}
+    ).get("binding_resource")
+    if binding and binding not in ("none", ""):
+        utilization = (new_attr.get("resource_conflict") or {}).get(
+            "binding_utilization"
+        )
+        if isinstance(utilization, (int, float)) and utilization > 0:
+            parts.append(f"binding resource {binding} at {utilization:.0%}")
+        else:
+            parts.append(f"binding resource {binding}")
     change_penalty = new.get("change_penalty") or 0
     if change_penalty:
         parts.append(f"change penalty {change_penalty}")
