@@ -20,11 +20,16 @@ projected rows carry values; ``enforcement.py`` stays profile-driven.
 
 import logging
 import ast
+import dataclasses
 from datetime import datetime
 from typing import Any, Optional
 
 from fl_op.canonical.enums import ReasonCode
-from fl_op.core.constants import ROUTING_HORIZON_S
+from fl_op.core.constants import (
+    RESTRICTION_MIN_WORKABLE_AREA_FRACTION,
+    ROUTING_HORIZON_S,
+)
+from fl_op.core.geometry import unrestricted_area_fraction
 from fl_op.solver.enforcement import ops_set
 from fl_op.solver.task_relations import parse_time_windows
 
@@ -225,14 +230,23 @@ def _deadline_epoch(order: Any, now_epoch: int) -> int:
         return now_epoch + ROUTING_HORIZON_S
 
 
-def _intersecting_restricted_area(
+def _restricted_overlap(
     order: Any,
     site: Any,
     sites: list[Any],
-) -> Optional[Any]:
-    """Return the first geometric restricted area blocking ``order``."""
+) -> tuple[list[list[Point]], Optional[str]]:
+    """Restricted areas overlapping ``order``'s site for its operation.
+
+    Returns ``(overlapping_polygons, point_block_id)``. ``overlapping_polygons``
+    are the restricted-area rings intersecting the site polygon (used to compute
+    partial-overlap severity). ``point_block_id`` is set when the site has no
+    geometry and its centroid lies inside a restricted area -- a point cannot be
+    partially restricted, so that case stays a hard block.
+    """
+    overlapping: list[list[Point]] = []
+    point_block_id: Optional[str] = None
     if site is None:
-        return None
+        return overlapping, point_block_id
     site_polygon = parse_polygon(site.polygon)
     site_point = (float(site.lon), float(site.lat))
     for area in sites:
@@ -243,11 +257,35 @@ def _intersecting_restricted_area(
         area_polygon = parse_polygon(area.polygon)
         if not area_polygon:
             continue
-        if site_polygon and polygons_intersect(site_polygon, area_polygon):
-            return area
-        if not site_polygon and point_in_polygon(site_point, area_polygon):
-            return area
-    return None
+        if site_polygon:
+            if polygons_intersect(site_polygon, area_polygon):
+                overlapping.append(area_polygon)
+        elif point_in_polygon(site_point, area_polygon):
+            point_block_id = area.location_id
+            break
+    return overlapping, point_block_id
+
+
+def _clip_order_to_area_fraction(order: Any, fraction: float) -> Any:
+    """Scale an order's effective work down to the unrestricted area fraction.
+
+    Area always scales; the generic work quantity scales only when it is
+    area-like ("" / "ha"), since a volume or item count is not reduced by part
+    of the field being off-limits. Revenue scales with the area too: only the
+    unrestricted fraction of the field can be served, so the order earns that
+    fraction of its value and the objective no longer over-credits a clipped
+    task. An explicit service-duration override is left untouched (it already
+    wins over any quantity estimate).
+    """
+    new_area = round(float(order.area or 0.0) * fraction, 6)
+    new_quantity = order.work_quantity
+    unit = str(order.work_quantity_unit or "").strip().lower()
+    if float(order.work_quantity or 0.0) > 0 and unit in ("", "ha"):
+        new_quantity = round(float(order.work_quantity) * fraction, 6)
+    new_revenue = round(float(order.revenue or 0.0) * fraction, 6)
+    return dataclasses.replace(
+        order, area=new_area, work_quantity=new_quantity, revenue=new_revenue
+    )
 
 
 def apply_location_restrictions(
@@ -258,14 +296,17 @@ def apply_location_restrictions(
     """Split off tasks blocked by their location's declared restrictions.
 
     A task is excluded when its operation type is prohibited at its location
-    (restricted zone), when its geometry intersects another restricted polygon
-    prohibiting that operation, or when the location's restriction windows
-    block every admissible start in [now, deadline] (time-restricted area).
+    (restricted zone), when a restricted polygon covers effectively all of its
+    work area, or when the location's restriction windows block every admissible
+    start in [now, deadline] (time-restricted area). When a restricted area
+    covers only part of the site, the task is kept with its work area clipped to
+    the unrestricted fraction (partial-overlap severity) rather than dropped.
     """
     site_map = {s.location_id: s for s in sites}
     now_epoch = int(now.timestamp())
     kept: list[Any] = []
     infeasible: list[dict[str, Any]] = []
+    clipped = 0
     for order in orders:
         site = site_map.get(order.location_ref)
         if site is None:
@@ -285,8 +326,8 @@ def apply_location_restrictions(
                 }
             )
             continue
-        area = _intersecting_restricted_area(order, site, sites)
-        if area is not None:
+        overlapping, point_block_id = _restricted_overlap(order, site, sites)
+        if point_block_id is not None:
             infeasible.append(
                 {
                     "task_id": order.task_id,
@@ -294,11 +335,32 @@ def apply_location_restrictions(
                     "reason_code": ReasonCode.RESTRICTED_ZONE.value,
                     "detail": (
                         f"operation {order.operation_type} at {order.location_ref} "
-                        f"intersects restricted area {area.location_id}"
+                        f"intersects restricted area {point_block_id}"
                     ),
                 }
             )
             continue
+        if overlapping:
+            fraction = unrestricted_area_fraction(
+                parse_polygon(site.polygon), overlapping
+            )
+            if fraction <= RESTRICTION_MIN_WORKABLE_AREA_FRACTION:
+                infeasible.append(
+                    {
+                        "task_id": order.task_id,
+                        "cluster_id": "",
+                        "reason_code": ReasonCode.RESTRICTED_ZONE.value,
+                        "detail": (
+                            f"operation {order.operation_type} at "
+                            f"{order.location_ref} restricted over "
+                            f"{(1 - fraction) * 100:.0f}% of the work area"
+                        ),
+                    }
+                )
+                continue
+            if fraction < 1.0:
+                order = _clip_order_to_area_fraction(order, fraction)
+                clipped += 1
         if not allowed_start_intervals(
             order, site, now_epoch, _deadline_epoch(order, now_epoch)
         ):
@@ -315,6 +377,10 @@ def apply_location_restrictions(
             )
             continue
         kept.append(order)
-    if infeasible:
-        logger.info("Location restrictions excluded %d tasks", len(infeasible))
+    if infeasible or clipped:
+        logger.info(
+            "Location restrictions excluded %d tasks, clipped %d work areas",
+            len(infeasible),
+            clipped,
+        )
     return kept, infeasible

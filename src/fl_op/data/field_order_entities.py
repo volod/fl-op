@@ -179,6 +179,14 @@ def _generate_orders_and_contracts(
                     if ops[oi] in _LOAD_DEMANDING_OPERATIONS
                     else 0.0
                 ),
+                # A share of material-carrying orders pick the load up at the
+                # field's nearest yard first (paired pickup-and-delivery); the
+                # rest carry the load from the cluster depot (empty ref).
+                "pickup_location_ref": (
+                    fields[oi]["nearest_depot_id"]
+                    if ops[oi] in _LOAD_DEMANDING_OPERATIONS and oi % 5 == 0
+                    else ""
+                ),
             }
             if j > 0 and chain_draws[oi] < _ORDER_CHAIN_SHARE:
                 _chain_to_predecessor(o, orders[-1])

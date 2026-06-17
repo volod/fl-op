@@ -27,13 +27,14 @@ class TestAutoTune:
         overrides = auto_tune_monitoring_policy(
             _accuracy(fp=0.5), MonitoringPolicySpec(), overlay, audit
         )
-        # One 10% step down from the defaults (3.0 days, 0.35 threshold).
+        # One 10% step down from the defaults (3.0 days, 0.35 threshold, 20% battery).
         assert overrides["batteryForecastHorizonDays"] == pytest.approx(2.7)
         assert overrides["compositeHealthThreshold"] == pytest.approx(0.315)
+        assert overrides["batteryLowThresholdPct"] == pytest.approx(18.0)
         assert json.loads(overlay.read_text()) == pytest.approx(overrides)
         records = [json.loads(line) for line in audit.read_text().splitlines()]
         assert records[0]["reason"] == "false-positives"
-        assert len(records[0]["adjustments"]) == 2
+        assert len(records[0]["adjustments"]) == 3
 
     def test_false_negatives_loosen_policy(self, tmp_path):
         overlay = tmp_path / "tuned.json"
@@ -77,6 +78,103 @@ class TestAutoTune:
         assert not audit.exists()
 
 
+class TestLeadTimeFeedback:
+    def _lead(self, late_share: float, n: int = 5) -> dict:
+        return {"n_service_completions": n, "service_late_share": late_share}
+
+    def test_late_service_completions_loosen_policy(self, tmp_path):
+        overlay = tmp_path / "tuned.json"
+        audit = tmp_path / "audit.jsonl"
+        overrides = auto_tune_monitoring_policy(
+            _accuracy(fp=0.1, fn=0.1), MonitoringPolicySpec(), overlay, audit,
+            lead_time=self._lead(0.5),
+        )
+        # Healthy fp/fn, but a high service late share loosens (fires earlier).
+        assert overrides["batteryForecastHorizonDays"] == pytest.approx(3.3)
+        assert overrides["batteryLowThresholdPct"] == pytest.approx(22.0)
+        record = json.loads(audit.read_text().splitlines()[0])
+        assert record["reason"] == "late-service-completions"
+        assert record["service_late_share"] == pytest.approx(0.5)
+
+    def test_lateness_below_alert_changes_nothing(self, tmp_path):
+        overlay = tmp_path / "tuned.json"
+        auto_tune_monitoring_policy(
+            _accuracy(), MonitoringPolicySpec(), overlay, tmp_path / "a.jsonl",
+            lead_time=self._lead(0.1),
+        )
+        assert not overlay.exists()
+
+    def test_too_few_completions_are_not_trusted(self, tmp_path):
+        overlay = tmp_path / "tuned.json"
+        auto_tune_monitoring_policy(
+            _accuracy(), MonitoringPolicySpec(), overlay, tmp_path / "a.jsonl",
+            lead_time=self._lead(1.0, n=1),
+        )
+        assert not overlay.exists()
+
+    def test_false_positives_and_lateness_conflict_is_skipped(self, tmp_path):
+        overlay = tmp_path / "tuned.json"
+        audit = tmp_path / "audit.jsonl"
+        overrides = auto_tune_monitoring_policy(
+            _accuracy(fp=0.5), MonitoringPolicySpec(), overlay, audit,
+            lead_time=self._lead(0.5),
+        )
+        assert overrides == {}
+        assert not overlay.exists()
+        record = json.loads(audit.read_text().splitlines()[0])
+        assert record["reason"] == "conflicting-signals"
+
+
+class TestPerAssetTypeTuning:
+    def test_noisy_type_tuned_without_touching_global(self, tmp_path):
+        overlay = tmp_path / "tuned.json"
+        audit = tmp_path / "audit.jsonl"
+        accuracy = {
+            "n_observed": 20.0,
+            "false_positive_rate": 0.1,  # global healthy
+            "false_negative_rate": 0.1,
+            "by_asset_type": {
+                "PROBE": {
+                    "n_observed": 10.0,
+                    "false_positive_rate": 0.5,  # this type fires too eagerly
+                    "false_negative_rate": 0.0,
+                }
+            },
+        }
+        overrides = auto_tune_monitoring_policy(
+            accuracy, MonitoringPolicySpec(), overlay, audit
+        )
+        probe = overrides["assetTypeOverrides"]["PROBE"]
+        assert probe["batteryForecastHorizonDays"] == pytest.approx(2.7)
+        assert probe["batteryLowThresholdPct"] == pytest.approx(18.0)
+        # The global scalar policy was left alone (healthy global rates).
+        assert "batteryForecastHorizonDays" not in overrides
+        records = [json.loads(line) for line in audit.read_text().splitlines()]
+        assert any(
+            r["scope"] == "PROBE" and r["reason"] == "false-positives" for r in records
+        )
+
+    def test_per_type_override_is_applied_by_for_asset_type(self, tmp_path):
+        overlay = tmp_path / "tuned.json"
+        accuracy = {
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "by_asset_type": {
+                "PROBE": {
+                    "n_observed": 10.0,
+                    "false_positive_rate": 0.5,
+                    "false_negative_rate": 0.0,
+                }
+            },
+        }
+        auto_tune_monitoring_policy(
+            accuracy, MonitoringPolicySpec(), overlay, tmp_path / "a.jsonl"
+        )
+        tuned = apply_tuned_overrides(MonitoringPolicySpec(), load_tuned_overrides(overlay))
+        assert tuned.for_asset_type("PROBE").batteryForecastHorizonDays == pytest.approx(2.7)
+        assert tuned.batteryForecastHorizonDays == pytest.approx(3.0)
+
+
 class TestTunedOverlay:
     def test_overrides_layer_on_profile_policy(self):
         policy = apply_tuned_overrides(
@@ -93,6 +191,33 @@ class TestTunedOverlay:
             )
         )
         assert load_tuned_overrides(overlay) == {"batteryForecastHorizonDays": 2.0}
+
+    def test_load_keeps_per_type_tunables_only(self, tmp_path):
+        overlay = tmp_path / "tuned.json"
+        overlay.write_text(
+            json.dumps(
+                {
+                    "assetTypeOverrides": {
+                        "PROBE": {
+                            "batteryForecastHorizonDays": 2.0,
+                            "serviceOperationType": "HACK",
+                        }
+                    }
+                }
+            )
+        )
+        assert load_tuned_overrides(overlay) == {
+            "assetTypeOverrides": {"PROBE": {"batteryForecastHorizonDays": 2.0}}
+        }
+
+    def test_apply_merges_per_type_overrides(self):
+        policy = apply_tuned_overrides(
+            MonitoringPolicySpec(),
+            {"assetTypeOverrides": {"PROBE": {"batteryForecastHorizonDays": 2.0}}},
+        )
+        assert policy.for_asset_type("PROBE").batteryForecastHorizonDays == 2.0
+        # The base policy (other asset types) is untouched.
+        assert policy.batteryForecastHorizonDays == pytest.approx(3.0)
 
     def test_builder_applies_overlay_on_the_reviewed_policy(
         self, tmp_path, monkeypatch

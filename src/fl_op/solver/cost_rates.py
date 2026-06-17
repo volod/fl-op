@@ -14,9 +14,12 @@ from fl_op.core.constants import (
     ELECTRICITY_COST_EUR_PER_KWH,
     FERTILIZER_COST_EUR_PER_KG,
     FUEL_COST_EUR_PER_L,
+    LABOR_COST_EUR_PER_H,
+    MACHINE_WEAR_COST_EUR_PER_H,
     RATE_TYPE_ELECTRICITY,
     RATE_TYPE_FUEL,
     RATE_TYPE_MATERIAL,
+    TOLL_COST_EUR_PER_KM,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,20 +32,38 @@ class ResourcePrices:
     Defaults are the engine cost constants; the chain overrides them with the
     prices resolved from the snapshot's cost-rate entities, so routing arc
     costs and dispatch margins are priced from the same data as KPIs.
+
+    ``fuel``/``material``/``electricity`` price a consumed quantity; the
+    operating rates price the dispatch itself. ``labor`` and ``machine_wear``
+    are EUR per operating hour (travel plus on-task service time) and ``toll``
+    is EUR per kilometre travelled. The operating rates default to zero so the
+    extra arc-cost terms vanish unless cost-rate data prices them.
     """
 
     fuel_eur_per_l: float = FUEL_COST_EUR_PER_L
     material_eur_per_kg: float = FERTILIZER_COST_EUR_PER_KG
     electricity_eur_per_kwh: float = ELECTRICITY_COST_EUR_PER_KWH
+    labor_eur_per_h: float = LABOR_COST_EUR_PER_H
+    machine_wear_eur_per_h: float = MACHINE_WEAR_COST_EUR_PER_H
+    toll_eur_per_km: float = TOLL_COST_EUR_PER_KM
 
     def price_for(self, rate_type: str) -> float:
-        """Return the resolved unit price for a resource code."""
+        """Return the resolved unit price for a consumed-resource code."""
         normalized = str(rate_type or RATE_TYPE_FUEL)
         if normalized == RATE_TYPE_ELECTRICITY:
             return self.electricity_eur_per_kwh
         if normalized == RATE_TYPE_MATERIAL:
             return self.material_eur_per_kg
         return self.fuel_eur_per_l
+
+    @property
+    def operating_eur_per_h(self) -> float:
+        """Time-based operating surcharge per hour (driver labour plus wear).
+
+        Charged over both travel and on-task service hours, so a bundle that
+        finishes faster saves wages and wear, not just energy.
+        """
+        return self.labor_eur_per_h + self.machine_wear_eur_per_h
 
 
 def vehicle_energy_resource_type(vehicle: Any) -> str:

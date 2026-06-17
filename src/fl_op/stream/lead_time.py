@@ -141,4 +141,10 @@ def lead_time_stats(path: Optional[pathlib.Path] = None) -> dict[str, Any]:
         stats["mean_service_lead_s"] = round(
             sum(service_leads) / len(service_leads), 1
         )
+        # Share of service tasks finishing after their deadline (lead < 0):
+        # the signal guarded monitoring tuning folds in to loosen a policy
+        # that derives service work too late.
+        stats["service_late_share"] = round(
+            sum(1 for lead in service_leads if lead < 0) / len(service_leads), 4
+        )
     return stats

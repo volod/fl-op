@@ -127,6 +127,20 @@ def _payload_class_capacity(
     return values[index % len(values)]
 
 
+def _compartment_capacities(payload_capacity_kg: float) -> dict[str, float]:
+    """Per-material compartment capacities for a delivery vehicle.
+
+    Deliveries carry two material codes (`parcel`, `meal`). The bulk cargo bay
+    holds parcels up to the full payload; a smaller insulated box holds meals.
+    The meal box never exceeds the payload and stays at least large enough for a
+    single meal order, so adding compartments never tightens a vehicle below
+    what its aggregate payload already allowed for parcels.
+    """
+    payload = round(float(payload_capacity_kg), 1)
+    meal = round(min(payload, max(3.0, 0.3 * payload)), 1)
+    return {"parcel": payload, "meal": meal}
+
+
 def _road_speed_bucket(
     tuning: dict[str, Any],
     customer_class: str,
@@ -182,6 +196,9 @@ def _generate_ugvs(
                 "hub_id": hub["hub_id"],
                 "travel_speed_kmh": road_speeds[i % len(road_speeds)],
                 "payload_capacity_kg": _payload_class_capacity(tuning, "UGV", i),
+                "load_capacities_kg": _compartment_capacities(
+                    _payload_class_capacity(tuning, "UGV", i)
+                ),
                 "compatible_operations": ["UGV_DELIVERY"],
             }
         )
@@ -216,6 +233,9 @@ def _generate_uavs(
                 "hub_id": hub["hub_id"],
                 "travel_speed_kmh": float(rng.uniform(60, 95)),
                 "payload_capacity_kg": _payload_class_capacity(tuning, "UAV", i),
+                "load_capacities_kg": _compartment_capacities(
+                    _payload_class_capacity(tuning, "UAV", i)
+                ),
                 "compatible_operations": ["UAV_DELIVERY"],
             }
         )

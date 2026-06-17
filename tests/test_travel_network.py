@@ -188,6 +188,58 @@ class TestNetworkTimesInGreedy:
         )
         assert networked["o0"][0][1] == 1  # road access flips the ordering
 
+    def test_nearest_network_node_beats_home_depot_access(self):
+        """A vehicle far from its depot joins the network at a nearby node.
+
+        Both vehicles' home depots are off-network. Without node mapping they
+        fall back to the straight-line estimate, so the geographically closer
+        vehicle wins. With ``location_coords`` the farther vehicle maps onto a
+        local node that has a cheap link to the field, flipping the choice.
+        """
+        from fl_op.solver.greedy import vectorized_score
+        from fl_op.solver.types import PrimeMoverRow, RelatedRow
+
+        def vehicle(vid: str, lon: float) -> PrimeMoverRow:
+            return PrimeMoverRow.from_canonical_dict({
+                "asset_id": vid, "rated_power": "150", "lat": 48.5, "lon": lon,
+                "home_depot_ref": "d_off_network", "travel_speed": "15",
+                "fuel_consumption_rate": "18",
+            })
+
+        # v_a sits just east of the on-network node; v_b is geographically
+        # closer to the field but has no useful node link.
+        v_a = vehicle("v_a", 32.06)
+        v_b = vehicle("v_b", 32.03)
+        implement = RelatedRow.from_canonical_dict({
+            "asset_id": "i0", "compatible_operations": "['SPRAYING']",
+            "required_power": "100",
+        })
+        field = SiteRow.from_canonical_dict(
+            {"location_id": "f0", "lat": 48.5, "lon": 32.0}
+        )
+        order = TaskRow.from_canonical_dict({
+            "task_id": "o0", "location_ref": "f0", "operation_type": "SPRAYING",
+            "area": "10", "revenue": "2000",
+        })
+        feasible = {"o0": [(0, 0), (1, 0)]}
+        v_index = {"v_a": 0, "v_b": 1}
+        i_index = {"i0": 0}
+        lookup = build_travel_lookup([_link("n_local", "f0", 30.0)])
+        coords = {"f0": (48.5, 32.0), "n_local": (48.5, 32.05)}
+
+        without_coords = vectorized_score(
+            [order], [v_a, v_b], [implement], [field],
+            feasible, v_index, i_index, travel_lookup=lookup,
+        )
+        assert without_coords["o0"][0][1] == 1  # closer v_b wins on straight line
+
+        with_coords = vectorized_score(
+            [order], [v_a, v_b], [implement], [field],
+            feasible, v_index, i_index, travel_lookup=lookup,
+            location_coords=coords,
+        )
+        assert with_coords["o0"][0][1] == 0  # v_a's local node access wins
+
 
 class TestNodeGeometry:
     def _order(self, oid: str, fid: str) -> TaskRow:
@@ -211,6 +263,33 @@ class TestNodeGeometry:
         nodes = build_node_table(orders, field_map, 48.5, 32.0, "d0")
         matrix = build_time_matrix(nodes, {})
         assert matrix[0][1] == _haversine_s(48.5, 32.0, 48.9, 32.4)
+
+    def test_pickup_resolves_against_location_outside_site_table(self):
+        """A pickup at a hub/depot resolves to that hub's coordinates, not the
+        cluster depot, when supplied via ``pickup_map``."""
+        order = TaskRow.from_canonical_dict({
+            "task_id": "o0", "location_ref": "f0", "pickup_location_ref": "hub1",
+        })
+        field_map = {"f0": self._field("f0", 48.9, 32.4)}
+        pickup_map = {**field_map, "hub1": self._field("hub1", 50.0, 33.0)}
+        nodes = build_node_table(
+            [order], field_map, 48.5, 32.0, "d0", pickup_map=pickup_map
+        )
+        pickup_node = next(n for n in nodes if n.kind == "pickup")
+        assert (pickup_node.lat, pickup_node.lon) == (50.0, 33.0)
+
+    def test_unresolved_pickup_falls_back_to_depot(self):
+        """A supplier ref absent from every table falls back to depot coords."""
+        order = TaskRow.from_canonical_dict({
+            "task_id": "o0", "location_ref": "f0",
+            "pickup_location_ref": "ghost_supplier",
+        })
+        field_map = {"f0": self._field("f0", 48.9, 32.4)}
+        nodes = build_node_table(
+            [order], field_map, 48.5, 32.0, "d0", pickup_map=field_map
+        )
+        pickup_node = next(n for n in nodes if n.kind == "pickup")
+        assert (pickup_node.lat, pickup_node.lon) == (48.5, 32.0)
 
 
 class TestRoutesMapping:

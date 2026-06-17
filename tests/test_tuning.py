@@ -408,3 +408,115 @@ def test_mlflow_logging_filters_non_numeric_metrics(tmp_path, monkeypatch) -> No
     assert captured["params"] == {"cluster_target_size": "35"}
     assert captured["tags"] == {"phase": "trial"}
     assert captured["uri"].startswith("sqlite:///")
+
+
+# ---------------------------------------------------------------------------
+# Experiment-maturity additions: auto parallelism + real instability
+# ---------------------------------------------------------------------------
+
+
+def _case(n_tasks: int, primes=None):
+    from fl_op.tuning.optuna_tuner import _DatasetCase
+
+    rows = {"tasks": [SimpleNamespace(task_id=f"t{i}", penalty_per_day=0.0)
+                      for i in range(n_tasks)]}
+    if primes is not None:
+        rows["prime_movers"] = [SimpleNamespace(asset_id=pid) for pid in primes]
+    return _DatasetCase(
+        data_dir="d", snapshot_id="s", snapshot_hash="h",
+        rows=rows, enforcement=None, workload_weight=max(1, n_tasks),
+    )
+
+
+class TestAutoTuningParallelism:
+    def test_cpu_bound_when_memory_is_ample(self, monkeypatch):
+        from fl_op.solver import cluster_pool
+        from fl_op.tuning import optuna_tuner
+
+        monkeypatch.setattr(cluster_pool, "available_memory_mb", lambda: 1_000_000.0)
+        monkeypatch.setattr("os.cpu_count", lambda: 4)
+        assert optuna_tuner._auto_n_jobs([_case(10)]) == 4
+
+    def test_memory_bound_below_cpu(self, monkeypatch):
+        from fl_op.solver import cluster_pool
+        from fl_op.tuning import optuna_tuner
+
+        monkeypatch.setattr(optuna_tuner.constants, "TUNE_JOB_BASE_MEMORY_MB", 1000.0)
+        monkeypatch.setattr(optuna_tuner.constants, "TUNE_JOB_MEMORY_MB_PER_TASK", 0.0)
+        monkeypatch.setattr(optuna_tuner.constants, "SOLVER_MEMORY_HEADROOM_PCT", 0.0)
+        monkeypatch.setattr(cluster_pool, "available_memory_mb", lambda: 2500.0)
+        monkeypatch.setattr("os.cpu_count", lambda: 8)
+        # 2500 / 1000 = 2 worker footprints fit.
+        assert optuna_tuner._auto_n_jobs([_case(10)]) == 2
+
+    def test_bigger_dataset_reduces_parallelism(self, monkeypatch):
+        from fl_op.solver import cluster_pool
+        from fl_op.tuning import optuna_tuner
+
+        monkeypatch.setattr(optuna_tuner.constants, "TUNE_JOB_BASE_MEMORY_MB", 500.0)
+        monkeypatch.setattr(optuna_tuner.constants, "TUNE_JOB_MEMORY_MB_PER_TASK", 10.0)
+        monkeypatch.setattr(optuna_tuner.constants, "SOLVER_MEMORY_HEADROOM_PCT", 0.0)
+        monkeypatch.setattr(cluster_pool, "available_memory_mb", lambda: 6000.0)
+        monkeypatch.setattr("os.cpu_count", lambda: 16)
+        small = optuna_tuner._auto_n_jobs([_case(50)])   # per job 1000 -> 6
+        large = optuna_tuner._auto_n_jobs([_case(500)])  # per job 5500 -> 1
+        assert small > large
+
+    def test_unmeasurable_memory_falls_back_to_one(self, monkeypatch):
+        from fl_op.solver import cluster_pool
+        from fl_op.tuning import optuna_tuner
+
+        monkeypatch.setattr(cluster_pool, "available_memory_mb", lambda: None)
+        assert optuna_tuner._auto_n_jobs([_case(10)]) == 1
+
+
+class TestPerturbedInstability:
+    def _scenario_chain(self):
+        """Base plan vs the plan after the busiest mover (v1) is removed."""
+        base = [
+            {"task_id": "t1", "prime_asset_id": "v1", "related_asset_id": "i1"},
+            {"task_id": "t2", "prime_asset_id": "v1", "related_asset_id": "i1"},
+            {"task_id": "t3", "prime_asset_id": "v2", "related_asset_id": "i2"},
+            {"task_id": "t4", "prime_asset_id": "v3", "related_asset_id": "i3"},
+        ]
+        perturbed = [
+            {"task_id": "t1", "prime_asset_id": "v2", "related_asset_id": "i1"},
+            {"task_id": "t2", "prime_asset_id": "v3", "related_asset_id": "i1"},
+            {"task_id": "t3", "prime_asset_id": "v2", "related_asset_id": "i2"},
+            # t4 cascades from v3 to v2 despite v3 still being available -> churn.
+            {"task_id": "t4", "prime_asset_id": "v2", "related_asset_id": "i3"},
+        ]
+
+        def chain(rows, enforcement=None, parameters=None, **kwargs):
+            primes = {getattr(m, "asset_id", "") for m in rows.get("prime_movers", [])}
+            dispatch = base if "v1" in primes else perturbed
+            return SolverChainResult(
+                dispatch=list(dispatch), infeasible=[],
+                kpis={"total_estimated_margin_eur": 0.0},
+                greedy_assignment={}, n_clusters=1,
+            )
+
+        return chain
+
+    def test_avoidable_churn_times_change_penalty(self, monkeypatch):
+        from fl_op.tuning import optuna_tuner
+
+        monkeypatch.setattr(
+            "fl_op.solver.chain.run_solver_chain", self._scenario_chain()
+        )
+        case = _case(0, primes=["v1", "v2", "v3"])
+        params = SolverParameters(rolling_change_penalty=1000)
+        evaluation = optuna_tuner._evaluate_case(case, params, measure_instability=True)
+        # Only t4 is avoidable churn (t1/t2 had to move with v1); 1 x 1000.
+        assert evaluation.instability == pytest.approx(1000.0)
+
+    def test_disabled_keeps_periodic_zero_instability(self, monkeypatch):
+        from fl_op.tuning import optuna_tuner
+
+        monkeypatch.setattr(
+            "fl_op.solver.chain.run_solver_chain", self._scenario_chain()
+        )
+        case = _case(0, primes=["v1", "v2", "v3"])
+        params = SolverParameters(rolling_change_penalty=1000)
+        evaluation = optuna_tuner._evaluate_case(case, params, measure_instability=False)
+        assert evaluation.instability == 0.0

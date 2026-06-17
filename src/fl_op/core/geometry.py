@@ -20,12 +20,19 @@ Coordinate convention: callers pass ``(lat, lon)`` in degrees. Shapely geometry
 uses ``(x=lon, y=lat)`` so emitted features are GeoJSON/map friendly.
 """
 
+import math
+
 import numpy as np
 from pyproj import Geod
-from shapely.geometry import LineString, Point, box
+from shapely.geometry import LineString, Point, Polygon, box
+from shapely.ops import unary_union
 from sklearn.neighbors import BallTree
 
-from fl_op.core.constants import EARTH_RADIUS_KM, FALLBACK_TRAVEL_SPEED_KMH
+from fl_op.core.constants import (
+    EARTH_RADIUS_KM,
+    FALLBACK_TRAVEL_SPEED_KMH,
+    METERS_PER_DEGREE_LAT,
+)
 
 # Spherical geodesic engine: a sphere of mean Earth radius reproduces the legacy
 # haversine results while giving us pyproj's vectorized, well-tested inverse
@@ -118,6 +125,92 @@ def to_point(lat: float, lon: float) -> Point:
 def to_linestring(latlon_coords: list[tuple[float, float]]) -> LineString:
     """Polyline from ``(lat, lon)`` pairs, emitted as map-order (lon, lat)."""
     return LineString([(lon, lat) for lat, lon in latlon_coords])
+
+
+def unrestricted_area_fraction(
+    site_polygon: list[tuple[float, float]],
+    restricted_polygons: list[list[tuple[float, float]]],
+) -> float:
+    """Fraction of a site polygon's area not covered by restricted areas.
+
+    Rings are ``(x=lon, y=lat)`` coordinate lists (as ``parse_polygon`` emits).
+    Returns 1.0 when there is no overlap (or the site has no positive area) and
+    0.0 when restricted areas fully cover the site. Planar area in degree units
+    is sufficient here because the result is a ratio over a small region, so the
+    latitude-scale distortion cancels.
+    """
+    if len(site_polygon) < 3 or not restricted_polygons:
+        return 1.0
+    site = Polygon(site_polygon)
+    if not site.is_valid:
+        site = site.buffer(0)
+    total = site.area
+    if total <= 0:
+        return 1.0
+    polys = []
+    for ring in restricted_polygons:
+        if len(ring) < 3:
+            continue
+        poly = Polygon(ring)
+        if not poly.is_valid:
+            poly = poly.buffer(0)
+        polys.append(poly)
+    if not polys:
+        return 1.0
+    covered = site.intersection(unary_union(polys)).area
+    return max(0.0, min(1.0, (total - covered) / total))
+
+
+def swept_polygon(
+    path_latlon: list[tuple[float, float]],
+    width_m: float,
+) -> list[tuple[float, float]]:
+    """Coverage swath of one execution pass: a path swept by an implement width.
+
+    ``path_latlon`` is the pass centreline as ``(lat, lon)`` points (a single
+    point is allowed: a spot coverage). The path is buffered by half the swath
+    width, returning the covered polygon ring as ``(x=lon, y=lat)`` points
+    matching ``parse_polygon`` output. The buffer is computed in a longitude
+    space scaled by ``cos(latitude)`` so the swath is metrically round in both
+    directions rather than stretched east-west away from the equator; the
+    half-width in degrees uses the mean meters-per-degree of latitude. Returns
+    an empty list for an empty path or a non-positive width.
+    """
+    if width_m <= 0 or not path_latlon:
+        return []
+    lat0 = sum(lat for lat, _ in path_latlon) / len(path_latlon)
+    scale = max(1e-6, math.cos(math.radians(lat0)))
+    half_deg = (width_m / 2.0) / METERS_PER_DEGREE_LAT
+    scaled = [(lon * scale, lat) for lat, lon in path_latlon]
+    base = Point(scaled[0]) if len(scaled) == 1 else LineString(scaled)
+    buffered = base.buffer(half_deg)
+    if buffered.is_empty:
+        return []
+    return [(x / scale, y) for x, y in buffered.exterior.coords]
+
+
+def polygon_rings_area_km2(rings: list[list[tuple[float, float]]]) -> float:
+    """Geodesic area (km2) of the union of polygon rings (``(x=lon, y=lat)``).
+
+    Overlapping rings are merged before measuring, so passes that cover the
+    same ground are not double-counted -- the reason coverage is tracked as
+    geometry rather than a running sum of per-pass areas. Returns 0.0 when no
+    ring has a positive area.
+    """
+    polys = []
+    for ring in rings:
+        if len(ring) < 3:
+            continue
+        poly = Polygon(ring)
+        if not poly.is_valid:
+            poly = poly.buffer(0)
+        if poly.is_empty:
+            continue
+        polys.append(poly)
+    if not polys:
+        return 0.0
+    area_m2, _ = _GEOD_SPHERE.geometry_area_perimeter(unary_union(polys))
+    return abs(float(area_m2)) / 1.0e6
 
 
 def bounding_box(

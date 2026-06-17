@@ -1,6 +1,7 @@
 """OR-Tools routing model construction and solve for one prepared cluster."""
 
 import logging
+import math
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -25,6 +26,7 @@ from fl_op.solver.routing_model import (
     RoutingNode,
     _build_initial_routes,
     _extract_dispatch_packages,
+    build_distance_matrix,
     build_node_table,
     build_vehicle_time_matrices,
     pickup_node_indices,
@@ -80,7 +82,7 @@ def solve_routing_context(
         resource_prices = ResourcePrices()
     has_load = any(_load_kg(o.load_demand) > 0 for o in context.cluster_orders)
     n_reloads = (
-        len(context.routing_vehicles)
+        _reload_nodes_per_vehicle(context) * len(context.routing_vehicles)
         if constants.DEPOT_RELOAD_ENABLED and has_load
         else 0
     )
@@ -91,9 +93,17 @@ def solve_routing_context(
         context.depot_lon,
         context.depot_id,
         n_reloads,
+        pickup_map=context.pickup_location_map,
     )
     time_matrices = build_vehicle_time_matrices(
         nodes, context.routing_vehicles, context.travel_lookup
+    )
+    # Single geodesic distance matrix shared by every vehicle; priced only when
+    # a per-kilometre toll rate is supplied (zero by default).
+    distance_matrix = (
+        build_distance_matrix(nodes)
+        if resource_prices.toll_eur_per_km > 0
+        else None
     )
     service_times = _vehicle_service_times(context, nodes)
     manager = pywrapcp.RoutingIndexManager(
@@ -110,6 +120,7 @@ def solve_routing_context(
         context,
         resource_prices,
         optimization_objective,
+        distance_matrix,
     )
     time_dim = _add_time_dimension(routing, manager, time_matrices, service_times)
     _add_operation_vehicle_constraints(routing, manager, context, nodes)
@@ -118,6 +129,9 @@ def solve_routing_context(
         now_epoch = int(datetime.now(tz=timezone.utc).timestamp())
     _add_order_windows_and_disjunctions(
         routing, manager, time_dim, context, now_epoch, service_times, nodes
+    )
+    _make_reload_nodes_optional(
+        routing, manager, nodes, len(context.routing_vehicles)
     )
     _add_completion_time_costs(
         routing,
@@ -212,6 +226,7 @@ def solve_routing_context(
         now_epoch,
         time_matrices,
         resource_prices,
+        distance_matrix,
     )
     infeasible = unserved_orders(
         context.task_ids,
@@ -244,18 +259,33 @@ def _add_arc_costs(
     context: ClusterContext,
     resource_prices: ResourcePrices,
     optimization_objective: str,
+    distance_matrix: Optional[list[list[float]]] = None,
 ) -> None:
     """Price arcs by the selected objective.
 
-    In cost mode, arc cost = travel hours x the prime mover's consumption rate x the
-    resolved resource price, converted into the objective currency drop
-    penalties use (one EUR of business value = EUR_TO_DROP_PENALTY_SECONDS
-    units). Per-vehicle evaluators let efficient machines win long
-    repositioning legs over expensive ones on time-equal routes.
+    In cost mode, the arc cost sums every priced driver of one leg, converted
+    into the objective currency drop penalties use (one EUR of business value =
+    EUR_TO_DROP_PENALTY_SECONDS units):
+
+    - energy: travel hours x the prime mover's consumption rate x the resolved
+      resource price;
+    - operating time: travel plus on-task service hours x the operating rate
+      (driver labour plus machine wear), so a faster bundle saves wages and
+      wear, not just energy;
+    - tolls: leg distance x the per-kilometre toll rate.
+
+    The operating and toll rates default to zero, so with no cost-rate data the
+    arc cost collapses to the energy-only term. Per-vehicle evaluators let
+    efficient machines win long repositioning legs over expensive ones on
+    time-equal routes.
 
     In time mode, arc cost uses travel seconds plus service seconds at the
     departing node, matching the Time dimension scale.
     """
+    operating_cost_per_second = (
+        resource_prices.operating_eur_per_h * EUR_TO_DROP_PENALTY_SECONDS / 3600.0
+    )
+    toll_cost_per_km = resource_prices.toll_eur_per_km * EUR_TO_DROP_PENALTY_SECONDS
     for rv_idx, routing_vehicle in enumerate(context.routing_vehicles):
         if _is_time_objective(optimization_objective):
 
@@ -277,25 +307,32 @@ def _add_arc_costs(
 
         prime = routing_vehicle["prime"]
         burn_l_per_h = _nonnegative_rate(vehicle_energy_consumption_rate(prime))
-        cost_per_travel_second = (
+        energy_cost_per_travel_second = (
             burn_l_per_h
             * resource_prices.price_for(vehicle_energy_resource_type(prime))
             * EUR_TO_DROP_PENALTY_SECONDS
             / 3600.0
         )
 
-        def fuel_cost_callback(
+        def cost_callback(
             from_index: int,
             to_index: int,
-            cost_per_travel_second: float = cost_per_travel_second,
+            rv_idx: int = rv_idx,
+            energy_cost_per_travel_second: float = energy_cost_per_travel_second,
         ) -> int:
             from_node = manager.IndexToNode(from_index)
             to_node = manager.IndexToNode(to_index)
-            return int(round(
-                time_matrices[rv_idx][from_node][to_node] * cost_per_travel_second
-            ))
+            travel_s = time_matrices[rv_idx][from_node][to_node]
+            cost = travel_s * energy_cost_per_travel_second
+            if operating_cost_per_second:
+                cost += (
+                    travel_s + service_times[rv_idx][from_node]
+                ) * operating_cost_per_second
+            if distance_matrix is not None and toll_cost_per_km:
+                cost += distance_matrix[from_node][to_node] * toll_cost_per_km
+            return int(round(cost))
 
-        cost_cb_idx = routing.RegisterTransitCallback(fuel_cost_callback)
+        cost_cb_idx = routing.RegisterTransitCallback(cost_callback)
         routing.SetArcCostEvaluatorOfVehicle(cost_cb_idx, rv_idx)
 
 
@@ -418,10 +455,10 @@ def _add_order_windows_and_disjunctions(
 
     A paired order's pickup node carries no penalty of its own: the pair is
     served or dropped together (active-variable equality), on one vehicle,
-    pickup first. Reload nodes get no disjunction: they are mandatory depot
-    stops (negligible cost when unused, since they sit at the depot), so the
-    first-solution construction always places them and serving a task behind
-    a reload stays a single insertion move for the local search.
+    pickup first. Reload nodes are handled separately
+    (``_make_reload_nodes_optional``): one stays mandatory per vehicle and any
+    extra multi-trip stops are optional, so a route reloads only as often as its
+    demand requires.
     """
     solver = routing.solver()
     pickup_nodes = pickup_node_indices(nodes)
@@ -791,6 +828,71 @@ def _add_operator_no_overlap(
                 solver.Add(
                     a_before_b + b_before_a + (1 - active_a) + (1 - active_b) >= 1
                 )
+
+
+def _reload_nodes_per_vehicle(context: ClusterContext) -> int:
+    """Optional reload stops to offer each routing vehicle.
+
+    Enough stops for one vehicle to clear the cluster's heaviest single-material
+    demand in successive fills (refills = ceil(total_demand / smallest matching
+    compartment) - 1), bounded by DEPOT_RELOAD_MAX_TRIPS_PER_VEHICLE and at
+    least one. Because reload stops are optional, offering a few extra never
+    forces unnecessary depot trips; it only widens the search for multi-trip
+    routes when demand exceeds a single fill.
+    """
+    materials = {
+        str(order.load_material or "")
+        for order in context.cluster_orders
+        if _load_kg(order.load_demand) > 0
+    }
+    refills = 1
+    for material in materials:
+        total = sum(
+            _load_kg(order.load_demand)
+            for order in context.cluster_orders
+            if str(order.load_material or "") == material
+        )
+        capacities = [
+            _compartment_capacity_kg(rv["prime"], material)
+            for rv in context.routing_vehicles
+        ]
+        min_capacity = min((c for c in capacities if c > 0), default=0.0)
+        if min_capacity > 0:
+            refills = max(refills, math.ceil(total / min_capacity) - 1)
+    return max(1, min(refills, constants.DEPOT_RELOAD_MAX_TRIPS_PER_VEHICLE))
+
+
+def _make_reload_nodes_optional(
+    routing: Any,
+    manager: Any,
+    nodes: list[RoutingNode],
+    n_mandatory: int,
+) -> None:
+    """Make reload visits beyond the first per vehicle optional.
+
+    The first ``n_mandatory`` reload stops (one per routing vehicle) stay
+    mandatory: they sit at the depot, cost only their handling time, and act as
+    an anchor that keeps serving a task behind a reload a single
+    cheapest-insertion move so the proven multi-trip routes survive. Any
+    additional reload stops offered for heavier multi-trip demand get a
+    zero-penalty disjunction, so the solver visits them only when a route
+    genuinely needs a second (or later) refill and drops the surplus otherwise.
+
+    Fully optional reloads (no mandatory anchor) regress: the greedy warm start
+    seeds only one task per implement, so the remaining tasks must be added by
+    local search, and without a reload already in the route cheapest-insertion
+    cannot perform the coupled "insert reload + insert task" move within the
+    time limit -- it drops the task instead. Removing the anchor therefore needs
+    coupled-insertion search support, which remains future work.
+    """
+    seen = 0
+    for node_idx, node in enumerate(nodes):
+        if node.kind != NODE_RELOAD:
+            continue
+        seen += 1
+        if seen <= n_mandatory:
+            continue
+        routing.AddDisjunction([manager.NodeToIndex(node_idx)], 0)
 
 
 def _add_load_capacity_dimensions(

@@ -269,6 +269,25 @@ class TestSolverIntegration:
         assert {d["task_id"] for d in dispatch} == {"o0", "o1"}, infeasible
         assert infeasible == []
 
+    def test_multiple_reloads_serve_demand_beyond_two_fills(self):
+        """Three 80 kg orders on a 100 kg vehicle need two refills (three
+        trips); the extra optional reload stop lets all three be served."""
+        cd = _cluster(task_ids=["o0", "o1", "o2"], allocated={"v0": ["i0"]})
+        orders = [
+            dataclasses.replace(_order("o0", "f0"), load_demand=80.0),
+            dataclasses.replace(_order("o1", "f1"), load_demand=80.0),
+            dataclasses.replace(_order("o2", "f2"), load_demand=80.0),
+        ]
+        vehicle = dataclasses.replace(_vehicle("v0"), load_capacity=100.0)
+        dispatch, infeasible = solve_cluster(
+            cd, orders, [vehicle], [_implement("i0")],
+            [_field("f0"), _field("f1", 48.6, 32.1), _field("f2", 48.55, 32.05)],
+            [_depot()],
+            {}, {"v0": 0}, {"i0": 0},
+        )
+        assert {d["task_id"] for d in dispatch} == {"o0", "o1", "o2"}, infeasible
+        assert infeasible == []
+
     def test_load_capacity_bounds_route_load_without_reloads(self, monkeypatch):
         """Single-trip semantics (reloads disabled): one of the orders drops."""
         from fl_op.core import constants
@@ -496,6 +515,46 @@ class TestCostTrueRouting:
         time_end = datetime.fromisoformat(time_dispatch[0]["scheduled_end"]).timestamp()
         assert time_end < cost_end
 
+    def test_high_labor_rate_flips_cost_mode_to_fast_bundle(self):
+        """Driver time changes the cost-mode choice.
+
+        With no operating rate, cost mode prices only travel fuel and keeps the
+        slow/cheap mover. Pricing driver labour per operating hour makes the
+        slow pair's long on-task service time the dominant cost, so cost mode
+        flips to the fast/expensive bundle that finishes sooner -- the routing
+        topology is now expressive enough for the rate to change the decision.
+        """
+        from fl_op.solver.cost_rates import ResourcePrices
+
+        slow_cheap = dataclasses.replace(
+            _vehicle("v_slow_cheap"), fuel_consumption_rate=5.0
+        )
+        fast_expensive = dataclasses.replace(
+            _vehicle("v_fast_expensive"), fuel_consumption_rate=80.0
+        )
+        slow_impl = dataclasses.replace(
+            _implement("i0"), working_width=4.0, max_speed=2.0
+        )
+        fast_impl = dataclasses.replace(
+            _implement("i1"), working_width=36.0, max_speed=15.0
+        )
+        allocated = {"v_slow_cheap": ["i0"], "v_fast_expensive": ["i1"]}
+
+        def _solve(prices):
+            cd = _cluster(task_ids=["o0"], allocated=allocated)
+            return solve_cluster(
+                cd, [_order("o0", fid="f_near")],
+                [slow_cheap, fast_expensive], [slow_impl, fast_impl],
+                [_field("f_near", lat=48.6)], [_depot()],
+                {}, {"v_slow_cheap": 0, "v_fast_expensive": 1}, {"i0": 0, "i1": 1},
+                resource_prices=prices,
+            )
+
+        no_labor, no_labor_inf = _solve(ResourcePrices())
+        with_labor, with_labor_inf = _solve(ResourcePrices(labor_eur_per_h=80.0))
+        assert no_labor[0]["prime_asset_id"] == "v_slow_cheap", no_labor_inf
+        assert with_labor[0]["prime_asset_id"] == "v_fast_expensive", with_labor_inf
+
     def test_margin_is_net_of_fuel_and_material_at_resolved_prices(self):
         from fl_op.solver.cost_rates import ResourcePrices
 
@@ -531,6 +590,71 @@ class TestCostTrueRouting:
             {}, {"v0": 0}, {"i0": 0},
         )
         assert far_dispatch[0]["estimated_fuel_l"] > near_dispatch[0]["estimated_fuel_l"]
+
+
+class TestOperatingCostExpansion:
+    """Driver labour, machine wear, and tolls priced into dispatch margins."""
+
+    def _far_solve(self, prices):
+        from fl_op.solver.cost_rates import ResourcePrices
+
+        cd = _cluster(task_ids=["o0"], allocated={"v0": ["i0"]})
+        dispatch, _ = solve_cluster(
+            cd, [_order("o0", fid="f_far")], [_vehicle("v0")], [_implement("i0")],
+            [_field("f_far", lat=49.0)], [_depot()],
+            {}, {"v0": 0}, {"i0": 0},
+            resource_prices=prices or ResourcePrices(),
+        )
+        return dispatch
+
+    def test_margin_is_net_of_operating_and_toll_costs(self):
+        from fl_op.solver.cost_rates import ResourcePrices
+
+        prices = ResourcePrices(
+            fuel_eur_per_l=2.0, material_eur_per_kg=1.0,
+            labor_eur_per_h=30.0, machine_wear_eur_per_h=10.0, toll_eur_per_km=0.5,
+        )
+        dispatch = self._far_solve(prices)
+        assert len(dispatch) == 1
+        package = dispatch[0]
+        # The new per-package cost fields are populated for a travelled leg.
+        assert package["estimated_distance_km"] > 0
+        assert package["estimated_labor_cost_eur"] > 0
+        assert package["estimated_machine_wear_cost_eur"] > 0
+        assert package["estimated_toll_cost_eur"] > 0
+        expected = (
+            2000.0
+            - package["estimated_energy_cost_eur"]
+            - package["estimated_fertilizer_kg"] * prices.material_eur_per_kg
+            - package["estimated_labor_cost_eur"]
+            - package["estimated_machine_wear_cost_eur"]
+            - package["estimated_toll_cost_eur"]
+        )
+        assert package["estimated_margin_eur"] == pytest.approx(expected, abs=0.05)
+
+    def test_operating_and_toll_reduce_margin(self):
+        from fl_op.solver.cost_rates import ResourcePrices
+
+        base = self._far_solve(
+            ResourcePrices(fuel_eur_per_l=2.0, material_eur_per_kg=1.0)
+        )[0]["estimated_margin_eur"]
+        expanded = self._far_solve(
+            ResourcePrices(
+                fuel_eur_per_l=2.0, material_eur_per_kg=1.0,
+                labor_eur_per_h=30.0, machine_wear_eur_per_h=10.0,
+                toll_eur_per_km=0.5,
+            )
+        )[0]["estimated_margin_eur"]
+        assert expanded < base
+
+    def test_zero_operating_rates_leave_distance_and_costs_at_zero(self):
+        from fl_op.solver.cost_rates import ResourcePrices
+
+        package = self._far_solve(ResourcePrices())[0]
+        assert package["estimated_distance_km"] == 0.0
+        assert package["estimated_labor_cost_eur"] == 0.0
+        assert package["estimated_machine_wear_cost_eur"] == 0.0
+        assert package["estimated_toll_cost_eur"] == 0.0
 
 
 # ---------------------------------------------------------------------------

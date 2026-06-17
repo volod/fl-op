@@ -51,6 +51,11 @@
       "physicalType": "string",
       "required": true
     },
+    "load_capacities_kg": {
+      "logicalType": "object",
+      "physicalType": "string",
+      "required": false
+    },
     "name": {
       "logicalType": "string",
       "physicalType": "string",
@@ -83,7 +88,7 @@
     }
   },
   "fingerprints": {
-    "optimizationMetadataHash": "96c3e475f76db51e9414d98bd50f2e5ec3d5f4485a3fa3c75c63ec39229a8660"
+    "optimizationMetadataHash": "549737fd714fdd9d8d49636f7bee8fd00a1ad71fa3425fae0b9815f99a297820"
   },
   "history": [
     {
@@ -499,16 +504,283 @@
         "mappingVersion": "1.0.0"
       },
       "version": "1.1.0"
+    },
+    {
+      "contractId": "drone-uavs",
+      "fields": {
+        "battery_capacity_kwh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "compatible_operations": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": true
+        },
+        "current_lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "current_lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "energy_capacity_l_equiv": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "energy_resource_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "energy_unit": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "energy_use_kwh_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "energy_use_l_per_h": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "hub_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "load_capacities_kg": {
+          "logicalType": "object",
+          "physicalType": "string",
+          "required": false
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "payload_capacity_kg": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "rated_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "travel_speed_kmh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "uav_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "vehicle_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "549737fd714fdd9d8d49636f7bee8fd00a1ad71fa3425fae0b9815f99a297820"
+      },
+      "odcsId": "uavs",
+      "registryArtifact": {
+        "artifactId": "drone_logistics/uavs",
+        "artifactRef": "drone_logistics/uavs@odcs:1.2.0+mapping:1.1.0",
+        "contractVersion": "1.2.0",
+        "domain": "drone_logistics",
+        "localId": "uavs",
+        "mappingVersion": "1.1.0",
+        "odcsId": "uavs",
+        "qualifiedId": "drone_logistics/uavs",
+        "registryId": "drone-uavs"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "assetRole": "mobile-prime-mover",
+            "canonicalEntity": "asset",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "assetMaster",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "uavs"
+          },
+          "field:battery_capacity_kwh": {
+            "binding": "asset.capabilities.energyCapacity",
+            "canonicalUnit": "kWh",
+            "planningUse": [
+              "capacity"
+            ],
+            "quantityKind": "energy",
+            "semanticTerm": "urn:xopt:capability:energy-capacity"
+          },
+          "field:compatible_operations": {
+            "binding": "asset.capabilities.compatibleOperations",
+            "planningUse": [
+              "compatibility-filter"
+            ],
+            "quantityKind": "categorical-set",
+            "semanticTerm": "urn:xopt:capability:compatible-operations"
+          },
+          "field:current_lat": {
+            "binding": "asset.location.lat",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:latitude"
+          },
+          "field:current_lon": {
+            "binding": "asset.location.lon",
+            "canonicalUnit": "deg",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:longitude"
+          },
+          "field:energy_capacity_l_equiv": {
+            "binding": "asset.capabilities.fuelTankVolume",
+            "canonicalUnit": "L",
+            "planningUse": [
+              "capacity"
+            ],
+            "quantityKind": "volume",
+            "semanticTerm": "urn:xopt:capability:fuel-tank-volume"
+          },
+          "field:energy_resource_type": {
+            "binding": "asset.capabilities.energyResourceType",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "categorical",
+            "semanticTerm": "urn:xopt:capability:energy-resource-type"
+          },
+          "field:energy_unit": {
+            "binding": "asset.capabilities.energyUnit",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "categorical",
+            "semanticTerm": "urn:xopt:capability:energy-unit"
+          },
+          "field:energy_use_kwh_per_h": {
+            "binding": "asset.capabilities.energyConsumptionRate",
+            "canonicalUnit": "kWh/h",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "energy-flow-rate",
+            "semanticTerm": "urn:xopt:capability:energy-consumption-rate"
+          },
+          "field:energy_use_l_per_h": {
+            "binding": "asset.capabilities.fuelConsumptionRate",
+            "canonicalUnit": "L/h",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "flow-rate",
+            "semanticTerm": "urn:xopt:capability:fuel-consumption-rate"
+          },
+          "field:hub_id": {
+            "binding": "asset.homeDepotRef",
+            "planningUse": [
+              "assignment"
+            ],
+            "semanticTerm": "urn:xopt:relationship:home-depot"
+          },
+          "field:load_capacities_kg": {
+            "binding": "asset.capabilities.loadCapacities",
+            "planningUse": [
+              "capacity"
+            ],
+            "quantityKind": "rate-map",
+            "semanticTerm": "urn:xopt:capability:load-capacities"
+          },
+          "field:name": {
+            "binding": "asset.name",
+            "planningUse": [
+              "classification"
+            ],
+            "semanticTerm": "urn:xopt:attribute:display-name"
+          },
+          "field:payload_capacity_kg": {
+            "binding": "asset.capabilities.loadCapacity",
+            "canonicalUnit": "kg",
+            "planningUse": [
+              "capacity"
+            ],
+            "quantityKind": "mass",
+            "semanticTerm": "urn:xopt:capability:load-capacity"
+          },
+          "field:rated_power_kw": {
+            "binding": "asset.capabilities.ratedPower",
+            "canonicalUnit": "kW",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "capacity",
+              "compatibility-filter"
+            ],
+            "quantityKind": "power",
+            "semanticTerm": "urn:xopt:capability:rated-power"
+          },
+          "field:travel_speed_kmh": {
+            "binding": "asset.capabilities.travelSpeed",
+            "canonicalUnit": "km/h",
+            "planningUse": [
+              "routing"
+            ],
+            "quantityKind": "speed",
+            "semanticTerm": "urn:xopt:capability:travel-speed"
+          },
+          "field:uav_id": {
+            "binding": "asset.assetId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:asset-id"
+          },
+          "field:vehicle_class": {
+            "binding": "asset.assetType",
+            "planningUse": [
+              "classification"
+            ],
+            "semanticTerm": "urn:xopt:attribute:asset-type"
+          }
+        },
+        "mappingVersion": "1.1.0"
+      },
+      "version": "1.2.0"
     }
   ],
   "odcsId": "uavs",
   "registryArtifact": {
     "artifactId": "drone_logistics/uavs",
-    "artifactRef": "drone_logistics/uavs@odcs:1.1.0+mapping:1.0.0",
-    "contractVersion": "1.1.0",
+    "artifactRef": "drone_logistics/uavs@odcs:1.2.0+mapping:1.1.0",
+    "contractVersion": "1.2.0",
     "domain": "drone_logistics",
     "localId": "uavs",
-    "mappingVersion": "1.0.0",
+    "mappingVersion": "1.1.0",
     "odcsId": "uavs",
     "qualifiedId": "drone_logistics/uavs",
     "registryId": "drone-uavs"
@@ -613,6 +885,14 @@
         ],
         "semanticTerm": "urn:xopt:relationship:home-depot"
       },
+      "field:load_capacities_kg": {
+        "binding": "asset.capabilities.loadCapacities",
+        "planningUse": [
+          "capacity"
+        ],
+        "quantityKind": "rate-map",
+        "semanticTerm": "urn:xopt:capability:load-capacities"
+      },
       "field:name": {
         "binding": "asset.name",
         "planningUse": [
@@ -664,7 +944,7 @@
         "semanticTerm": "urn:xopt:attribute:asset-type"
       }
     },
-    "mappingVersion": "1.0.0"
+    "mappingVersion": "1.1.0"
   },
-  "version": "1.1.0"
+  "version": "1.2.0"
 }

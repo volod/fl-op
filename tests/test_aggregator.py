@@ -67,6 +67,21 @@ class TestComputeKpis:
         assert kpis["total_fuel_l"] == pytest.approx(50.0)
         assert kpis["total_fertilizer_kg"] == pytest.approx(15.0)
 
+    def test_operating_and_toll_costs_summed(self):
+        dispatch = [
+            {"task_id": "o0", "estimated_margin_eur": 0,
+             "estimated_distance_km": 12.0, "estimated_labor_cost_eur": 30.0,
+             "estimated_machine_wear_cost_eur": 8.0, "estimated_toll_cost_eur": 0.5},
+            {"task_id": "o1", "estimated_margin_eur": 0,
+             "estimated_distance_km": 8.0, "estimated_labor_cost_eur": 20.0,
+             "estimated_machine_wear_cost_eur": 5.0, "estimated_toll_cost_eur": 0.3},
+        ]
+        kpis = _compute_kpis(dispatch, [], [], {})
+        assert kpis["total_distance_km"] == pytest.approx(20.0)
+        assert kpis["total_labor_cost_eur"] == pytest.approx(50.0)
+        assert kpis["total_machine_wear_cost_eur"] == pytest.approx(13.0)
+        assert kpis["total_toll_cost_eur"] == pytest.approx(0.8)
+
     def test_infeasibility_reasons_counted(self):
         infeasible = [
             {"task_id": "o0", "reason_code": "OPTIMIZATION_TRADEOFF"},
@@ -158,6 +173,8 @@ class TestComputeKpis:
             "n_dispatched", "n_infeasible",
             "total_estimated_margin_eur", "greedy_baseline_margin_eur",
             "solver_improvement_eur", "total_fuel_l", "total_fertilizer_kg",
+            "total_distance_km", "total_labor_cost_eur",
+            "total_machine_wear_cost_eur", "total_toll_cost_eur",
             "infeasibility_reasons",
         ):
             assert key in kpis, f"KPI dict missing key: {key}"

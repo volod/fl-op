@@ -67,9 +67,12 @@ class _DatasetCase:
 def _evaluate(
     cases: list[_DatasetCase],
     parameters: SolverParameters,
+    measure_instability: bool = False,
 ) -> _Evaluation:
     """Run the solver chain over every dataset case and score the outcome."""
-    evaluations = [_evaluate_case(case, parameters) for case in cases]
+    evaluations = [
+        _evaluate_case(case, parameters, measure_instability) for case in cases
+    ]
     weights = [max(1.0, case.workload_weight) for case in cases]
     weight_total = sum(weights) or 1.0
     return _Evaluation(
@@ -112,6 +115,7 @@ def _evaluate(
 def _evaluate_case(
     case: _DatasetCase,
     parameters: SolverParameters,
+    measure_instability: bool = False,
 ) -> _Evaluation:
     """Run the solver chain once and score one dataset case."""
     from fl_op.solver.chain import run_solver_chain
@@ -130,7 +134,10 @@ def _evaluate_case(
         penalty_by_task.get(record["task_id"], 0.0) for record in result.infeasible
     )
     margin = float(result.kpis.get("total_estimated_margin_eur", 0.0))
-    instability = float(result.kpis.get("plan_instability_penalty", 0.0))
+    if measure_instability:
+        instability = _perturbed_instability(case, parameters, result)
+    else:
+        instability = float(result.kpis.get("plan_instability_penalty", 0.0))
     kpis = dict(result.kpis)
     kpis["wall_time_s"] = wall_time_s
     kpis["plan_instability_penalty"] = instability
@@ -142,6 +149,102 @@ def _evaluate_case(
         unassigned_penalty_eur_per_day=unassigned_penalty,
         cases=[],
     )
+
+
+def _assignment_by_task(dispatch: list[dict[str, Any]]) -> dict[str, tuple[str, str]]:
+    return {
+        str(pkg.get("task_id", "")): (
+            str(pkg.get("prime_asset_id", "")),
+            str(pkg.get("related_asset_id", "")),
+        )
+        for pkg in dispatch
+    }
+
+
+def _perturbed_instability(
+    case: _DatasetCase,
+    parameters: SolverParameters,
+    base_result: Any,
+) -> float:
+    """Real plan churn from a one-event rolling perturbation.
+
+    The busiest prime mover in the base plan is removed (an ``asset.unavailable``
+    event) and the case is re-solved. Instability is the number of tasks whose
+    bundle changed *despite their original resources still being available* --
+    avoidable churn, not the unavoidable reassignment of the removed mover's own
+    work -- weighted by ``rolling_change_penalty``. A parameter set that
+    localizes the disruption scores lower than one that cascades.
+    """
+    from fl_op.solver.chain import run_solver_chain
+    from fl_op.solver.inputs import SECTION_PRIME_MOVERS
+
+    base = _assignment_by_task(base_result.dispatch)
+    if len(base) < 2:
+        return 0.0
+    task_count: dict[str, int] = {}
+    for prime, _related in base.values():
+        if prime:
+            task_count[prime] = task_count.get(prime, 0) + 1
+    if not task_count:
+        return 0.0
+    # Deterministic: most-loaded prime, ties broken by asset id.
+    busiest = max(sorted(task_count), key=lambda prime: task_count[prime])
+
+    perturbed_rows = copy.deepcopy(case.rows)
+    perturbed_rows[SECTION_PRIME_MOVERS] = [
+        mover
+        for mover in perturbed_rows.get(SECTION_PRIME_MOVERS, [])
+        if getattr(mover, "asset_id", "") != busiest
+    ]
+    perturbed = _assignment_by_task(
+        run_solver_chain(
+            perturbed_rows, enforcement=case.enforcement, parameters=parameters
+        ).dispatch
+    )
+    change_penalty = int(
+        getattr(parameters, "rolling_change_penalty", 0) or 0
+    )
+    churn = sum(
+        1
+        for task_id, bundle in base.items()
+        if bundle[0] != busiest
+        and task_id in perturbed
+        and perturbed[task_id] != bundle
+    )
+    return float(churn * change_penalty)
+
+
+def _auto_n_jobs(cases: list[_DatasetCase]) -> int:
+    """Optuna worker count from CPU count and available memory per dataset.
+
+    Each worker's footprint is a base plus a per-task term scaled by the largest
+    dataset, so a bigger dataset reduces parallelism under the memory budget.
+    Falls back to a single worker when memory is not measurable.
+    """
+    import os
+
+    from fl_op.solver.cluster_pool import available_memory_mb
+
+    cpu = os.cpu_count() or 1
+    available = available_memory_mb()
+    if available is None:
+        return 1
+    max_tasks = max(
+        (len(case.rows.get("tasks", [])) for case in cases), default=0
+    )
+    per_job_mb = (
+        constants.TUNE_JOB_BASE_MEMORY_MB
+        + constants.TUNE_JOB_MEMORY_MB_PER_TASK * max_tasks
+    )
+    usable_mb = available * (1.0 - constants.SOLVER_MEMORY_HEADROOM_PCT / 100.0)
+    memory_cap = max(1, int(usable_mb / per_job_mb)) if per_job_mb > 0 else cpu
+    jobs = max(1, min(cpu, memory_cap))
+    logger.info(
+        "Auto tuning parallelism: %d jobs (cpu %d, available %.0f MB, "
+        "per-job %.0f MB, max tasks %d)",
+        jobs, cpu, available, per_job_mb, max_tasks,
+    )
+    return jobs
 
 
 def _average_numeric_kpis(
@@ -172,7 +275,18 @@ def _average_numeric_kpis(
     return averaged
 
 
-def _trial_parameters(trial: Any, baseline_limit_s: int) -> SolverParameters:
+def _trial_parameters(
+    trial: Any, baseline_limit_s: int, measure_instability: bool = False
+) -> SolverParameters:
+    overrides: dict[str, Any] = {}
+    if measure_instability:
+        # The change penalty only bites when instability is actually measured
+        # (the perturbed re-solve), so it joins the search space only then.
+        overrides["rolling_change_penalty"] = trial.suggest_int(
+            "rolling_change_penalty",
+            constants.TUNE_CHANGE_PENALTY_MIN,
+            constants.TUNE_CHANGE_PENALTY_MAX,
+        )
     return SolverParameters(
         cluster_target_size=trial.suggest_int(
             "cluster_target_size",
@@ -196,6 +310,7 @@ def _trial_parameters(trial: Any, baseline_limit_s: int) -> SolverParameters:
             constants.TUNE_TIME_LIMIT_MIN_S,
             max(constants.TUNE_TIME_LIMIT_MIN_S, baseline_limit_s),
         ),
+        **overrides,
     )
 
 
@@ -208,8 +323,16 @@ def run_tune(
     storage: Optional[str] = None,
     multi_objective: bool = True,
     study_name: Optional[str] = None,
+    measure_instability: bool = False,
 ) -> pathlib.Path:
-    """Tune solver parameters with Optuna; returns the artifact directory."""
+    """Tune solver parameters with Optuna; returns the artifact directory.
+
+    ``n_jobs=0`` auto-selects Optuna parallelism from CPU count and available
+    memory versus the per-dataset job footprint. ``measure_instability`` scores
+    real plan churn by re-solving each case after removing its busiest prime
+    mover (a one-event rolling perturbation) instead of the periodic chain's
+    always-zero instability.
+    """
     import optuna
 
     from fl_op.contracts.registry import FileRegistry
@@ -249,6 +372,8 @@ def run_tune(
             )
         )
     snapshot_hashes = [case.snapshot_hash for case in cases]
+    if n_jobs == 0:
+        n_jobs = _auto_n_jobs(cases)
 
     # Recorded KPI baseline: default parameters at the trial-scale time budget
     # so trials and baseline compare under one compute budget.
@@ -256,7 +381,7 @@ def run_tune(
         SolverParameters().cluster_solve_time_limit_s, constants.TUNE_TIME_LIMIT_MAX_S
     )
     baseline_params = SolverParameters(cluster_solve_time_limit_s=baseline_limit_s)
-    baseline = _evaluate(cases, baseline_params)
+    baseline = _evaluate(cases, baseline_params, measure_instability)
     logger.info(
         "Tuning baseline: objective %.2f (margin %.2f, unassigned penalty %.2f, "
         "wall %.3fs, datasets %d)",
@@ -285,8 +410,8 @@ def run_tune(
     records_lock = threading.Lock()
 
     def objective(trial: "optuna.Trial") -> float | tuple[float, float, float]:
-        parameters = _trial_parameters(trial, baseline_limit_s)
-        evaluation = _evaluate(cases, parameters)
+        parameters = _trial_parameters(trial, baseline_limit_s, measure_instability)
+        evaluation = _evaluate(cases, parameters, measure_instability)
         record = {
             "number": trial.number,
             "params": parameters.as_dict(),
@@ -363,6 +488,7 @@ def run_tune(
         "improvement_over_baseline": round(best_objective - baseline.objective, 2),
         "n_trials": n_trials,
         "n_jobs": n_jobs,
+        "measure_instability": measure_instability,
         "seed": seed,
         "storage": storage_uri or "",
         "dataset_dirs": data_dirs,

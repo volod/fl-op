@@ -8,7 +8,7 @@ metadata:
   sourceContract: jobs
   canonicalEntity: task
   canonicalModelRef: urn:xopt:model:canonical:0.1.0
-  mappingVersion: 1.1.0
+  mappingVersion: 1.2.0
   dataProductRole: serviceOrders
   permittedPlanningUses: [periodic-planning, rolling-dispatch]
 
@@ -82,3 +82,8 @@ fieldMappings:
     quantityKind: money
     planningUse: [objective]
     missingValuePolicy: fallback-to-conservative-value
+  - sourceField: pickup_location_ref
+    binding: task.pickupLocationRef
+    semanticTerm: urn:xopt:relationship:pickup-location
+    planningUse: [capacity, geospatial]
+    missingValuePolicy: accept-optional

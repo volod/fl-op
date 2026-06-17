@@ -17,6 +17,7 @@ from fl_op.data.geo import (
     _REGION_CENTER_LAT,
     _REGION_CENTER_LON,
     _REGION_RADIUS_KM,
+    _nearest_depot_ids,
     _random_points_in_circle,
 )
 
@@ -238,6 +239,7 @@ def _generate_jobs(
     rng: np.random.Generator,
     n: int,
     sites: list[dict[str, Any]],
+    yards: list[dict[str, Any]],
     now: datetime,
 ) -> list[dict[str, Any]]:
     today = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
@@ -247,6 +249,15 @@ def _generate_jobs(
     revenues = rng.uniform(_JOB_REVENUE_MIN_EUR, _JOB_REVENUE_MAX_EUR, n)
     priorities = rng.integers(1, 11, size=n)
     volumes = rng.uniform(_JOB_QUANTITY_MIN_M3, _JOB_QUANTITY_MAX_M3, n)
+
+    # Nearest supply yard per site, for the paired pickup-and-delivery share.
+    nearest_yard = _nearest_depot_ids(
+        np.array([s["entry_lat"] for s in sites]),
+        np.array([s["entry_lon"] for s in sites]),
+        np.array([y["lat"] for y in yards]),
+        np.array([y["lon"] for y in yards]),
+        [y["yard_id"] for y in yards],
+    )
 
     jobs = []
     for i in range(n):
@@ -271,6 +282,9 @@ def _generate_jobs(
                 "revenue_eur": round(float(revenues[i]), 2),
                 "quantity_value": quantity_value,
                 "quantity_unit": quantity_unit,
+                # A share of jobs collect equipment at the nearest yard before
+                # the site (paired pickup-and-delivery); the rest go direct.
+                "pickup_location_ref": nearest_yard[i] if i % 5 == 0 else "",
             }
         )
     return jobs

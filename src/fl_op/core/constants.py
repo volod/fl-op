@@ -190,6 +190,14 @@ MAX_PAIRS_PER_ORDER: int = int(os.environ.get("MAX_PAIRS_PER_ORDER", "30"))
 # WGS-84 mean Earth radius used for haversine distance calculations.
 EARTH_RADIUS_KM: float = 6371.0
 
+# Mean meters per degree of latitude (used to convert a swath width in meters
+# into a degree-space buffer radius for coverage geometry).
+METERS_PER_DEGREE_LAT: float = 111_320.0
+
+# Unit conversion: one square kilometre is 100 hectares. Coverage geometry is
+# measured geodesically in km2 and compared against task work areas in hectares.
+HECTARES_PER_SQUARE_KM: float = 100.0
+
 # Average ground speed (km/h) for the geometric travel-time fallback used when
 # no travel-network link connects a location pair. Env-configurable so the
 # geometry-fixed leg duration can be tuned without code changes.
@@ -231,6 +239,21 @@ DEPOT_RELOAD_ENABLED: bool = bool(int(os.environ.get("DEPOT_RELOAD_ENABLED", "1"
 # Handling time of one depot reload visit (loading at the ramp).
 DEPOT_RELOAD_SERVICE_S: int = int(os.environ.get("DEPOT_RELOAD_SERVICE_S", "900"))
 
+# Maximum optional reload stops offered to each routing vehicle. The model
+# offers enough stops for a vehicle to clear the cluster's heaviest material
+# demand in multiple fills, bounded by this cap; reload stops are optional, so
+# surplus stops are left unvisited and a route reloads only as often as needed.
+DEPOT_RELOAD_MAX_TRIPS_PER_VEHICLE: int = int(
+    os.environ.get("DEPOT_RELOAD_MAX_TRIPS_PER_VEHICLE", "3")
+)
+
+# Geometric restrictions partially overlapping a work site clip the workable
+# area by the unrestricted fraction instead of dropping the task. Below this
+# fraction the site is treated as effectively fully restricted and dropped.
+RESTRICTION_MIN_WORKABLE_AREA_FRACTION: float = float(
+    os.environ.get("RESTRICTION_MIN_WORKABLE_AREA_FRACTION", "0.02")
+)
+
 # Number of parallel solver workers. 0 = auto: min(n_clusters, cpu_count,
 # memory-derived cap). An explicit positive value always wins.
 SOLVER_WORKERS: int = int(os.environ.get("SOLVER_WORKERS", "0"))
@@ -249,9 +272,17 @@ SOLVER_WORKER_BASE_MEMORY_MB: float = float(
 )
 
 # Estimated bytes per routing-model matrix cell (matrix entry plus callback
-# and search-state overhead, measured order of magnitude).
+# and search-state overhead, measured order of magnitude). Used only until
+# worker RSS feedback has fit its own (base, per-cell) coefficients.
 SOLVER_MODEL_BYTES_PER_CELL: float = float(
     os.environ.get("SOLVER_MODEL_BYTES_PER_CELL", "64.0")
+)
+
+# Minimum distinct (model-cells, worker-RSS) samples before the retained
+# feedback fits its own linear memory model (base MB plus MB per model cell)
+# in place of the constants above; below it the constant estimate stands.
+SOLVER_MEMORY_FIT_MIN_SAMPLES: int = int(
+    os.environ.get("SOLVER_MEMORY_FIT_MIN_SAMPLES", "5")
 )
 
 # Share of available memory kept free for the parent process and OS.
@@ -288,9 +319,19 @@ CLUSTER_LNS_MAX_BUDGET_MULTIPLIER: float = float(
 # constants below are the engine fallback for unpriced resources.
 
 # Canonical resource codes a cost-rate row may price (cost-rate.rateType).
+# The first three price a consumable quantity (per litre / kg / kWh); the
+# operating rates below price time and distance of the dispatch itself, so they
+# extend the same arc-pricing mechanism to driver wages, machine wear, and tolls.
 RATE_TYPE_FUEL: str = "fuel"
 RATE_TYPE_MATERIAL: str = "fertilizer"
 RATE_TYPE_ELECTRICITY: str = "electricity"
+
+# Driver/operator labour, priced per operating hour (travel plus on-task time).
+RATE_TYPE_LABOR: str = "labor"
+# Machine wear / depreciation, priced per operating hour.
+RATE_TYPE_MACHINE_WEAR: str = "machine-wear"
+# Road tolls, priced per kilometre travelled.
+RATE_TYPE_TOLL: str = "toll"
 
 # Canonical unit of depot material inventory and of the material-reservation
 # quantities derived from it (urn:xopt:inventory:fertilizer is kept in kg).
@@ -307,6 +348,17 @@ FERTILIZER_COST_EUR_PER_KG: float = float(os.environ.get("FERTILIZER_COST_EUR_PE
 ELECTRICITY_COST_EUR_PER_KWH: float = float(
     os.environ.get("ELECTRICITY_COST_EUR_PER_KWH", "0.18")
 )
+
+# Operating cost-rate fallbacks. Default to zero so the extra cost terms stay
+# inert unless a cost-rate row prices them: the engine only lets driver time,
+# machine wear, and tolls change routing decisions when the data supplies them.
+# Labour and wear are EUR per operating hour (travel plus on-task service time);
+# tolls are EUR per kilometre travelled.
+LABOR_COST_EUR_PER_H: float = float(os.environ.get("LABOR_COST_EUR_PER_H", "0.0"))
+MACHINE_WEAR_COST_EUR_PER_H: float = float(
+    os.environ.get("MACHINE_WEAR_COST_EUR_PER_H", "0.0")
+)
+TOLL_COST_EUR_PER_KM: float = float(os.environ.get("TOLL_COST_EUR_PER_KM", "0.0"))
 
 # Share of a related-equipment material tank assumed consumed by one task.
 RELATED_MATERIAL_FILL_RATIO: float = 0.8
@@ -400,9 +452,20 @@ TUNE_N_TRIALS: int = int(os.environ.get("TUNE_N_TRIALS", "20"))
 TUNE_SEED: int = int(os.environ.get("TUNE_SEED", "7"))
 # Parallel Optuna workers. Values above 1 use an RDB storage backend so trials
 # can be coordinated safely across worker threads/processes or repeated CLI
-# invocations.
+# invocations. 0 means auto: choose from CPU count and available memory versus
+# the per-dataset job footprint below.
 TUNE_N_JOBS: int = int(os.environ.get("TUNE_N_JOBS", "1"))
 TUNE_STORAGE_URI: str = os.environ.get("TUNE_STORAGE_URI", "")
+
+# Auto tuning-parallelism job footprint: one Optuna worker's resident memory is
+# estimated as a base plus a per-task term scaled by the largest dataset's task
+# count, so bigger datasets reduce parallelism under a fixed memory budget.
+TUNE_JOB_BASE_MEMORY_MB: float = float(
+    os.environ.get("TUNE_JOB_BASE_MEMORY_MB", "500.0")
+)
+TUNE_JOB_MEMORY_MB_PER_TASK: float = float(
+    os.environ.get("TUNE_JOB_MEMORY_MB_PER_TASK", "2.0")
+)
 
 # Per-cluster solve budget used for the tuning baseline and as the search
 # upper bound: trials run at experiment scale, not production scale, so the
@@ -416,6 +479,12 @@ TUNE_CLUSTER_TARGET_SIZE_MIN: int = int(os.environ.get("TUNE_CLUSTER_TARGET_SIZE
 TUNE_CLUSTER_TARGET_SIZE_MAX: int = int(os.environ.get("TUNE_CLUSTER_TARGET_SIZE_MAX", "80"))
 TUNE_SCORE_WEIGHT_MIN: float = float(os.environ.get("TUNE_SCORE_WEIGHT_MIN", "0.1"))
 TUNE_SCORE_WEIGHT_MAX: float = float(os.environ.get("TUNE_SCORE_WEIGHT_MAX", "5.0"))
+
+# Search bounds for the rolling change penalty, tuned only when instability is
+# measured (the perturbed re-solve harness); it weights avoidable plan churn
+# against business value on the instability objective.
+TUNE_CHANGE_PENALTY_MIN: int = int(os.environ.get("TUNE_CHANGE_PENALTY_MIN", "100"))
+TUNE_CHANGE_PENALTY_MAX: int = int(os.environ.get("TUNE_CHANGE_PENALTY_MAX", "5000"))
 
 # Reviewed tuned solver-parameter artifact. `fl-op tune-promote` writes this
 # under DATA_DIR/tune; plan adapters load it as an overlay on the checked-in
@@ -665,16 +734,22 @@ SNAPSHOT_INPUT_ENTITIES: tuple[str, ...] = (
 )
 
 # ---------------------------------------------------------------------------
-# Stationary-equipment monitoring policy
+# Equipment monitoring policy
 # ---------------------------------------------------------------------------
-# Thresholds the monitoring policy applies to derive service tasks for
-# stationary assets (sensor stations, fixed road/field equipment) from their
-# latest observations and maintenance state.
+# Thresholds the monitoring policy applies to derive service tasks for assets
+# (sensor stations, fixed road/field equipment, and -- when enabled -- mobile
+# prime movers and drones) from their latest observations and maintenance state.
 
 # Canonical metric codes observations must carry for the engine to interpret
 # them; domain sources normalize their metric vocabulary to these values.
 METRIC_BATTERY_LEVEL: str = "battery-level"
 METRIC_HEALTH_STATUS: str = "health-status"
+
+# Whether predictive monitoring also derives service tasks for mobile assets
+# (prime movers, drones), not just stationary equipment. Off by default so the
+# established stationary-only behaviour is unchanged; a domain profile opts in
+# globally or per asset type via the monitoring policy.
+MONITOR_MOBILE_ASSETS: bool = bool(int(os.environ.get("MONITOR_MOBILE_ASSETS", "0")))
 
 # Telemetry-derived task progress: an observation carrying this canonical
 # metric for a task id reports the completed share of the task's work in
@@ -883,6 +958,24 @@ PROGNOSIS_LOG_FILENAME: str = "service-prognosis.jsonl"
 # one record per completed task with its deadline lead and schedule error.
 LEAD_TIME_LOG_FILENAME: str = "completion-lead-times.jsonl"
 
+# ---------------------------------------------------------------------------
+# Spatial execution feedback (per-pass coverage geometry)
+# ---------------------------------------------------------------------------
+# A task.progress event or work-progress telemetry observation may carry the
+# geometry covered in that pass (a covered polygon, or a path swept by an
+# implement width). Passes accumulate into the task's covered geometry; the
+# overlap-corrected covered area drives how much remaining work is left.
+
+# Covered share at or above which the task is treated as finished (the last
+# strip is effectively done; a tiny uncovered remainder is not worth a revisit).
+COVERAGE_COMPLETE_FRACTION: float = float(
+    os.environ.get("COVERAGE_COMPLETE_FRACTION", "0.99")
+)
+
+# Filename (under DATA_DIR/quality) of the append-only per-pass coverage trail:
+# one record per coverage pass with the covered/remaining area and pass count.
+COVERAGE_TRAIL_FILENAME: str = "coverage-passes.jsonl"
+
 # Share of withdrawn (false positive) service prognoses above which a looser
 # monitoring policy (shorter forecast horizon, lower composite threshold) is
 # recommended.
@@ -919,6 +1012,19 @@ MONITORING_TUNE_HORIZON_MIN_DAYS: float = 1.0
 MONITORING_TUNE_HORIZON_MAX_DAYS: float = 14.0
 MONITORING_TUNE_COMPOSITE_MIN: float = 0.1
 MONITORING_TUNE_COMPOSITE_MAX: float = 0.6
+MONITORING_TUNE_BATTERY_LOW_MIN: float = 5.0
+MONITORING_TUNE_BATTERY_LOW_MAX: float = 40.0
+
+# Completion lead-time feedback into guarded tuning: a high share of service
+# tasks finishing after their deadline means the policy fired too late, so it
+# loosens (the same direction as a high false-negative rate). Trusted only once
+# enough service completions have accumulated.
+MONITORING_LATE_SHARE_ALERT: float = float(
+    os.environ.get("MONITORING_LATE_SHARE_ALERT", "0.3")
+)
+MONITORING_LEAD_TIME_MIN_SAMPLES: int = int(
+    os.environ.get("MONITORING_LEAD_TIME_MIN_SAMPLES", "3")
+)
 
 # Overlay and audit-trail filenames under DATA_DIR/quality.
 MONITORING_TUNED_POLICY_FILENAME: str = "monitoring-policy-tuned.json"

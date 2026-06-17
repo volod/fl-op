@@ -149,9 +149,15 @@ def run_solver_chain(
         FERTILIZER_COST_EUR_PER_KG,
         ELECTRICITY_COST_EUR_PER_KWH,
         FUEL_COST_EUR_PER_L,
+        LABOR_COST_EUR_PER_H,
+        MACHINE_WEAR_COST_EUR_PER_H,
         RATE_TYPE_ELECTRICITY,
         RATE_TYPE_FUEL,
+        RATE_TYPE_LABOR,
+        RATE_TYPE_MACHINE_WEAR,
         RATE_TYPE_MATERIAL,
+        RATE_TYPE_TOLL,
+        TOLL_COST_EUR_PER_KM,
     )
     from fl_op.solver.aggregator import _compute_kpis
     from fl_op.solver.cluster_pool import pool_solve
@@ -218,10 +224,22 @@ def run_solver_chain(
         now,
         ELECTRICITY_COST_EUR_PER_KWH,
     )
+    labor_price = resolve_unit_price(
+        cost_rates_raw, RATE_TYPE_LABOR, now, LABOR_COST_EUR_PER_H
+    )
+    machine_wear_price = resolve_unit_price(
+        cost_rates_raw, RATE_TYPE_MACHINE_WEAR, now, MACHINE_WEAR_COST_EUR_PER_H
+    )
+    toll_price = resolve_unit_price(
+        cost_rates_raw, RATE_TYPE_TOLL, now, TOLL_COST_EUR_PER_KM
+    )
     resource_prices = ResourcePrices(
         fuel_eur_per_l=fuel_price,
         material_eur_per_kg=material_price,
         electricity_eur_per_kwh=electricity_price,
+        labor_eur_per_h=labor_price,
+        machine_wear_eur_per_h=machine_wear_price,
+        toll_eur_per_km=toll_price,
     )
 
     orders_raw, enforcement_infeasible, weather_blocked = apply_weather_filter(
@@ -249,6 +267,10 @@ def run_solver_chain(
     feasible_pairs = cached_feasible_vehicle_implement_pairs(
         orders_raw, vehicles_raw, implements_raw, compat, vehicle_index, implement_index
     )
+    location_coords = {
+        loc.location_id: (float(loc.lat), float(loc.lon))
+        for loc in (*fields_raw, *depots_raw)
+    }
     scored = vectorized_score(
         orders_raw, vehicles_raw, implements_raw, fields_raw,
         feasible_pairs, vehicle_index, implement_index,
@@ -258,6 +280,7 @@ def run_solver_chain(
         score_weight_reposition=parameters.score_weight_reposition,
         travel_lookup=travel_lookup,
         optimization_objective=parameters.optimization_objective,
+        location_coords=location_coords,
     )
     clusters = cached_cluster_specs(
         orders_raw, fields_raw, depots_raw, vehicles_raw, implements_raw,

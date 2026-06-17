@@ -73,7 +73,13 @@ def reschedule(data: str, schedule: str, events: str | None) -> None:
     "--jobs",
     default=None,
     type=int,
-    help="Parallel Optuna workers (default: TUNE_N_JOBS).",
+    help="Parallel Optuna workers (default: TUNE_N_JOBS; 0 = auto from CPU/memory).",
+)
+@click.option(
+    "--measure-instability",
+    is_flag=True,
+    default=False,
+    help="Measure real plan churn via a perturbed re-solve (slower; two solves per trial).",
 )
 @click.option(
     "--storage",
@@ -94,6 +100,7 @@ def tune(
     jobs: int | None,
     storage: str | None,
     single_objective: bool,
+    measure_instability: bool,
 ) -> None:
     """Tune solver parameters with Optuna against a recorded KPI baseline."""
     from fl_op.tuning.optuna_tuner import run_tune
@@ -106,6 +113,7 @@ def tune(
         n_jobs=jobs,
         storage=storage,
         multi_objective=not single_objective,
+        measure_instability=measure_instability,
     )
 
 

@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: orders
-version: 1.0.0
+version: 1.1.0
 status: active
 name: Service Orders
 domain: agricultural-custom-services
@@ -167,3 +167,16 @@ schema:
             value:
               avro: {default: 0.0}
               proto: {fieldNumber: 14}
+      - name: pickup_location_ref
+        logicalType: string
+        physicalType: string
+        required: false
+        description: >-
+          Supply location where the material load is picked up before the field
+          (paired pickup-and-delivery); empty means the load is carried from the
+          depot.
+        customProperties:
+          - property: fieldGeneration
+            value:
+              avro: {default: ""}
+              proto: {fieldNumber: 15}

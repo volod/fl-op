@@ -206,6 +206,28 @@ def _lookup_seconds(
     return travel_lookup.get((from_ref, to_ref))
 
 
+def travel_network_nodes(travel_lookup: Optional[TravelLookup]) -> set[str]:
+    """Every location ref that appears as a node in the travel network.
+
+    Used to map an arbitrary position (a vehicle's current location) onto the
+    network: the candidate access points are exactly the refs the lookup knows
+    a path for.
+    """
+    if not travel_lookup:
+        return set()
+    nodes: set[str] = set()
+    if isinstance(travel_lookup, ModeAwareTravelLookup):
+        pairs: list[tuple[str, str]] = list(travel_lookup.keys())
+        for lookup in travel_lookup.by_mode.values():
+            pairs.extend(lookup.keys())
+    else:
+        pairs = list(travel_lookup.keys())
+    for from_ref, to_ref in pairs:
+        nodes.add(from_ref)
+        nodes.add(to_ref)
+    return nodes
+
+
 def travel_mode_for_vehicle(vehicle: Any) -> str:
     """Resolve a vehicle's travel network mode from type or operations."""
     asset_type = str(getattr(vehicle, "asset_type", "") or "").upper()

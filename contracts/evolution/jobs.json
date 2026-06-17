@@ -21,6 +21,11 @@
       "physicalType": "double",
       "required": true
     },
+    "pickup_location_ref": {
+      "logicalType": "string",
+      "physicalType": "string",
+      "required": false
+    },
     "plot_ha": {
       "logicalType": "number",
       "physicalType": "double",
@@ -63,8 +68,8 @@
     }
   },
   "fingerprints": {
-    "avroParsingFingerprint": "5d891357098f54f0e0b50dd073962cf680221761b2fbb7d31aae7bff4abd00db",
-    "optimizationMetadataHash": "c32ca688064f21c681cba3ae1ab4870f7fb3c83c4970a4c989e188a50915a842"
+    "avroParsingFingerprint": "9f6e943014ba4ac94a9e090388a441e056ec18dd008e41be3d179e6f275047fb",
+    "optimizationMetadataHash": "68da0dcf08ec5df5eab2619de5a8713446c4685fda697029f4dd7798ac32f21c"
   },
   "history": [
     {
@@ -404,16 +409,230 @@
         "mappingVersion": "1.1.0"
       },
       "version": "1.1.0"
+    },
+    {
+      "contractId": "jobs",
+      "fields": {
+        "contract_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "deadline": {
+          "logicalType": "timestamp",
+          "physicalType": "string",
+          "required": true
+        },
+        "job_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "penalty_per_day_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "pickup_location_ref": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "plot_ha": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "priority": {
+          "logicalType": "integer",
+          "physicalType": "int",
+          "required": false
+        },
+        "quantity_unit": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "quantity_value": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "revenue_eur": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "site_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "status": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "work_type": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "9f6e943014ba4ac94a9e090388a441e056ec18dd008e41be3d179e6f275047fb",
+        "optimizationMetadataHash": "68da0dcf08ec5df5eab2619de5a8713446c4685fda697029f4dd7798ac32f21c"
+      },
+      "odcsId": "jobs",
+      "registryArtifact": {
+        "artifactId": "construction/jobs",
+        "artifactRef": "construction/jobs@odcs:1.2.0+mapping:1.2.0",
+        "contractVersion": "1.2.0",
+        "domain": "construction",
+        "localId": "jobs",
+        "mappingVersion": "1.2.0",
+        "odcsId": "jobs",
+        "qualifiedId": "construction/jobs",
+        "registryId": "jobs"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "task",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "serviceOrders",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "jobs"
+          },
+          "field:contract_id": {
+            "binding": "task.orderId",
+            "planningUse": [
+              "commitment"
+            ],
+            "semanticTerm": "urn:xopt:relationship:contract"
+          },
+          "field:deadline": {
+            "binding": "task.deadline",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "time-window",
+              "commitment"
+            ],
+            "quantityKind": "timestamp",
+            "semanticTerm": "urn:xopt:commitment:deadline"
+          },
+          "field:job_id": {
+            "binding": "task.taskId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:task-id"
+          },
+          "field:penalty_per_day_eur": {
+            "binding": "task.penaltyPerDay",
+            "canonicalUnit": "EUR",
+            "missingValuePolicy": "fallback-to-conservative-value",
+            "planningUse": [
+              "objective",
+              "commitment"
+            ],
+            "quantityKind": "money",
+            "semanticTerm": "urn:xopt:commitment:lateness-penalty"
+          },
+          "field:pickup_location_ref": {
+            "binding": "task.pickupLocationRef",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "capacity",
+              "geospatial"
+            ],
+            "semanticTerm": "urn:xopt:relationship:pickup-location"
+          },
+          "field:plot_ha": {
+            "binding": "task.areaHa",
+            "canonicalUnit": "ha",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "area",
+            "semanticTerm": "urn:xopt:attribute:service-area"
+          },
+          "field:priority": {
+            "binding": "task.priorityClass",
+            "missingValuePolicy": "fallback-to-conservative-value",
+            "planningUse": [
+              "objective"
+            ],
+            "semanticTerm": "urn:xopt:attribute:priority-class"
+          },
+          "field:quantity_unit": {
+            "binding": "task.workQuantityUnit",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "semanticTerm": "urn:xopt:attribute:work-quantity-unit"
+          },
+          "field:quantity_value": {
+            "binding": "task.workQuantity",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "duration-estimation"
+            ],
+            "quantityKind": "work",
+            "semanticTerm": "urn:xopt:attribute:work-quantity"
+          },
+          "field:revenue_eur": {
+            "binding": "task.revenueValue",
+            "canonicalUnit": "EUR",
+            "missingValuePolicy": "fallback-to-conservative-value",
+            "planningUse": [
+              "objective"
+            ],
+            "quantityKind": "money",
+            "semanticTerm": "urn:xopt:attribute:expected-revenue"
+          },
+          "field:site_id": {
+            "binding": "task.locationRef",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "geospatial"
+            ],
+            "semanticTerm": "urn:xopt:relationship:location"
+          },
+          "field:status": {
+            "binding": "task.status",
+            "planningUse": [
+              "freeze"
+            ],
+            "semanticTerm": "urn:xopt:attribute:task-status"
+          },
+          "field:work_type": {
+            "binding": "task.operationType",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "compatibility-filter"
+            ],
+            "semanticTerm": "urn:xopt:attribute:operation-type"
+          }
+        },
+        "mappingVersion": "1.2.0"
+      },
+      "version": "1.2.0"
     }
   ],
   "odcsId": "jobs",
   "registryArtifact": {
     "artifactId": "construction/jobs",
-    "artifactRef": "construction/jobs@odcs:1.1.0+mapping:1.1.0",
-    "contractVersion": "1.1.0",
+    "artifactRef": "construction/jobs@odcs:1.2.0+mapping:1.2.0",
+    "contractVersion": "1.2.0",
     "domain": "construction",
     "localId": "jobs",
-    "mappingVersion": "1.1.0",
+    "mappingVersion": "1.2.0",
     "odcsId": "jobs",
     "qualifiedId": "construction/jobs",
     "registryId": "jobs"
@@ -464,6 +683,15 @@
         ],
         "quantityKind": "money",
         "semanticTerm": "urn:xopt:commitment:lateness-penalty"
+      },
+      "field:pickup_location_ref": {
+        "binding": "task.pickupLocationRef",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "capacity",
+          "geospatial"
+        ],
+        "semanticTerm": "urn:xopt:relationship:pickup-location"
       },
       "field:plot_ha": {
         "binding": "task.areaHa",
@@ -534,7 +762,7 @@
         "semanticTerm": "urn:xopt:attribute:operation-type"
       }
     },
-    "mappingVersion": "1.1.0"
+    "mappingVersion": "1.2.0"
   },
-  "version": "1.1.0"
+  "version": "1.2.0"
 }

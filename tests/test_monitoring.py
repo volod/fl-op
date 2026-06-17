@@ -315,3 +315,60 @@ def test_stable_battery_yields_no_forecast_task() -> None:
         _battery_obs(79.5, at=_NOW),
     ]
     assert derive_service_tasks([_sensor()], obs, _NOW) == []
+
+
+def _mobile(asset_id: str = "drone1", asset_type: str = "UAV", anchor: str = "hub_1") -> Asset:
+    return Asset(
+        asset_id=asset_id,
+        asset_type=asset_type,
+        roles=["prime-mover"],
+        mobility=AssetMobility.MOBILE.value,
+        home_depot_ref=anchor,
+    )
+
+
+def test_mobile_asset_not_monitored_by_default() -> None:
+    # Default policy only monitors stationary equipment.
+    tasks = derive_service_tasks(
+        [_mobile()], [_battery_obs(BATTERY_LOW_THRESHOLD_PCT - 1, asset_id="drone1")], _NOW
+    )
+    assert tasks == []
+
+
+def test_mobile_asset_monitored_when_policy_opts_in() -> None:
+    policy = MonitoringPolicySpec(monitorMobileAssets=True)
+    tasks = derive_service_tasks(
+        [_mobile()],
+        [_battery_obs(BATTERY_LOW_THRESHOLD_PCT - 1, asset_id="drone1")],
+        _NOW,
+        policy,
+    )
+    assert len(tasks) == 1
+    assert tasks[0].task_id == "service-drone1"
+    assert tasks[0].location_ref == "hub_1"
+    assert "battery-low" in tasks[0].source_ref
+
+
+def test_mobile_monitoring_opt_in_per_asset_type() -> None:
+    # Global flag off, but the UAV asset type opts in; a UGV stays unmonitored.
+    policy = MonitoringPolicySpec(
+        assetTypeOverrides={"UAV": MonitoringPolicyOverride(monitorMobileAssets=True)}
+    )
+    assets = [_mobile("drone1", "UAV"), _mobile("rover1", "UGV")]
+    obs = [
+        _battery_obs(BATTERY_LOW_THRESHOLD_PCT - 1, asset_id="drone1"),
+        _battery_obs(BATTERY_LOW_THRESHOLD_PCT - 1, asset_id="rover1"),
+    ]
+    tasks = derive_service_tasks(assets, obs, _NOW, policy)
+    assert {t.task_id for t in tasks} == {"service-drone1"}
+
+
+def test_stationary_still_monitored_alongside_mobile_opt_in() -> None:
+    policy = MonitoringPolicySpec(monitorMobileAssets=True)
+    assets = [_sensor("s1"), _mobile("drone1")]
+    obs = [
+        _battery_obs(BATTERY_LOW_THRESHOLD_PCT - 1, asset_id="s1"),
+        _battery_obs(BATTERY_LOW_THRESHOLD_PCT - 1, asset_id="drone1"),
+    ]
+    tasks = derive_service_tasks(assets, obs, _NOW, policy)
+    assert {t.task_id for t in tasks} == {"service-s1", "service-drone1"}

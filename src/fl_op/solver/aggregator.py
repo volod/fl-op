@@ -11,6 +11,7 @@ from fl_op.core.constants import (
     FUEL_COST_EUR_PER_L,
     RELATED_MATERIAL_FILL_RATIO,
 )
+from fl_op.core.geometry import haversine_km
 from fl_op.solver.cost_rates import (
     ResourcePrices,
     vehicle_energy_consumption_rate,
@@ -81,6 +82,12 @@ def _compute_kpis(
         energy_by_type[resource_type] = energy_by_type.get(resource_type, 0.0) + quantity
         energy_by_unit[unit] = energy_by_unit.get(unit, 0.0) + quantity
     total_fertilizer = sum(d.get("estimated_fertilizer_kg", 0) for d in dispatch_packages)
+    total_distance = sum(d.get("estimated_distance_km", 0) for d in dispatch_packages)
+    total_labor_cost = sum(d.get("estimated_labor_cost_eur", 0) for d in dispatch_packages)
+    total_wear_cost = sum(
+        d.get("estimated_machine_wear_cost_eur", 0) for d in dispatch_packages
+    )
+    total_toll_cost = sum(d.get("estimated_toll_cost_eur", 0) for d in dispatch_packages)
 
     greedy_baseline = _compute_greedy_baseline_margin(
         orders,
@@ -122,6 +129,10 @@ def _compute_kpis(
         },
         "total_fertilizer_kg": round(total_fertilizer, 2),
         "total_material_cost_eur": round(total_fertilizer * material_price, 2),
+        "total_distance_km": round(total_distance, 2),
+        "total_labor_cost_eur": round(total_labor_cost, 2),
+        "total_machine_wear_cost_eur": round(total_wear_cost, 2),
+        "total_toll_cost_eur": round(total_toll_cost, 2),
         "infeasibility_reasons": infeasibility_reasons,
         **completion,
     }
@@ -257,15 +268,20 @@ def _compute_greedy_baseline_margin(
         except (IndexError, TypeError):
             continue
 
+        service_hours = _estimate_operation_seconds(order, implement) / 3600.0
         service_fuel_cost = (
-            _estimate_operation_seconds(order, implement)
-            / 3600.0
+            service_hours
             * vehicle_energy_consumption_rate(vehicle)
             * (
                 resource_prices.price_for(vehicle_energy_resource_type(vehicle))
                 if resource_prices is not None
                 else fuel_price
             )
+        )
+        # On-task driver labour and machine wear; same operating rate the
+        # dispatch margin charges over service hours.
+        service_operating_cost = service_hours * (
+            resource_prices.operating_eur_per_h if resource_prices is not None else 0.0
         )
         material_cost = (
             float(implement.material_capacity)
@@ -283,6 +299,7 @@ def _compute_greedy_baseline_margin(
         baseline += (
             float(order.revenue)
             - service_fuel_cost
+            - service_operating_cost
             - material_cost
             - repositioning_cost
         )
@@ -314,11 +331,22 @@ def _greedy_repositioning_cost(
             travel_lookup, location_ref, home_ref, mode
         )
         if seconds:
+            hours = float(seconds) / 3600.0
+            operating_eur_per_h = (
+                resource_prices.operating_eur_per_h
+                if resource_prices is not None
+                else 0.0
+            )
+            toll_eur_per_km = (
+                resource_prices.toll_eur_per_km if resource_prices is not None else 0.0
+            )
+            dist_km = haversine_km(
+                float(vehicle.lat), float(vehicle.lon), float(field.lat), float(field.lon)
+            )
             return (
-                float(seconds)
-                / 3600.0
-                * vehicle_energy_consumption_rate(vehicle)
-                * energy_price
+                hours
+                * (vehicle_energy_consumption_rate(vehicle) * energy_price + operating_eur_per_h)
+                + dist_km * toll_eur_per_km
             )
     return _estimate_repositioning_cost(
         vehicle, field, fuel_price, resource_prices=resource_prices

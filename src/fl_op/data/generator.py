@@ -169,7 +169,7 @@ def run_generate_construction(
     attachments = _generate_attachments(rng, n_attachments, yards)
     operators = _generate_construction_operators(rng, n_machines, yards)
     sites = _generate_sites(rng, n_jobs)
-    jobs = _generate_jobs(rng, n_jobs, sites, now)
+    jobs = _generate_jobs(rng, n_jobs, sites, yards, now)
 
     for name, records in zip(
         _CONSTRUCTION_TABULAR_DATASETS,
