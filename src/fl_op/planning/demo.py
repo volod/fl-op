@@ -6,10 +6,13 @@ import pathlib
 from datetime import datetime, timezone
 from typing import Any
 
+import numpy as np
+
 from fl_op.canonical.enums import PlanningMode
 from fl_op.contracts.registry import FileRegistry
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION, OBJECTIVE_MODE_COST
 from fl_op.core.paths import DATA_ROOT
+from fl_op.data.ingestion import stamp_ingested
 from fl_op.planning.artifacts import model_json, run_timestamp, write_json
 from fl_op.planning.contracts import run_contracts_validate
 from fl_op.planning.demo_summary import print_demo_summary
@@ -18,12 +21,17 @@ from fl_op.snapshot.builder import SnapshotBuilder
 
 logger = logging.getLogger(__name__)
 
+# Seed for the synthetic arrival-delay draw so demo events stamp a reproducible
+# ingested_at.
+_DEMO_EVENT_SEED = 0
+
 
 def generate_demo_events(data_dir: str, plan_dir: pathlib.Path) -> pathlib.Path:
     """Synthesize a small events.jsonl from a periodic plan for the rolling demo."""
     plan = json.loads((plan_dir / "plan.json").read_text())
     assignments = plan.get("assignments", [])
-    now = datetime.now(tz=timezone.utc).isoformat()
+    now_dt = datetime.now(tz=timezone.utc)
+    now = now_dt.isoformat()
 
     events: list[dict[str, Any]] = []
     if assignments:
@@ -46,6 +54,12 @@ def generate_demo_events(data_dir: str, plan_dir: pathlib.Path) -> pathlib.Path:
                 "payload_json": "{}",
             }
         )
+
+    # Each event reaches the platform after a bounded delivery delay; stamping a
+    # true ingested_at (not just the observed time) makes arrival order explicit.
+    rng = np.random.default_rng(_DEMO_EVENT_SEED)
+    for e in events:
+        e["ingested_at"] = stamp_ingested(now_dt, rng)
 
     out_dir = DATA_ROOT / "demo" / run_timestamp()
     out_dir.mkdir(parents=True, exist_ok=True)

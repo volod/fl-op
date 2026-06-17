@@ -18,9 +18,36 @@ import logging
 from typing import Any, Callable, Iterable, Iterator, Optional
 
 from fl_op.core import constants
-from fl_op.stream.source import ExecutionEvent, JsonlEventSource, parse_event
+from fl_op.stream.source import (
+    ExecutionEvent,
+    JsonlEventSource,
+    parse_event,
+    stamp_broker_ingested,
+)
 
 logger = logging.getLogger(__name__)
+
+# confluent_kafka.TIMESTAMP_NOT_AVAILABLE: no usable record timestamp.
+_KAFKA_TIMESTAMP_NOT_AVAILABLE = 0
+
+
+def _message_epoch_ms(message: Any) -> Optional[float]:
+    """A Kafka record's broker/producer timestamp in milliseconds.
+
+    ``message.timestamp()`` returns ``(timestamp_type, timestamp_ms)``; None
+    when the client exposes no timestamp or marks it unavailable, so a fake or
+    timestamp-less message leaves the event's ingested_at to the proxy.
+    """
+    getter = getattr(message, "timestamp", None)
+    if getter is None:
+        return None
+    try:
+        ts_type, ts_ms = getter()
+    except Exception:  # noqa: BLE001 - a missing/odd timestamp must not stall ingestion
+        return None
+    if ts_type == _KAFKA_TIMESTAMP_NOT_AVAILABLE or ts_ms is None:
+        return None
+    return float(ts_ms)
 
 # Recognized EVENT_SOURCE_KIND values.
 EVENT_SOURCE_JSONL = "jsonl"
@@ -127,9 +154,13 @@ class BrokerEventSource:
             if isinstance(raw, bytes):
                 raw = raw.decode("utf-8")
             try:
-                yield parse_event(json.loads(raw))
+                event = parse_event(json.loads(raw))
             except (json.JSONDecodeError, ValueError) as exc:
                 logger.warning("Skipping malformed broker event: %s", exc)
+                continue
+            # The record timestamp is the broker's arrival time; stamp it as the
+            # arrival time when the producer left ingested_at blank.
+            yield stamp_broker_ingested(event, _message_epoch_ms(message))
 
     def commit_offsets(self) -> None:
         """Commit the consumed offsets without closing the consumer.

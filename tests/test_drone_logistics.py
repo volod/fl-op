@@ -62,6 +62,10 @@ def test_drone_logistics_small_plan_uses_ugv_and_uav(tmp_path: pathlib.Path) -> 
         "asset.unavailable",
         "entity.corrected",
     } <= {event["event_type"] for event in events}
+    # Each trigger is stamped with a true arrival time at or after its observed
+    # time, so any event-derived series orders by ingestion across restarts.
+    for event in events:
+        assert event["ingested_at"] >= event["observed_at"]
     metadata = json.loads((out_dir / "metadata.json").read_text())["run_metadata"]
     assert metadata["tuning"]["ugv_share"] == 0.6
     assert metadata["tuning"]["cluster_target_size"] == 36

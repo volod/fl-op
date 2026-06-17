@@ -11,10 +11,10 @@ from fl_op.core.constants import (
     ARTIFACT_SCHEMA_VERSION,
     DEFAULT_DATA_FORMAT,
     EQUIPMENT_SERVICE_OPERATION,
-    INGESTION_DELAY_MAX_S,
 )
 from fl_op.core.paths import DATA_ROOT
 from fl_op.io import get_codec
+from fl_op.data.ingestion import stamp_ingested
 from fl_op.data.io import _write_json, _write_jsonl
 
 logger = logging.getLogger(__name__)
@@ -186,11 +186,11 @@ def _generate_inspection_rounds(
     findings: list[dict[str, Any]] = []
     for i, sign in enumerate(signs):
         inspected_at = now - timedelta(hours=i % 12)
-        # Delivery delay between a finding being recorded in the field and arriving
-        # at the platform; stamped as ingested_at so arrival order is explicit
-        # across restarts, not approximated by source row order.
-        delay = timedelta(seconds=float(rng.uniform(0.0, INGESTION_DELAY_MAX_S)))
-        ingested_at = inspected_at + delay
+        # A finding recorded in the field arrives at the platform after a delivery
+        # delay; stamping it as ingested_at makes arrival order explicit across
+        # restarts instead of approximating it by source row order. Both findings
+        # of a sign share the one arrival time.
+        ingested_at = stamp_ingested(inspected_at, rng)
         battery = 18.0 if i % 4 == 0 else float(rng.uniform(42, 95))
         health = "degraded" if i % 5 == 0 else "healthy"
         findings.extend(
@@ -204,7 +204,7 @@ def _generate_inspection_rounds(
                     "state_value": "",
                     "unit": "%",
                     "inspected_at": inspected_at.isoformat(),
-                    "ingested_at": ingested_at.isoformat(),
+                    "ingested_at": ingested_at,
                     "quality_flag": "ok",
                 },
                 {
@@ -216,7 +216,7 @@ def _generate_inspection_rounds(
                     "state_value": health,
                     "unit": "",
                     "inspected_at": inspected_at.isoformat(),
-                    "ingested_at": ingested_at.isoformat(),
+                    "ingested_at": ingested_at,
                     "quality_flag": "ok",
                 },
             ]

@@ -8,8 +8,9 @@ the stream analogue of the batch CSV importer.
 import json
 import logging
 import pathlib
-from dataclasses import dataclass
-from typing import Any, Iterator
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
+from typing import Any, Iterator, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,27 @@ def parse_event(record: dict[str, Any]) -> ExecutionEvent:
         payload=payload,
         ingested_at=record.get("ingested_at", ""),
     )
+
+
+def stamp_broker_ingested(
+    event: ExecutionEvent, arrival_epoch_ms: Optional[float]
+) -> ExecutionEvent:
+    """Fill ``ingested_at`` from a broker-assigned arrival time when the
+    producer left it blank.
+
+    A live broker's receipt time (the Redis stream entry id, the Kafka record
+    timestamp) is the true moment the platform ingested the event -- a real
+    arrival timestamp, far better than the observed-time proxy the consumer
+    otherwise falls back to. A producer-supplied ``ingested_at`` always wins, and
+    a missing or non-positive broker arrival leaves the event untouched (the
+    proxy still applies downstream). Stamping at the adapter boundary is the only
+    non-determinism, and it is stable: the broker assigns the timestamp once, so
+    a redelivered or restart-reloaded entry carries the same arrival time.
+    """
+    if event.ingested_at or not arrival_epoch_ms or arrival_epoch_ms <= 0:
+        return event
+    arrival = datetime.fromtimestamp(arrival_epoch_ms / 1000.0, tz=timezone.utc)
+    return replace(event, ingested_at=arrival.isoformat())
 
 
 class JsonlEventSource:

@@ -23,6 +23,7 @@ from fl_op.data.drone_logistics_tuning import (
     default_drone_logistics_tuning_path,
     load_drone_logistics_tuning,
 )
+from fl_op.data.ingestion import stamp_ingested
 from fl_op.io import get_codec
 
 logger = logging.getLogger(__name__)
@@ -557,6 +558,7 @@ def _generate_prices(now: datetime, tuning: dict[str, Any]) -> list[dict[str, An
 
 
 def _build_scenario_events(
+    rng: np.random.Generator,
     now: datetime,
     hubs: list[dict[str, Any]],
     ugvs: list[dict[str, Any]],
@@ -689,6 +691,12 @@ def _build_scenario_events(
                 "payload_json": json.dumps(no_fly),
             }
         )
+    # Each trigger reaches the platform after a bounded delivery delay; stamping
+    # a true ingested_at (not just the observed time) makes arrival order
+    # explicit, so any event-derived observation series orders by ingestion.
+    for event in events:
+        observed_at = datetime.fromisoformat(str(event["observed_at"]))
+        event["ingested_at"] = stamp_ingested(observed_at, rng)
     return events
 
 
@@ -909,6 +917,7 @@ def run_generate_drone_logistics(
     weather = _generate_weather(hubs, now)
     prices = _generate_prices(now, tuning)
     scenario_events = _build_scenario_events(
+        rng,
         now,
         hubs,
         ugvs,

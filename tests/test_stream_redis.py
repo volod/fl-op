@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import uuid
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -22,7 +23,11 @@ from fl_op.stream.broker import (
     open_event_source,
     registered_event_sources,
 )
-from fl_op.stream.redis_stream import EVENT_SOURCE_REDIS, RedisStreamEventSource
+from fl_op.stream.redis_stream import (
+    EVENT_SOURCE_REDIS,
+    RedisStreamEventSource,
+    _entry_id_epoch_ms,
+)
 
 
 def _make_client():
@@ -176,3 +181,37 @@ def test_redis_registered_and_opts_into_dedup(monkeypatch, tmp_path) -> None:
 def test_open_event_source_redis_returns_redis_source(monkeypatch) -> None:
     monkeypatch.setattr(constants, "EVENT_SOURCE_KIND", EVENT_SOURCE_REDIS)
     assert isinstance(open_event_source(None), RedisStreamEventSource)
+
+
+def test_entry_id_epoch_ms_parses_broker_time_and_tolerates_garbage() -> None:
+    # Redis ids are "<millisecondsTime>-<sequenceNumber>".
+    assert _entry_id_epoch_ms("1700000000000-0") == 1700000000000.0
+    assert _entry_id_epoch_ms("1700000000000-5") == 1700000000000.0
+    assert _entry_id_epoch_ms("not-an-id") is None
+    assert _entry_id_epoch_ms(None) is None
+
+
+def test_redis_entry_id_stamps_ingested_at(redis_env) -> None:
+    _add(redis_env, _body("e-1"))
+    [event] = list(_source(redis_env))
+    # The entry id Redis just assigned gives a true arrival time, distinct from
+    # the producer-omitted ingested_at; it is recent (the broker added it now).
+    assert event.ingested_at
+    arrival = datetime.fromisoformat(event.ingested_at)
+    assert abs((datetime.now(timezone.utc) - arrival).total_seconds()) < 300
+
+
+def test_redis_keeps_producer_ingested_at(redis_env) -> None:
+    body = json.dumps(
+        {
+            "event_id": "e-1",
+            "event_type": "task.started",
+            "observed_at": "2026-06-11T08:00:00Z",
+            "entity_ref": "task-1",
+            "payload_json": "{}",
+            "ingested_at": "2026-06-11T08:00:30+00:00",
+        }
+    )
+    _add(redis_env, body)
+    [event] = list(_source(redis_env))
+    assert event.ingested_at == "2026-06-11T08:00:30+00:00"

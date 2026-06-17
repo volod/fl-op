@@ -12,13 +12,6 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-9. Event visibility completeness. Remaining work is incremental: producers
-   stamping a true `ingested-at` on events (the event path falls back to the
-   observed time as the arrival proxy today), with the source-row-order fallback
-   staying as the defensive net for any observation source that does not declare
-   the `ingestedAt` binding. The delivered visibility (file and event sources
-   emitting `ingested-at`, and `entity.corrected` advancing its contract's
-   watermark) lives in current-implementation.md.
 10. Multi-domain extensibility and packaging. Add plugin discovery, versioned
     generator packaging, and generator capability declaration, and key
     generated schema and evolution-baseline filenames off versioned
@@ -71,33 +64,20 @@ Recommended order, optimized for dependency reuse and low rework:
    conflict attribution for window/precedence-driven drops. The delivered primal
    resource-conflict attribution (a binding-resource signal from
    routing-dimension utilization) lives in current-implementation.md.
+28. Event visibility completeness. Remaining work is incremental: future
+   event-client adapters (NATS, RabbitMQ, cloud pub/sub) must carry the
+   broker-arrival stamping the Kafka and Redis adapters already do, a producer
+   on a transport with no broker-arrival metadata still needs to stamp
+   `ingested-at` itself, and a new domain pack's observation source must declare
+   the `ingestedAt` binding. The delivered visibility (file and in-repo event
+   producers emitting a true `ingested-at`, the live Kafka/Redis adapters
+   stamping the broker's own arrival time when a producer omits it, purely
+   event-fed series ordering by arrival and flagging regressions, and
+   `entity.corrected` advancing its contract's watermark) lives in
+   current-implementation.md.
 
 
 
-## 9. Event visibility completeness
-
-Effect catalog:
-[reference/model-world-divergence.md](reference/model-world-divergence.md).
-
-Delivered behavior lives in current-implementation.md: both observation source
-packs (agricultural sensor-readings, roadside inspection-rounds) bind
-`ingestedAt`, and event-derived observations (`observation.recorded`) are now
-stamped with the observation contract's `ingestedAt` source field -- the
-producer payload value, else the event's `ingested_at`, else its observed time
-as the deterministic arrival proxy -- so a series mixing file readings and live
-events orders by ingestion instead of source row order
-(`stream/apply.py:_observation_ingested_extra`). Event watermarks already cover
-`entity.corrected`: absent from the declared event-to-entity map, it resolves
-its target contract by key column and advances that contract's watermark from
-`_upsert_entity`. The residual open work is:
-
-- The event-derived arrival time falls back to the observed time when neither
-  the producer payload nor the event carries an explicit `ingested_at`; a true
-  arrival timestamp (and arrival-regression detection for purely event-fed
-  series) needs producers to stamp it.
-- A new domain pack's observation source must declare the `ingestedAt` binding;
-  the source-row-order fallback remains the defensive net for any source that
-  does not.
 
 ## 10. Multi-domain extensibility and packaging
 
@@ -275,3 +255,31 @@ is research-grade:
 - Drops that no aggregate dimension explains are attributed to `other`; pinning
   the specific binding constraint (a particular time window or precedence edge)
   for an individual dropped task is not modelled.
+
+## 28. Event visibility completeness
+
+Effect catalog:
+[reference/model-world-divergence.md](reference/model-world-divergence.md).
+
+Delivered behavior lives in current-implementation.md: file and event sources
+emit a true `ingested-at` through one shared delivery-delay model
+(`data/ingestion.py:stamp_ingested`); the in-repo event producers (the rolling
+demo's `events.jsonl` and the drone scenario stream) stamp it on every emitted
+event, and at the ingestion boundary the live broker adapters (Kafka and Redis
+Streams) stamp the broker's own arrival time -- the Kafka record timestamp, the
+Redis entry id's `<millisecondsTime>` -- as `ingested_at` when a producer omits
+it (`stream/source.py:stamp_broker_ingested`). So a purely event-fed or
+broker-fed observation series orders by arrival and flags arrival-order
+regressions instead of looking ordered under the observed-time proxy. A
+producer-supplied `ingested_at` always wins, and the observed-time proxy (then
+source-row order) stays as the defensive net when neither a producer nor a
+broker arrival time is available. The residual open work is:
+
+- Future event-client adapters (NATS, RabbitMQ, a cloud pub/sub) must carry the
+  same broker-arrival stamping; the shared `stamp_broker_ingested` primitive is
+  ready, but each adapter has to extract its transport's arrival timestamp. A
+  producer publishing over a transport with no broker-arrival metadata still has
+  to stamp `ingested_at` itself, else the consumer falls back to the proxy.
+- A new domain pack's observation source must declare the `ingestedAt` binding;
+  the source-row-order fallback remains the defensive net for any source that
+  does not.
