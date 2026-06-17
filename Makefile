@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: venv setenv quickstart analyse data demo contracts canonical-validate validate-drone-logistics validate-construction validate-roadside avro-gen proto-gen es-gen parquet-gen contracts-gen check-gen evolution-check evolution-freeze test ci serve clean
+.PHONY: venv setenv quickstart analyse data demo contracts canonical-validate validate-drone-logistics validate-construction validate-roadside avro-gen proto-gen es-gen parquet-gen contracts-gen check-gen evolution-check evolution-freeze test ci serve redis-up redis-down clean
 
 PYTHON := .venv/bin/python
 FL_OP := .venv/bin/fl-op
@@ -105,6 +105,12 @@ test: venv  ## Run the test suite
 
 serve: venv  ## Run the thin service API (feasibility + plan retrieval)
 	$(FL_OP) serve
+
+redis-up:  ## Start the local Redis event bus (EVENT_SOURCE_KIND=redis)
+	docker compose up -d redis
+
+redis-down:  ## Stop the local Redis event bus
+	docker compose down
 
 # CI entrypoint. Physical schemas are regenerated from the ODCS contracts
 # BEFORE any validation runs, so stale committed/generated schemas can never

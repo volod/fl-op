@@ -516,6 +516,84 @@ SERVE_AUTH_TOKEN: str = os.environ.get("SERVE_AUTH_TOKEN", "")
 SERVE_ARTIFACT_ROOT: str = os.environ.get("SERVE_ARTIFACT_ROOT", "")
 
 # ---------------------------------------------------------------------------
+# Serving auth, authorization, rate limiting, and audit
+# ---------------------------------------------------------------------------
+
+# Auth mode for the serving API. "" auto-infers from the rest of the
+# configuration (oidc when an OIDC issuer is set, static when bearer tokens are
+# set, otherwise none); set explicitly to "none", "static", or "oidc" to force
+# one. Health stays public in every mode.
+SERVE_AUTH_MODE: str = os.environ.get("SERVE_AUTH_MODE", "")
+
+# Comma-separated bearer tokens accepted by the static authenticator. Listing
+# more than one supports zero-downtime token rotation: issue a new token, add
+# it alongside the old one, roll clients over, then drop the retired token.
+# SERVE_AUTH_TOKEN (singular) is folded in for backward compatibility.
+SERVE_AUTH_TOKENS: str = os.environ.get("SERVE_AUTH_TOKENS", "")
+
+# OIDC/JWT validation (static-token alternative). When SERVE_OIDC_ISSUER is set
+# the API validates RFC 7519 bearer JWTs: signature (RS256 via the issuer JWKS
+# at SERVE_OIDC_JWKS_URL, or HS256 via SERVE_OIDC_HS256_SECRET for symmetric
+# setups), issuer, audience, and expiry. Requires the [auth] extra (PyJWT).
+SERVE_OIDC_ISSUER: str = os.environ.get("SERVE_OIDC_ISSUER", "")
+SERVE_OIDC_AUDIENCE: str = os.environ.get("SERVE_OIDC_AUDIENCE", "")
+SERVE_OIDC_JWKS_URL: str = os.environ.get("SERVE_OIDC_JWKS_URL", "")
+SERVE_OIDC_HS256_SECRET: str = os.environ.get("SERVE_OIDC_HS256_SECRET", "")
+SERVE_OIDC_ALGORITHMS: str = os.environ.get("SERVE_OIDC_ALGORITHMS", "RS256")
+# Claims unioned to derive a principal's authorization scopes: a space-delimited
+# "scope" string, plus "scp" and "roles" lists.
+SERVE_OIDC_SCOPE_CLAIMS: str = os.environ.get(
+    "SERVE_OIDC_SCOPE_CLAIMS", "scope,scp,roles"
+)
+
+# In-process fixed-window rate limit applied per authenticated principal (or
+# per client host when anonymous). 0 disables limiting (the default; durable
+# distributed limits still belong at an ingress/proxy). Health is never limited.
+SERVE_RATE_LIMIT_REQUESTS: int = int(os.environ.get("SERVE_RATE_LIMIT_REQUESTS", "0"))
+SERVE_RATE_LIMIT_WINDOW_S: float = float(
+    os.environ.get("SERVE_RATE_LIMIT_WINDOW_S", "60")
+)
+
+# Per-request audit logging: a structured line per protected request recording
+# the principal, method, path, decision, and status. Enabled by default to the
+# `fl_op.serving.audit` logger; set SERVE_AUDIT_LOG_FILENAME to also append JSONL
+# under DATA_DIR/SERVE_AUDIT_DIRNAME.
+SERVE_AUDIT_LOG_ENABLED: bool = bool(
+    int(os.environ.get("SERVE_AUDIT_LOG_ENABLED", "1"))
+)
+SERVE_AUDIT_DIRNAME: str = "serving"
+SERVE_AUDIT_LOG_FILENAME: str = os.environ.get("SERVE_AUDIT_LOG_FILENAME", "")
+
+# ---------------------------------------------------------------------------
+# Object-store artifact backend
+# ---------------------------------------------------------------------------
+
+# Artifact backend the serving API reads through: "filesystem" (default,
+# FilesystemArtifactStore over SERVE_ARTIFACT_ROOT/DATA_DIR) or "object-store"
+# (ObjectStoreArtifactStore, which serves only runs that carry a commit marker,
+# so a reader never sees a half-published run published by another writer).
+SERVE_ARTIFACT_BACKEND: str = os.environ.get("SERVE_ARTIFACT_BACKEND", "filesystem")
+
+# Object-store client kind when SERVE_ARTIFACT_BACKEND=object-store. Only
+# "local" (a filesystem-backed reference object store, no extra dependency) is
+# built in; the ObjectStoreClient protocol is the seam for a future networked
+# backend (added through its own client, no vendor SDK bundled here).
+SERVE_OBJECT_STORE_KIND: str = os.environ.get("SERVE_OBJECT_STORE_KIND", "local")
+SERVE_OBJECT_STORE_LOCAL_ROOT: str = os.environ.get(
+    "SERVE_OBJECT_STORE_LOCAL_ROOT", ""
+)
+SERVE_OBJECT_STORE_PREFIX: str = os.environ.get("SERVE_OBJECT_STORE_PREFIX", "")
+
+# Object key written last when publishing a run, and read to decide a run is
+# committed. Its presence is the cross-writer consistency signal: list and read
+# operations skip any run prefix that lacks it.
+OBJECT_STORE_COMMIT_MARKER: str = "_COMMITTED"
+
+# Directory (under DATA_DIR) where the object-store backend materializes run
+# files the feasibility path needs as local inputs.
+OBJECT_STORE_MATERIALIZE_DIRNAME: str = "cache/objstore-materialized"
+
+# ---------------------------------------------------------------------------
 # Event-bus ingestion (broker-backed execution events)
 # ---------------------------------------------------------------------------
 
@@ -535,6 +613,29 @@ EVENT_BROKER_POLL_TIMEOUT_S: float = float(
 )
 EVENT_BROKER_MAX_EMPTY_POLLS: int = int(
     os.environ.get("EVENT_BROKER_MAX_EMPTY_POLLS", "3")
+)
+
+# Redis Streams execution-event source (EVENT_SOURCE_KIND=redis, the [redis]
+# extra). Reads a stream through a consumer group, validates each body through
+# the same parse_event, and acknowledges (XACK) only after the resulting
+# revisions are published, so an at-least-once redelivery is suppressed by the
+# durable event-id dedup store. EVENT_REDIS_URL (redis://host:port/db) overrides
+# the host/port/db triple when set.
+EVENT_REDIS_URL: str = os.environ.get("EVENT_REDIS_URL", "")
+EVENT_REDIS_HOST: str = os.environ.get("EVENT_REDIS_HOST", "localhost")
+EVENT_REDIS_PORT: int = int(os.environ.get("EVENT_REDIS_PORT", "6379"))
+EVENT_REDIS_DB: int = int(os.environ.get("EVENT_REDIS_DB", "0"))
+EVENT_REDIS_STREAM: str = os.environ.get("EVENT_REDIS_STREAM", "fl-op.execution-events")
+EVENT_REDIS_GROUP: str = os.environ.get("EVENT_REDIS_GROUP", "fl-op-rolling")
+EVENT_REDIS_CONSUMER: str = os.environ.get("EVENT_REDIS_CONSUMER", "fl-op-1")
+# Stream field carrying the JSON event body in each XADD entry.
+EVENT_REDIS_BODY_FIELD: str = os.environ.get("EVENT_REDIS_BODY_FIELD", "data")
+# Read batch size, block wait per read (ms), and how many consecutive empty
+# reads end a bounded drain - the Redis analogue of EVENT_BROKER_MAX_EMPTY_POLLS.
+EVENT_REDIS_COUNT: int = int(os.environ.get("EVENT_REDIS_COUNT", "10"))
+EVENT_REDIS_BLOCK_MS: int = int(os.environ.get("EVENT_REDIS_BLOCK_MS", "1000"))
+EVENT_REDIS_MAX_EMPTY_POLLS: int = int(
+    os.environ.get("EVENT_REDIS_MAX_EMPTY_POLLS", "3")
 )
 
 # Durable event-id deduplication for broker-backed rolling runs: ids of

@@ -12,9 +12,6 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-6. Serving and integration hardening. Add OIDC/JWT validation, route-level
-   authorization, token rotation, audit/rate-limit hooks, object-store
-   artifact backends, and additional durable event clients.
 7. Solver explanation research. Investigate exact resource-conflict
    attribution through richer solver instrumentation or an alternative model
    that exposes dual/shadow-price signals.
@@ -66,20 +63,13 @@ Recommended order, optimized for dependency reuse and low rework:
    non-filesystem storage. The delivered maturity (perturbed-resolve real
    instability measurement, CPU/RSS-aware tuning parallelism, and a fitted
    worker-memory coefficient model) lives in current-implementation.md.
+26. Serving and integration hardening. Remaining work is incremental, not a
+   blocking gap: durable cross-instance rate limiting and a shared audit sink at
+   the ingress layer, JWT revocation (a `jti` denylist), wiring publishers to
+   write newly published runs through the object-store commit marker (and a
+   networked object-store client behind the existing protocol), and further
+   event-client adapter packages.
 
-
-## 6. Serving and integration hardening
-
-- Serving does not yet provide OIDC/JWT validation, per-route authorization,
-  token rotation, audit logging, or rate limiting; those still belong at an
-  ingress/proxy layer or in a future auth provider.
-- Artifact manifests and namespace-versioned cache invalidation now exist
-  (`fl_op/provenance/`), and the read-only artifact registry indexes runs and
-  caches under the data root. A true object-store backend with cross-writer
-  consistency semantics for newly published runs remains open.
-- Additional production event clients still need small adapter packages that
-  register their factory and opt into deduplication when the source can
-  redeliver.
 
 ## 7. Solver explanation research
 
@@ -243,3 +233,30 @@ hardcoded constants once enough feedback accrues. The residual open work is:
 - Reviewed tuned overlays (solver-parameter and monitoring-policy) are still
   filesystem-only; sharing them over non-filesystem (object-store) storage
   remains open, tied to the object-store artifact backend (item 6).
+
+## 26. Serving and integration hardening
+
+Delivered behavior lives in current-implementation.md: the serving security
+gateway (static-token rotation and OIDC/JWT authentication, per-route scope
+authorization, an opt-in in-process rate limiter, and per-request audit
+logging), the commit-marker object-store artifact backend with run
+materialization, and the Redis Streams event-client adapter. The residual open
+work is:
+
+- Auth is per-instance and additive. The in-process rate limiter and the audit
+  sink are local to one process, so durable cross-instance rate quotas and a
+  shared audit store still belong at an ingress/proxy or external service. The
+  static authenticator's accept-set rotation cannot revoke a token before its
+  natural expiry, and JWT validation has no `jti` denylist.
+- The object-store backend is read-side: it serves commit-marked runs and
+  materializes them locally, but the planning/publication pipeline still writes
+  runs to the filesystem. The built-in client is the filesystem-backed
+  reference; a networked client still has to be added behind the
+  `ObjectStoreClient` protocol (no vendor SDK is bundled). Wiring publishers to
+  write through `publish_run` (so newly published runs land in the object store
+  behind the marker) remains open, as do materialization eviction/TTL and
+  large-object streaming.
+- More production event clients (NATS, RabbitMQ, a cloud pub/sub, ...) still
+  need their own adapter packages following the broker SPI, and poison messages
+  are acknowledged-and-skipped rather than routed to a
+  dead-letter queue.

@@ -405,13 +405,39 @@ default; FastAPI + uvicorn):
 .venv/bin/fl-op serve            # or: make serve
 ```
 
-Plan and feasibility routes are public only when `SERVE_AUTH_TOKEN` is unset
-for local development. Set `SERVE_AUTH_TOKEN` to require
-`Authorization: Bearer <token>`; binding outside loopback, for example
-`SERVE_HOST=0.0.0.0`, requires the token. `/health` remains unauthenticated
-for load balancers. By default the API reads artifacts from `$DATA_DIR`; set
+Plan and feasibility routes are guarded by the security gateway; `/health`
+stays public for load balancers. `SERVE_AUTH_MODE` selects how callers
+authenticate (auto when unset: OIDC if an issuer is set, static tokens if any
+are set, otherwise open for loopback dev):
+
+- Static tokens: `SERVE_AUTH_TOKENS` is a comma-separated accept-list sent as
+  `Authorization: Bearer <token>` (`SERVE_AUTH_TOKEN` is folded in). Listing
+  more than one token supports zero-downtime rotation -- add the new token,
+  roll clients over, then drop the retired one.
+- OIDC/JWT: set `SERVE_OIDC_ISSUER` (and usually `SERVE_OIDC_AUDIENCE`) to
+  validate RFC 7519 bearer JWTs -- signature (RS256 via `SERVE_OIDC_JWKS_URL`,
+  or HS256 via `SERVE_OIDC_HS256_SECRET`), issuer, audience, and expiry, with
+  scopes read from the `scope`/`scp`/`roles` claims. Requires the auth extra:
+  `uv sync --extra auth`.
+
+Authorization is per scope: plan routes need `plans:read` and feasibility needs
+`feasibility:evaluate` (static tokens are unrestricted unless given an explicit
+scope set), so a known caller missing the scope gets 403 and an unauthenticated
+one 401. Binding outside loopback (for example `SERVE_HOST=0.0.0.0`) requires an
+authenticator. An opt-in in-process rate limiter
+(`SERVE_RATE_LIMIT_REQUESTS`/`SERVE_RATE_LIMIT_WINDOW_S`, 0 = off) returns 429
+per principal, and every protected request is audited to the
+`fl_op.serving.audit` logger -- and to JSONL under `$DATA_DIR/serving/` when
+`SERVE_AUDIT_LOG_FILENAME` is set.
+
+By default the API reads artifacts from `$DATA_DIR`; set
 `SERVE_ARTIFACT_ROOT=/mnt/fl-op-artifacts` to serve a shared mounted artifact
-tree from several instances.
+tree from several instances. Set `SERVE_ARTIFACT_BACKEND=object-store` with
+`SERVE_OBJECT_STORE_KIND=local` and `SERVE_OBJECT_STORE_LOCAL_ROOT` to read
+through the object-store backend instead: only runs carrying a `_COMMITTED`
+marker are served, so a reader never sees a half-published run. The built-in
+client is a filesystem-backed reference (no vendor SDK); a networked backend
+plugs into the same `ObjectStoreClient` seam.
 
 | Endpoint | Meaning |
 |----------|---------|
@@ -434,17 +460,42 @@ may also be run ids (`20260612T120000`) or artifact-root-relative paths under
 
 Rolling planning reads execution events from the source selected by
 `EVENT_SOURCE_KIND`: `jsonl` (default) reads the `--events` file; `kafka`
-consumes `EVENT_BROKER_TOPIC` from `EVENT_BROKER_BOOTSTRAP_SERVERS` instead
-(requires the broker extra: `uv sync --extra broker`). Both sources validate
-events identically, and a rolling run drains the visible backlog
-(`EVENT_BROKER_MAX_EMPTY_POLLS` consecutive empty polls) before publishing
-revisions.
+consumes `EVENT_BROKER_TOPIC` from `EVENT_BROKER_BOOTSTRAP_SERVERS` (the broker
+extra: `uv sync --extra broker`); `redis` reads `EVENT_REDIS_STREAM` through the
+`EVENT_REDIS_GROUP` consumer group (the redis extra: `uv sync --extra redis`).
+All sources validate events identically, and a rolling run drains the visible
+backlog (`EVENT_BROKER_MAX_EMPTY_POLLS` / `EVENT_REDIS_MAX_EMPTY_POLLS`
+consecutive empty polls) before publishing revisions. Kafka and Redis
+acknowledge consumption (commit offsets / `XACK`) only after the revisions are
+published and their event ids recorded in the durable dedup store, so a
+redelivery after a restart is suppressed instead of producing a duplicate
+revision -- effectively exactly-once.
 
 Integrations can register more source kinds with
 `fl_op.stream.broker.register_event_source(kind, factory,
-uses_dedup_store=True)`. Use the dedup flag for sources that may redeliver
-events after a process restart; leave it off for intentionally replayed files
-or test feeds.
+uses_dedup_store=True)`; the Redis Streams adapter (`fl_op/stream/redis_stream.py`)
+is a worked example. Use the dedup flag for sources that may redeliver events
+after a process restart; leave it off for intentionally replayed files or test
+feeds.
+
+### Running Redis locally
+
+A `docker-compose.yml` ships a Redis service for the Redis Streams source:
+
+```bash
+docker compose up -d redis                       # start Redis on localhost:6379
+export EVENT_SOURCE_KIND=redis
+export EVENT_REDIS_URL=redis://localhost:6379/0  # endpoint (overrides host/port/db)
+```
+
+`EVENT_REDIS_URL` is the single-knob endpoint; without it the source falls back
+to `EVENT_REDIS_HOST`/`EVENT_REDIS_PORT`/`EVENT_REDIS_DB`. Producers publish each
+event as a JSON string in the `EVENT_REDIS_BODY_FIELD` (default `data`) field,
+for example `XADD fl-op.execution-events * data '{"event_id": ...}'`.
+
+The test suite runs against an in-memory `fakeredis` server by default (no
+broker needed); set `FL_OP_TEST_REDIS_URL=redis://localhost:6379/0` to exercise
+the same tests against the real endpoint.
 
 ---
 
