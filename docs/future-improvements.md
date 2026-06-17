@@ -12,11 +12,6 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-8. Solver model fidelity. Remaining work is incremental: joint in-model operator
-   scheduling for operators shared across clusters that solve concurrently in one
-   re-solve, and a per-mode circuity factor on the fallback (no-network) travel
-   leg. The delivered fidelity (held-operator in-model breaks and per-vehicle
-   fallback travel speed) lives in current-implementation.md.
 9. Event visibility completeness. Emit `ingested-at` from every source and
    domain pack (a series missing it on any reading falls back to row order
    today) and extend event watermarks to cover `entity.corrected`.
@@ -74,28 +69,6 @@ Recommended order, optimized for dependency reuse and low rework:
    routing-dimension utilization) lives in current-implementation.md.
 
 
-
-## 8. Solver model fidelity
-
-Delivered behavior lives in current-implementation.md: a held operator's busy
-calendar is now blocked as in-model no-overlap constraints on that operator's
-cluster tasks (`solver/cluster/routing.py:_block_held_operator_windows`, the same
-exact time blocking prime movers and implements get as vehicle breaks), and each
-routing vehicle's no-network (haversine) fallback legs are priced at its prime
-mover's declared `travel_speed` (`vehicle_fallback_speed_kmh`) so a genuinely
-faster mover gets shorter fallback legs and `--objective time` can prefer it.
-The residual open work is:
-
-- Operators shared by two clusters solving concurrently in the *same* re-solve
-  are still reconciled by hold-aware allocation scoring, not joint in-model time
-  blocking, because clusters solve independently; only the held (cross-revision)
-  operator calendar is time-modelled. Exact same-solve cross-cluster operator
-  scheduling needs a global operator dimension or a cross-cluster pass.
-- The fallback leg applies per-vehicle speed but not a per-mode routing factor:
-  it is straight-line geodesic for every travel mode, so a road mover's fallback
-  underestimates real (circuitous) road distance the way a drone's direct flight
-  does not. A mode-specific circuity multiplier on the fallback distance remains
-  open.
 
 ## 9. Event visibility completeness
 

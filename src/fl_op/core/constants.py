@@ -205,6 +205,17 @@ FALLBACK_TRAVEL_SPEED_KMH: float = float(
     os.environ.get("FALLBACK_TRAVEL_SPEED_KMH", "15.0")
 )
 
+# Geometric fallback circuity per travel mode. The no-network haversine leg is
+# straight-line, but real travel detours: a ground mover follows roads and field
+# tracks (factor > 1) while a drone flies direct (1.0). Applied only to the
+# fallback leg -- network links already carry their declared, circuitous times.
+# Air stays direct; road and the unspecified "any" ground default share the
+# configurable ground factor (most agricultural movers type as "any").
+AIR_TRAVEL_CIRCUITY: float = 1.0
+GROUND_TRAVEL_CIRCUITY: float = float(
+    os.environ.get("GROUND_TRAVEL_CIRCUITY", "1.3")
+)
+
 # Travel-network locations above which the all-pairs shortest-path closure is
 # skipped (the composed lookup grows with the square of the node count);
 # direct links still apply, pairs without one fall back to haversine.
@@ -267,6 +278,27 @@ RESTRICTION_MIN_WORKABLE_AREA_FRACTION: float = float(
 # Number of parallel solver workers. 0 = auto: min(n_clusters, cpu_count,
 # memory-derived cap). An explicit positive value always wins.
 SOLVER_WORKERS: int = int(os.environ.get("SOLVER_WORKERS", "0"))
+
+# Exact joint scheduling for backup operators shared across clusters. Off by
+# default: clusters solve in parallel and a backup operator is shared only over
+# time-disjoint demand windows (correct, but conservative). When on, scarce
+# backup operators may be shared across overlapping demand windows; the clusters
+# that contend for one are then solved sequentially in value order, each fed the
+# operator intervals the earlier clusters actually committed (as in-model
+# operator breaks), so the shared operator is never double-booked. Tightens
+# operator use at the cost of serializing the contending clusters.
+OPERATOR_SHARING_SEQUENTIAL: bool = bool(
+    int(os.environ.get("OPERATOR_SHARING_SEQUENTIAL", "0"))
+)
+
+# Total solve-time budget (seconds) for one sequential operator-sharing group,
+# divided across the group's clusters by value (penalty) weight with a small
+# floor. 0 (default) keeps the per-cluster limit for every cluster (a large
+# group can then run long); a positive value bounds the whole group's latency,
+# so the sequential solve can be enabled without an unbounded tail.
+OPERATOR_SHARING_GROUP_TIME_LIMIT_S: int = int(
+    os.environ.get("OPERATOR_SHARING_GROUP_TIME_LIMIT_S", "0")
+)
 
 # ---------------------------------------------------------------------------
 # Memory-aware pool sizing (auto mode only)

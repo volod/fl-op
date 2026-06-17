@@ -365,6 +365,49 @@ def test_backup_not_shared_when_windows_overlap() -> None:
     assert cluster_b["task_ids"] == []
 
 
+def test_backup_shared_over_overlapping_windows_when_sequential_enabled(
+    monkeypatch,
+) -> None:
+    from datetime import datetime, timezone
+
+    from fl_op.solver import enforcement
+
+    monkeypatch.setattr(enforcement, "OPERATOR_SHARING_SEQUENTIAL", True)
+    now = datetime(2026, 6, 14, 0, 0, tzinfo=timezone.utc)
+    cluster_a = _cluster(["t1"], operator_ref="op_1")
+    cluster_b = _cluster(["t2"], operator_ref="op_3")
+    cluster_b["cluster_id"] = "c2"
+    order_index = {
+        "t1": _task_tw(
+            "t1", "SPRAYING", "2026-06-14T01:00:00Z/2026-06-14T04:00:00Z"
+        ),
+        "t2": _task_tw(
+            "t2", "SPRAYING", "2026-06-14T03:00:00Z/2026-06-14T06:00:00Z"
+        ),
+    }
+    operators = {
+        "op_1": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_1", "certified_operations": "['TILLAGE']"}
+        ),
+        "op_3": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_3", "certified_operations": "['TILLAGE']"}
+        ),
+        "op_backup": OperatorRow.from_canonical_dict(
+            {"asset_id": "op_backup", "certified_operations": "['SPRAYING']"}
+        ),
+    }
+    infeasible = apply_operator_qualification(
+        [cluster_a, cluster_b], order_index, operators, None, now
+    )
+    # The scarce backup is shared across the overlapping windows; neither task is
+    # dropped, and both clusters are stamped so the pool serializes them.
+    assert infeasible == []
+    assert cluster_a["task_operators"] == {"t1": "op_backup"}
+    assert cluster_b["task_operators"] == {"t2": "op_backup"}
+    assert cluster_a["shared_backup_operators"] == ["op_backup"]
+    assert cluster_b["shared_backup_operators"] == ["op_backup"]
+
+
 def test_material_limit_serves_high_penalty_first() -> None:
     cluster = _cluster(["t_low", "t_high", "t_other"])
     order_index = {

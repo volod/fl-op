@@ -14,7 +14,9 @@ from collections.abc import Mapping
 from typing import Any, Optional
 
 from fl_op.core.constants import (
+    AIR_TRAVEL_CIRCUITY,
     FALLBACK_TRAVEL_SPEED_KMH,
+    GROUND_TRAVEL_CIRCUITY,
     TRAVEL_NETWORK_MAX_COMPOSE_NODES,
 )
 from fl_op.core.geometry import travel_time_seconds
@@ -163,20 +165,33 @@ def vehicle_fallback_speed_kmh(prime: Any) -> float:
     return speed if speed > 0 else FALLBACK_TRAVEL_SPEED_KMH
 
 
+def mode_circuity(travel_mode: Optional[str]) -> float:
+    """Fallback circuity multiplier for a travel mode (air direct, ground detours).
+
+    Air flies straight (1.0); road and the unspecified "any" ground default
+    share the configurable ground factor, since most movers type as "any".
+    """
+    return AIR_TRAVEL_CIRCUITY if _normalise_mode(travel_mode) == "air" else GROUND_TRAVEL_CIRCUITY
+
+
 def _haversine_s(
     lat1: float,
     lon1: float,
     lat2: float,
     lon2: float,
     speed_kmh: float = FALLBACK_TRAVEL_SPEED_KMH,
+    circuity: float = 1.0,
 ) -> int:
     """Travel time in integer seconds between two lat/lon points.
 
     Geometric fallback at ``speed_kmh`` (the engine average ground speed by
-    default, or a prime mover's declared travel speed); delegates to the
-    centralized geodesic helper so all distance math shares one implementation.
+    default, or a prime mover's declared travel speed), scaled by ``circuity``
+    so a ground mover's straight-line estimate reflects real detours; delegates
+    to the centralized geodesic helper so all distance math shares one
+    implementation.
     """
-    return travel_time_seconds(lat1, lon1, lat2, lon2, speed_kmh)
+    base = travel_time_seconds(lat1, lon1, lat2, lon2, speed_kmh)
+    return max(1, int(round(base * circuity)))
 
 
 def travel_seconds(
@@ -194,8 +209,9 @@ def travel_seconds(
 
     A missing directed link falls back to the reverse direction (road links
     are usually symmetric) before the geometric estimate. ``fallback_speed_kmh``
-    sets the geometric leg's speed (per-vehicle when supplied); network legs
-    keep their declared, vehicle-independent times.
+    sets the geometric leg's speed (per-vehicle when supplied) and ``travel_mode``
+    its circuity (air direct, ground detours); network legs keep their declared,
+    vehicle-independent times.
     """
     if travel_lookup and from_ref and to_ref and from_ref != to_ref:
         seconds = _lookup_seconds(
@@ -203,7 +219,9 @@ def travel_seconds(
         ) or _lookup_seconds(travel_lookup, to_ref, from_ref, travel_mode)
         if seconds:
             return seconds
-    return _haversine_s(lat1, lon1, lat2, lon2, fallback_speed_kmh)
+    return _haversine_s(
+        lat1, lon1, lat2, lon2, fallback_speed_kmh, mode_circuity(travel_mode)
+    )
 
 
 def network_seconds(

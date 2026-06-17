@@ -92,7 +92,26 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    operator is not certified for is paired with a free qualified backup
    operator (recorded in the cluster's `task_operators` map and carried into
    its dispatch packages); only tasks no qualified operator can take are
-   dropped (`NO_AVAILABLE_OPERATOR`). Enforce material availability
+   dropped (`NO_AVAILABLE_OPERATOR`). A backup operator may serve several
+   clusters whose demand windows (the union of a cluster's task workable
+   windows) are time-disjoint, so one operator covers more work without
+   double-booking. When `OPERATOR_SHARING_SEQUENTIAL` is set and no free
+   (disjoint) backup remains, a scarce backup is instead shared across an
+   *overlapping* window: the contending clusters are stamped
+   (`shared_backup_operators`) and the pool solves them sequentially in value
+   order (`cluster_pool.py:_solve_sequential_groups`), feeding each the operator
+   intervals the earlier clusters actually committed as in-model operator breaks,
+   so the shared operator stays single-tasking. Each sharing group is a
+   connected component of clusters linked by a shared operator;
+   `OPERATOR_SHARING_GROUP_TIME_LIMIT_S` bounds a group's total solve time (split
+   across its clusters by a value x difficulty weight -- total penalty times a
+   model-size proxy of task count by vehicle count, floored -- so the search lands
+   on the clusters that are both valuable and hard rather than a trivially solved
+   one carrying a high penalty) so a large group cannot run unboundedly, and
+   independent groups (sharing no operator) run concurrently in the pool rather
+   than one after another. Off by default (clusters solve in
+   parallel and overlapping shares are refused); independent clusters are never
+   serialized. Enforce material availability
    (cumulative per-operation demand from the profile's `materialDemand`
    charged against depot inventory, highest penalty first ->
    `INSUFFICIENT_MATERIAL`). Material charging and reservations are one
@@ -142,10 +161,15 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    faster mover gets shorter no-network legs and `--objective time` can prefer it
    -- network legs keep their declared, vehicle-independent times, so per-vehicle
    speed differentiates exactly where the engine has no measured time to defer
-   to. Nearest-neighbor depot affinity uses a `scikit-learn` haversine `BallTree`,
-   and `shapely` point/linestring/bounding-box primitives back future map-based
-   interface control. Per-vehicle time matrices keep road and air travel
-   isolated and price each mover's fallback legs at its own speed. The selected objective is
+   to. The fallback leg also carries a per-mode circuity multiplier
+   (`travel_time.mode_circuity`): a ground mover (road or the unspecified `any`
+   default) scales the straight-line estimate by `GROUND_TRAVEL_CIRCUITY`
+   (env-configurable, default 1.3) to reflect real detours, while an air mover
+   (drone) flies direct at 1.0. Nearest-neighbor depot affinity uses a
+   `scikit-learn` haversine `BallTree`, and `shapely`
+   point/linestring/bounding-box primitives back future map-based interface
+   control. Per-vehicle time matrices keep road and air travel isolated and
+   price each mover's fallback legs at its own speed and mode circuity. The selected objective is
    `SolverParameters.optimization_objective`, exposed by `plan periodic`,
    `plan rolling`, and `demo` as `--objective cost|time`; `cost` is the
    default. Cost mode prices arcs per vehicle by summing every priced driver of
