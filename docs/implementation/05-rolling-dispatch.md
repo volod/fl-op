@@ -25,7 +25,12 @@ domain-specific column names. Supported triggers:
   a re-sent corrected reading replaces the earlier one; readings normalized
   to the canonical `work-progress` metric drive task progress directly from
   telemetry (carrying coverage geometry or a percent value) and complete the
-  task at 100 percent;
+  task at 100 percent. Each event-derived reading is stamped with the
+  observation contract's `ingestedAt` source field -- the producer's value if
+  the payload carries one, else the event's `ingested_at`, else its observed
+  time as the deterministic arrival proxy -- so a series mixing file readings
+  and live events still orders by ingestion instead of falling back to source
+  row order;
 - `entity.corrected`: a corrected source row upserted by its key column, so
   quality-rejected or wrongly-valued entities re-enter planning.
 

@@ -12,9 +12,13 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-9. Event visibility completeness. Emit `ingested-at` from every source and
-   domain pack (a series missing it on any reading falls back to row order
-   today) and extend event watermarks to cover `entity.corrected`.
+9. Event visibility completeness. Remaining work is incremental: producers
+   stamping a true `ingested-at` on events (the event path falls back to the
+   observed time as the arrival proxy today), with the source-row-order fallback
+   staying as the defensive net for any observation source that does not declare
+   the `ingestedAt` binding. The delivered visibility (file and event sources
+   emitting `ingested-at`, and `entity.corrected` advancing its contract's
+   watermark) lives in current-implementation.md.
 10. Multi-domain extensibility and packaging. Add plugin discovery, versioned
     generator packaging, and generator capability declaration, and key
     generated schema and evolution-baseline filenames off versioned
@@ -75,10 +79,25 @@ Recommended order, optimized for dependency reuse and low rework:
 Effect catalog:
 [reference/model-world-divergence.md](reference/model-world-divergence.md).
 
-- Other sources and other domain packs do not emit `ingested-at`, and a series
-  with any reading missing it falls back to row order. Event watermarks skip
-  `entity.corrected` because its target contract is resolved by key column,
-  not declared.
+Delivered behavior lives in current-implementation.md: both observation source
+packs (agricultural sensor-readings, roadside inspection-rounds) bind
+`ingestedAt`, and event-derived observations (`observation.recorded`) are now
+stamped with the observation contract's `ingestedAt` source field -- the
+producer payload value, else the event's `ingested_at`, else its observed time
+as the deterministic arrival proxy -- so a series mixing file readings and live
+events orders by ingestion instead of source row order
+(`stream/apply.py:_observation_ingested_extra`). Event watermarks already cover
+`entity.corrected`: absent from the declared event-to-entity map, it resolves
+its target contract by key column and advances that contract's watermark from
+`_upsert_entity`. The residual open work is:
+
+- The event-derived arrival time falls back to the observed time when neither
+  the producer payload nor the event carries an explicit `ingested_at`; a true
+  arrival timestamp (and arrival-regression detection for purely event-fed
+  series) needs producers to stamp it.
+- A new domain pack's observation source must declare the `ingestedAt` binding;
+  the source-row-order fallback remains the defensive net for any source that
+  does not.
 
 ## 10. Multi-domain extensibility and packaging
 
