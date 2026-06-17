@@ -150,13 +150,33 @@ def _compose_shortest_paths(direct: TravelPairLookup) -> TravelPairLookup:
     return composed
 
 
-def _haversine_s(lat1: float, lon1: float, lat2: float, lon2: float) -> int:
+def vehicle_fallback_speed_kmh(prime: Any) -> float:
+    """A prime mover's declared travel speed for the geometric fallback leg.
+
+    Falls back to the engine speed when the mover declares none, so a vehicle
+    with no ``travel_speed`` behaves exactly as before. Only the no-network
+    (haversine) leg uses this: network links carry vehicle-independent declared
+    times, so per-vehicle speed differentiates exactly where the engine has no
+    measured time to defer to.
+    """
+    speed = _nonnegative(getattr(prime, "travel_speed", 0.0))
+    return speed if speed > 0 else FALLBACK_TRAVEL_SPEED_KMH
+
+
+def _haversine_s(
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+    speed_kmh: float = FALLBACK_TRAVEL_SPEED_KMH,
+) -> int:
     """Travel time in integer seconds between two lat/lon points.
 
-    Geometric fallback at the engine's average ground speed; delegates to the
+    Geometric fallback at ``speed_kmh`` (the engine average ground speed by
+    default, or a prime mover's declared travel speed); delegates to the
     centralized geodesic helper so all distance math shares one implementation.
     """
-    return travel_time_seconds(lat1, lon1, lat2, lon2, FALLBACK_TRAVEL_SPEED_KMH)
+    return travel_time_seconds(lat1, lon1, lat2, lon2, speed_kmh)
 
 
 def travel_seconds(
@@ -168,11 +188,14 @@ def travel_seconds(
     lon2: float,
     travel_lookup: Optional[TravelLookup] = None,
     travel_mode: Optional[str] = None,
+    fallback_speed_kmh: float = FALLBACK_TRAVEL_SPEED_KMH,
 ) -> int:
     """Travel time between two locations: network link first, haversine fallback.
 
     A missing directed link falls back to the reverse direction (road links
-    are usually symmetric) before the geometric estimate.
+    are usually symmetric) before the geometric estimate. ``fallback_speed_kmh``
+    sets the geometric leg's speed (per-vehicle when supplied); network legs
+    keep their declared, vehicle-independent times.
     """
     if travel_lookup and from_ref and to_ref and from_ref != to_ref:
         seconds = _lookup_seconds(
@@ -180,7 +203,7 @@ def travel_seconds(
         ) or _lookup_seconds(travel_lookup, to_ref, from_ref, travel_mode)
         if seconds:
             return seconds
-    return _haversine_s(lat1, lon1, lat2, lon2)
+    return _haversine_s(lat1, lon1, lat2, lon2, fallback_speed_kmh)
 
 
 def network_seconds(

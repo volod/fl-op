@@ -63,15 +63,18 @@ Reuses the solver chain on a filtered canonical payload:
 - Assignments whose task and assets still exist are carried forward unchanged.
 - Tasks affected by new or unavailable assets are re-solved. Every asset held
   by a frozen/carried assignment stays available to the re-solve as a
-  resource calendar of busy intervals: prime movers and implements get exact
-  in-model gap reuse (the routing model blocks the union of the pair's
-  intervals as vehicle breaks, so either is reused only in a real
-  non-overlapping gap), while operator calendars feed hold-aware allocation
-  scoring. Within a cluster, operators are also time-modelled inside routing: an
-  operator shared by tasks on different routing vehicles gets vehicle-aware
-  no-overlap constraints so the shared operator's parallel tasks serialize. Held
-  assets are
-  classified by solver-row section membership, not id prefixes, so the
+  resource calendar of busy intervals, all blocked in-model: prime movers and
+  implements get exact gap reuse (the routing model blocks the union of the
+  pair's intervals as vehicle breaks, so either is reused only in a real
+  non-overlapping gap), and a held operator's busy windows block that operator's
+  own re-solved tasks the same way (each task interval must avoid the windows),
+  so a held operator is reused only in a genuine gap rather than by hold-aware
+  allocation scoring alone. Within a cluster, operators are also time-modelled
+  inside routing: an operator shared by tasks on different routing vehicles gets
+  vehicle-aware no-overlap constraints so the shared operator's parallel tasks
+  serialize. (Hold-aware allocation scoring still biases which operator/vehicle a
+  task draws; the in-model breaks make the held calendar a hard constraint.) Held
+  assets are classified by solver-row section membership, not id prefixes, so the
   mechanism is domain-neutral.
 - Each event yields an immutable plan revision with churn and plan-instability
   metrics.

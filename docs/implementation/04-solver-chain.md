@@ -137,11 +137,15 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    centralized `core/geometry.py` module: a `pyproj` geodesic engine configured
    as a sphere of mean Earth radius reproduces the legacy haversine results to
    floating-point noise while serving both scalar and vectorized call sites, the
-   geometric fallback speed is `FALLBACK_TRAVEL_SPEED_KMH` (env-configurable),
-   nearest-neighbor depot affinity uses a `scikit-learn` haversine `BallTree`,
+   geometric fallback speed is each prime mover's declared `travel_speed`
+   (defaulting to `FALLBACK_TRAVEL_SPEED_KMH`, env-configurable) so a genuinely
+   faster mover gets shorter no-network legs and `--objective time` can prefer it
+   -- network legs keep their declared, vehicle-independent times, so per-vehicle
+   speed differentiates exactly where the engine has no measured time to defer
+   to. Nearest-neighbor depot affinity uses a `scikit-learn` haversine `BallTree`,
    and `shapely` point/linestring/bounding-box primitives back future map-based
    interface control. Per-vehicle time matrices keep road and air travel
-   isolated. The selected objective is
+   isolated and price each mover's fallback legs at its own speed. The selected objective is
    `SolverParameters.optimization_objective`, exposed by `plan periodic`,
    `plan rolling`, and `demo` as `--objective cost|time`; `cost` is the
    default. Cost mode prices arcs per vehicle by summing every priced driver of
@@ -190,7 +194,14 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    no-overlap constraint requires one execution interval `[start, start +
    service]` to finish before the other starts; a dropped task is exempted
    through its active variable, so a shared operator forces parallel pairs into
-   series. `depends-on` precedence is
+   series. A *held* operator (carried/frozen on another assignment of a rolling
+   plan) also blocks its own tasks in-model: each of that operator's task
+   intervals must avoid the operator's busy windows, so a held operator is reused
+   only in a genuine gap -- the exact in-model time blocking prime movers and
+   implements already get as vehicle breaks (`SetBreakIntervalsOfVehicle`),
+   rather than the hold-aware allocation scoring alone it relied on before. (Two
+   clusters in the *same* solve contending for one operator are still scored, not
+   time-modelled, since clusters solve independently.) `depends-on` precedence is
    enforced in-model (a dependent cannot start before its predecessor
    finishes). Service durations are quantity-driven: the generic work
    quantity plus its unit feed the duration estimate (area is the legacy

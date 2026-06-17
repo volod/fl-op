@@ -12,17 +12,11 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-7. Solver explanation research. Remaining work is research-grade: exact marginal
-   (shadow-price) attribution via a finite-difference resource-relaxation
-   re-solve probe or an LP/MIP relaxation that exposes duals, and per-task
-   conflict attribution for window/precedence-driven drops. The delivered primal
-   resource-conflict attribution (a binding-resource signal from
-   routing-dimension utilization) lives in current-implementation.md.
-8. Solver model fidelity. Block a held operator's busy calendar as in-model
-   breaks across clusters (as prime movers and implements already are), and
-   thread per-vehicle travel speed and travel mode into the fallback
-   travel-time estimate so `--objective time` can prefer genuinely faster
-   movers.
+8. Solver model fidelity. Remaining work is incremental: joint in-model operator
+   scheduling for operators shared across clusters that solve concurrently in one
+   re-solve, and a per-mode circuity factor on the fallback (no-network) travel
+   leg. The delivered fidelity (held-operator in-model breaks and per-vehicle
+   fallback travel speed) lives in current-implementation.md.
 9. Event visibility completeness. Emit `ingested-at` from every source and
    domain pack (a series missing it on any reading falls back to row order
    today) and extend event watermarks to cover `entity.corrected`.
@@ -72,47 +66,36 @@ Recommended order, optimized for dependency reuse and low rework:
    write newly published runs through the object-store commit marker (and a
    networked object-store client behind the existing protocol), and further
    event-client adapter packages.
+27. Solver explanation research. Remaining work is research-grade: exact marginal
+   (shadow-price) attribution via a finite-difference resource-relaxation
+   re-solve probe or an LP/MIP relaxation that exposes duals, and per-task
+   conflict attribution for window/precedence-driven drops. The delivered primal
+   resource-conflict attribution (a binding-resource signal from
+   routing-dimension utilization) lives in current-implementation.md.
 
 
-## 7. Solver explanation research
-
-Delivered behavior lives in current-implementation.md: per-cluster primal
-resource-conflict attribution (`solver/cluster/conflict.py`) that reads the
-solved routes' Time/Load dimension utilization and fleet usage and names the
-`binding_resource` behind dropped tasks (`capacity:<material>` / `time` /
-`fleet` / `other`, or `solve_budget` / `model_infeasible` when no solution is
-found), threaded into the per-task attribution maps, the revision-diff
-explanation, and a `binding_resources` telemetry tally. The residual open work
-is research-grade:
-
-- The attribution is a heuristic over aggregate primal utilization, not an exact
-  marginal value. Exact resource-conflict attribution needs either a
-  finite-difference probe (re-solve the cluster with one resource marginally
-  relaxed -- an added vehicle, an extended horizon, more capacity -- and read the
-  served-count/objective delta as the empirical shadow price) or an alternative
-  LP/MIP relaxation whose dual values expose shadow prices directly. OR-Tools' CP
-  routing exposes neither, so both remain open.
-- Drops that no aggregate dimension explains are attributed to `other`; pinning
-  the specific binding constraint (a particular time window or precedence edge)
-  for an individual dropped task is not modelled.
 
 ## 8. Solver model fidelity
 
-- Operator time is now modelled inside routing for operators shared across
-  vehicles within a single cluster (vehicle-aware no-overlap reified
-  constraints). Still open: a held operator's busy calendar is not blocked as
-  in-model breaks the way prime movers and implements are, so cross-cluster
-  operator gap reuse still relies on allocation scoring rather than exact
-  in-model time blocking.
-- Prime-mover travel speed does not affect routing travel time. When no network
-  lookup is available, `travel_time.py` derives leg duration from the centralized
-  `core/geometry.travel_time_seconds` helper at the fixed `FALLBACK_TRAVEL_SPEED_KMH`
-  fallback speed, so travel time is geometry-fixed and identical across vehicles
-  regardless of `PrimeMoverRow.travel_speed`. The only per-vehicle
-  completion-time differentiator today is service time, driven by implement
-  `working_width` and `max_speed`. Investigate threading per-vehicle travel speed
-  (and travel mode) into the fallback travel-time estimate so `--objective time`
-  can prefer genuinely faster movers, not just faster implements.
+Delivered behavior lives in current-implementation.md: a held operator's busy
+calendar is now blocked as in-model no-overlap constraints on that operator's
+cluster tasks (`solver/cluster/routing.py:_block_held_operator_windows`, the same
+exact time blocking prime movers and implements get as vehicle breaks), and each
+routing vehicle's no-network (haversine) fallback legs are priced at its prime
+mover's declared `travel_speed` (`vehicle_fallback_speed_kmh`) so a genuinely
+faster mover gets shorter fallback legs and `--objective time` can prefer it.
+The residual open work is:
+
+- Operators shared by two clusters solving concurrently in the *same* re-solve
+  are still reconciled by hold-aware allocation scoring, not joint in-model time
+  blocking, because clusters solve independently; only the held (cross-revision)
+  operator calendar is time-modelled. Exact same-solve cross-cluster operator
+  scheduling needs a global operator dimension or a cross-cluster pass.
+- The fallback leg applies per-vehicle speed but not a per-mode routing factor:
+  it is straight-line geodesic for every travel mode, so a road mover's fallback
+  underestimates real (circuitous) road distance the way a drone's direct flight
+  does not. A mode-specific circuity multiplier on the fallback distance remains
+  open.
 
 ## 9. Event visibility completeness
 
@@ -278,3 +261,25 @@ work is:
   need their own adapter packages following the broker SPI, and poison messages
   are acknowledged-and-skipped rather than routed to a
   dead-letter queue.
+
+## 27. Solver explanation research
+
+Delivered behavior lives in current-implementation.md: per-cluster primal
+resource-conflict attribution (`solver/cluster/conflict.py`) that reads the
+solved routes' Time/Load dimension utilization and fleet usage and names the
+`binding_resource` behind dropped tasks (`capacity:<material>` / `time` /
+`fleet` / `other`, or `solve_budget` / `model_infeasible` when no solution is
+found), threaded into the per-task attribution maps, the revision-diff
+explanation, and a `binding_resources` telemetry tally. The residual open work
+is research-grade:
+
+- The attribution is a heuristic over aggregate primal utilization, not an exact
+  marginal value. Exact resource-conflict attribution needs either a
+  finite-difference probe (re-solve the cluster with one resource marginally
+  relaxed -- an added vehicle, an extended horizon, more capacity -- and read the
+  served-count/objective delta as the empirical shadow price) or an alternative
+  LP/MIP relaxation whose dual values expose shadow prices directly. OR-Tools' CP
+  routing exposes neither, so both remain open.
+- Drops that no aggregate dimension explains are attributed to `other`; pinning
+  the specific binding constraint (a particular time window or precedence edge)
+  for an individual dropped task is not modelled.

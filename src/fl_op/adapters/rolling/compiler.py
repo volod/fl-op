@@ -195,10 +195,10 @@ def _resolve_tasks(
 
     # Every held asset stays available to the incremental re-solve as a
     # resource calendar: its frozen/carried assignment windows travel along
-    # as busy intervals. Prime movers and related equipment get exact
-    # in-model gap reuse (the routing model blocks the pair's busy intervals
-    # as vehicle breaks); operator calendars feed hold-aware allocation
-    # scoring (operators are not time-modelled inside routing).
+    # as busy intervals, all blocked in-model. Prime movers and related
+    # equipment get exact gap reuse via vehicle breaks; a held operator's busy
+    # windows block that operator's own re-solved tasks (no-overlap on each task
+    # interval). Hold-aware allocation scoring still biases the assignment.
     held_windows = _held_asset_windows(
         held_assignments, prime_mover_ids | related_ids | operator_ids
     )
