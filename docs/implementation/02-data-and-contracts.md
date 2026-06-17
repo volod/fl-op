@@ -72,7 +72,25 @@ the snapshot (`dq://dataset/source-file-collision`,
 Every generator-bearing domain exposes capability metadata
 (`FileRegistry.generator_capabilities`, surfaced by
 `data/domain_generators.py` and the `fl-op domain-capabilities` CLI command):
-the generator callable, declared profile, the canonical entities the domain's
-contracts project, the staged contract ids, and source formats. Derived fields
-always reflect the registry, so capabilities cannot drift from the contracts.
+the generator callable, declared profile, the domain/generator `version`, the
+canonical entities the domain's contracts project, the staged contract ids,
+source formats, and a `source` marker (`builtin` vs `plugin`, with the plugin's
+entry point and distribution when discovered). Derived fields always reflect the
+registry, so capabilities cannot drift from the contracts.
+
+External domain packs need not be listed in this repo's `registry.yaml` or
+hardcoded anywhere: an installed distribution advertises itself under the
+`fl_op.domain_packs` entry-point group (`contracts/plugins.py`), pointing at a
+callable that returns its contribution -- the domain spec plus the contract and
+profile specs it registers, with *absolute* file refs into the installed
+package. `FileRegistry` discovers these at load and merges them into the index
+before building entries, so a plugin domain is a first-class citizen of every
+lookup, capability, and `generate-data --domain` path. Because `pathlib` resets
+on an absolute right-hand side, a contribution's absolute refs resolve through
+the registry's existing `root / ref` joins with no special-casing. Discovery is
+defensive (a broken or conflicting plugin is logged and skipped; the in-repo
+registry always wins a key conflict) and opt-out (`FL_OP_DISABLE_PLUGINS=1`).
+Discovered packs never enter the persisted `registry.yaml`: fingerprint
+persistence writes only the file-backed index, so a plugin's entries stay in its
+own distribution.
 </content>

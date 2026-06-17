@@ -12,10 +12,13 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-10. Multi-domain extensibility and packaging. Add plugin discovery, versioned
-    generator packaging, and generator capability declaration, and key
-    generated schema and evolution-baseline filenames off versioned
-    domain-local refs rather than the global registry id.
+10. Multi-domain extensibility and packaging. Remaining work is incremental: key
+    generated schema and evolution-baseline filenames off versioned domain-local
+    refs rather than the global registry id, and the declared generator/pack
+    version is recorded but not yet checked for engine compatibility. The
+    delivered extensibility (entry-point domain-pack plugin discovery merged into
+    the registry, generator/pack version and a builtin-vs-plugin source in the
+    capability metadata) lives in current-implementation.md.
 11. Drone logistics fidelity. Model 3D airspace deconfliction, altitude
     corridor planning, and vehicle-to-vehicle separation, plus charging-station
     scheduling and charging queue capacity.
@@ -81,12 +84,26 @@ Recommended order, optimized for dependency reuse and low rework:
 
 ## 10. Multi-domain extensibility and packaging
 
-- There is no plugin discovery, versioned generator packaging, or generator
-  capability declaration yet; external packs still need their Python module
-  importable in the running environment.
-- Generated schema filenames and evolution baseline filenames remain keyed by
-  the global registry id, though registry artifacts now expose versioned
-  domain-local refs.
+Delivered behavior lives in current-implementation.md: external domain packs
+self-register through the `fl_op.domain_packs` entry-point group
+(`contracts/plugins.py`), discovered and merged into the registry index at load
+so a plugin domain is first-class across lookups, capabilities, and
+`generate-data` without any in-repo registry.yaml edit; the in-repo registry
+wins key conflicts, discovery is defensive and opt-out (`FL_OP_DISABLE_PLUGINS`),
+and plugin entries never enter the persisted registry.yaml. Generator capability
+metadata now declares a domain/generator `version` and a builtin-vs-plugin
+`source` (with the plugin's entry point and distribution). The residual open
+work is:
+
+- Generated schema filenames and evolution-baseline filenames remain keyed by
+  the global registry id, though registry artifacts already expose versioned
+  domain-local refs; rekeying the committed evolution baselines (and the
+  canonical `canonical-*` ones) off the domain-local ref is a separate,
+  larger change to committed CI artifacts.
+- A pack's declared `version` is recorded but not yet checked for engine
+  compatibility, and a discovered contribution is shape-coerced rather than
+  semantically validated at discovery time (the normal contract-validation path
+  still applies once its contracts are loaded).
 
 ## 11. Drone logistics fidelity
 
