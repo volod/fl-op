@@ -363,6 +363,40 @@ def polygon_rings_area_km2(rings: list[list[tuple[float, float]]]) -> float:
     return abs(float(area_m2)) / 1.0e6
 
 
+def polygon_difference_area_km2(
+    base_ring: list[tuple[float, float]],
+    subtract_rings: list[list[tuple[float, float]]],
+) -> float:
+    """Geodesic area (km2) of ``base_ring`` minus the union of ``subtract_rings``.
+
+    Rings are ``(x=lon, y=lat)`` lists (as ``parse_polygon`` emits). Used to size
+    the residual workable area of a task -- its work-area polygon with restricted
+    and already-covered regions removed. Returns 0.0 when the base has no positive
+    area or the subtracted regions cover it entirely.
+    """
+    if len(base_ring) < 3:
+        return 0.0
+    base = Polygon(base_ring)
+    if not base.is_valid:
+        base = base.buffer(0)
+    if base.is_empty or base.area <= 0:
+        return 0.0
+    subs = []
+    for ring in subtract_rings:
+        if len(ring) < 3:
+            continue
+        poly = Polygon(ring)
+        if not poly.is_valid:
+            poly = poly.buffer(0)
+        if not poly.is_empty:
+            subs.append(poly)
+    remainder = base.difference(unary_union(subs)) if subs else base
+    if remainder.is_empty:
+        return 0.0
+    area_m2, _ = _GEOD_SPHERE.geometry_area_perimeter(remainder)
+    return abs(float(area_m2)) / 1.0e6
+
+
 def bounding_box(
     lats: np.ndarray | list[float],
     lons: np.ndarray | list[float],

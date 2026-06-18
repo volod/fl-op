@@ -104,6 +104,13 @@ semanticTerms:
   urn:xopt:attribute:load-material: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:polygon: {valueType: array, quantityKind: geometry}
   urn:xopt:attribute:route-geometry: {valueType: array, quantityKind: geometry}
+  # The specific work-area polygon a task must cover ([lat, lon] vertices), a
+  # sub-region of its site; absent falls back to the whole site polygon. The
+  # covered-geometry is the union of completed passes accumulated from spatial
+  # execution feedback, subtracted (with restricted areas) to leave the residual
+  # uncovered work the partial-area clip and duration estimate are sized on.
+  urn:xopt:attribute:work-area-geometry: {valueType: array, quantityKind: geometry}
+  urn:xopt:attribute:covered-geometry: {valueType: array, quantityKind: geometry}
   urn:xopt:attribute:soil-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:operation-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:priority-class: {valueType: integer, quantityKind: ordinal}

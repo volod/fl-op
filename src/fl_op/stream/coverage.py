@@ -74,6 +74,19 @@ def pass_ring_from_payload(payload: dict[str, Any]) -> Optional[Ring]:
     return ring or None
 
 
+def work_area_area_ha(work_area_geometry: Any) -> float:
+    """Geodesic area (ha) of a task work-area polygon, 0.0 when unusable.
+
+    When a task carries an explicit work-area polygon, coverage is measured
+    against its true geodesic area (the workable reference) rather than the gross
+    scalar area column, so the covered share reflects the actual ground worked.
+    """
+    ring = parse_polygon(work_area_geometry)
+    if len(ring) < 3:
+        return 0.0
+    return polygon_rings_area_km2([ring]) * HECTARES_PER_SQUARE_KM
+
+
 def coverage_state(accumulated_rings: list[Ring], original_area_ha: float) -> dict[str, float]:
     """Overlap-corrected covered share of the original work area.
 

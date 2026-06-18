@@ -12,13 +12,6 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-23. Spatial execution feedback. Remaining work is incremental: measuring
-   coverage against the restriction-clipped (workable) remainder and threading
-   the residual work-area polygon into the solver's partial-area clip, and
-   consuming coverage in periodic (batch) planning. The delivered per-pass
-   coverage geometry (swept-path/polygon passes accumulated into spatially
-   refined remaining work and a rolling coverage trail) lives in
-   current-implementation.md.
 24. Closed-loop monitoring policy. Remaining work is research-grade: learning
    the composite health-score weights from prognosis outcomes. The delivered
    closed-loop behaviour (per-asset-type prognosis accuracy splits with per-type
@@ -74,27 +67,12 @@ Recommended order, optimized for dependency reuse and low rework:
     or incremental polish left after the core cost model expansion (per-link
     tolls priced off network-link distance, fixed per-visit service fees, and
     per-vehicle wear / per-operator wage rates) shipped to current-implementation.md.
+42. Spatial execution feedback -- advanced refinements. Remaining work is
+    incremental polish left after the core spatial feedback (task work-area
+    geometry, a geodesic partial-area clip on the uncovered remainder, and
+    coverage measured against the work-area geometry) shipped to
+    current-implementation.md.
 
-
-## 23. Spatial execution feedback
-
-Delivered behavior (per-pass coverage geometry parsed and accumulated in
-`stream/coverage.py` over the `core/geometry.py` swath/area primitives, refining
-remaining work from the overlap-corrected covered area and logging a per-pass
-coverage trail with an aggregate rolling summary) lives in
-current-implementation.md. The residual open work is:
-
-- Coverage measures the covered geodesic area against the task's gross original
-  work area. Measuring it against the restriction-clipped *workable* remainder,
-  and threading the residual work-area polygon (site minus restricted minus
-  covered) into the solver's partial-area clip so restriction severity is
-  computed on the uncovered remainder, needs the task to carry work-area
-  geometry rather than only a scalar area.
-- Coverage feedback runs in the rolling stream only; periodic (batch) planning
-  does not yet consume per-pass coverage geometry.
-- Rolling progress explanations are the per-pass trail and its aggregate stats;
-  richer spatially-explicit explanations (remaining-geometry rendering,
-  per-cluster coverage rollups) remain open.
 
 ## 24. Closed-loop monitoring policy
 
@@ -310,3 +288,30 @@ The residual open work is:
   authoritative arc costs, dispatch margins, and KPIs use the per-link toll and
   per-asset rates. Threading the network-aware measures into those heuristics
   would tighten warm starts but does not change the published economics.
+
+## 42. Spatial execution feedback -- advanced refinements
+
+Delivered behavior lives in current-implementation.md: tasks carry an optional
+work-area polygon (`task.workAreaGeometry`) and an accumulated covered polygon
+(`task.coveredGeometry`); the solver's partial-area clip
+(`solver/restrictions.py:_residual_clip_fractions` over
+`core/geometry.polygon_difference_area_km2`) computes restriction severity on the
+*uncovered remainder* and sizes the task to the residual `work minus covered minus
+restricted` geodesically, in both rolling and periodic (batch) planning; and the
+rolling coverage applier measures the covered share against the work-area
+geometry's true area when the task carries one. The residual open work is:
+
+- Rolling covered-geometry write-back. The solver consumes `task.coveredGeometry`
+  from any source (external GIS/telemetry, a prior run), and periodic planning
+  clips on it; the rolling stream measures coverage spatially but still shrinks
+  the scalar work columns rather than persisting the accumulated covered polygon
+  back onto the task. Auto-populating `task.coveredGeometry` from rolling passes
+  (so a rolling re-solve clips the residual geometry) needs a covered-geometry
+  source column bound in each domain pack and a multi-component (MultiPolygon)
+  covered geometry representation for disjoint passes.
+- Multi-component residual. The clip treats covered/restricted geometry as
+  single rings; a covered region or remaining work that is several disjoint
+  pieces (with holes) is approximated, not threaded as an exact MultiPolygon.
+- Richer spatially-explicit explanations. The per-pass trail and its aggregate
+  stats remain the rolling progress signal; remaining-geometry rendering and
+  per-cluster coverage rollups are still open.

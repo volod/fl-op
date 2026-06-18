@@ -95,6 +95,8 @@ def build_task(table: BindingTable, acc: dict[str, Any]) -> Task:
         operation_type=str(acc["operationType"]),
         location_ref=str(acc["locationRef"]),
         area_ha=float(acc["areaHa"]) if "areaHa" in acc else None,
+        work_area_geometry=parse_route_geometry(acc.get("workAreaGeometry")),
+        covered_geometry=parse_route_geometry(acc.get("coveredGeometry")),
         work_quantity=float(acc["workQuantity"]) if "workQuantity" in acc else None,
         work_quantity_unit=str(acc.get("workQuantityUnit", "")),
         service_duration_minutes=int(float(duration)) if duration else None,

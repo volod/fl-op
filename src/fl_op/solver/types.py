@@ -293,6 +293,12 @@ class TaskRow(_SolverRow):
     location_ref: str = ""
     operation_type: str = ""
     area: float = 0.0
+    # Work-area polygon ([lat, lon] vertices) of the specific region to work; a
+    # sub-region of the site. Empty falls back to the whole site polygon.
+    work_area_geometry: Any = dataclasses.field(default_factory=list)
+    # Union of completed coverage passes ([lat, lon] vertices), subtracted from
+    # the work area (with restricted areas) to leave the uncovered remainder.
+    covered_geometry: Any = dataclasses.field(default_factory=list)
     # Generic work demand; preferred over area for duration estimation.
     work_quantity: float = 0.0
     work_quantity_unit: str = ""

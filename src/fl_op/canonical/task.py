@@ -41,6 +41,12 @@ class Task(BaseModel):
     operation_type: str
     location_ref: str
     area_ha: Optional[float] = None
+    # Work-area polygon ([lat, lon] vertices) of the region to work, a sub-region
+    # of the site; empty falls back to the whole site polygon.
+    work_area_geometry: list[list[float]] = Field(default_factory=list)
+    # Union of completed coverage passes ([lat, lon] vertices), subtracted from
+    # the work area (with restricted areas) to leave the uncovered remainder.
+    covered_geometry: list[list[float]] = Field(default_factory=list)
     # Generic work demand; preferred over area_ha for duration estimation when
     # present. The unit declares what the quantity counts (ha, m3, items, ...).
     work_quantity: Optional[float] = None

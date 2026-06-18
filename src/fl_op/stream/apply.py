@@ -23,6 +23,7 @@ from fl_op.stream.coverage import (
     coverage_state,
     has_coverage_payload,
     pass_ring_from_payload,
+    work_area_area_ha,
 )
 from fl_op.stream.source import (
     EVENT_ASSET_UNAVAILABLE,
@@ -47,8 +48,10 @@ _TASK_STATUS_BINDING = "task.status"
 _TASK_DEADLINE_BINDING = "task.deadline"
 _TASK_WORK_QUANTITY_BINDINGS = ("task.workQuantity", "task.areaHa")
 # Area reference for spatially-derived coverage fractions (covered geodesic
-# area vs the task's original area in hectares).
+# area vs the task's original area in hectares). When the task carries an
+# explicit work-area polygon, its geodesic area is the preferred reference.
 _TASK_AREA_BINDING = "task.areaHa"
+_TASK_WORK_AREA_GEOMETRY_BINDING = "task.workAreaGeometry"
 
 # Observation bindings consulted for telemetry-derived task progress.
 _OBSERVATION_METRIC_BINDING = "observation.metric"
@@ -144,6 +147,13 @@ class EventApplicator:
     def _area_field(self, contract_id: str) -> Optional[str]:
         """Physical column carrying the task's work area (the coverage reference)."""
         binding = self._tables[contract_id].by_binding_path().get(_TASK_AREA_BINDING)
+        return binding.source_field if binding else None
+
+    def _work_area_geometry_field(self, contract_id: str) -> Optional[str]:
+        """Physical column carrying the task's work-area polygon, when bound."""
+        binding = self._tables[contract_id].by_binding_path().get(
+            _TASK_WORK_AREA_GEOMETRY_BINDING
+        )
         return binding.source_field if binding else None
 
     # -- event handlers ----------------------------------------------------------
@@ -312,7 +322,13 @@ class EventApplicator:
                     except (TypeError, ValueError):
                         continue
                 area_ha = 0.0
-                if area_field is not None:
+                # An explicit work-area polygon is the preferred coverage
+                # reference (its true geodesic area); fall back to the scalar area
+                # column, then to the first work quantity.
+                geometry_field = self._work_area_geometry_field(cid)
+                if geometry_field is not None:
+                    area_ha = work_area_area_ha(row.get(geometry_field))
+                if area_ha <= 0 and area_field is not None:
                     try:
                         area_ha = float(row.get(area_field, 0.0) or 0.0)
                     except (TypeError, ValueError):

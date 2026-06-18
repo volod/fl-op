@@ -42,10 +42,19 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    (and area-like work quantity) and its revenue scaled to the unrestricted
    fraction of the site polygon (`core/geometry.unrestricted_area_fraction` via
    shapely), so only the genuinely off-limits part of a field is removed and the
-   objective credits only the work that can actually be done. The task is
-   dropped only when the unrestricted fraction falls below
-   `RESTRICTION_MIN_WORKABLE_AREA_FRACTION` (effectively fully covered) or the
-   site is a point lying inside a restricted area.
+   objective credits only the work that can actually be done. When the task
+   carries its own work-area geometry (`task.workAreaGeometry`, falling back to
+   the site polygon) the clip is geodesic and operates on the *uncovered
+   remainder*: already-covered passes (`task.coveredGeometry`, fed by spatial
+   execution feedback) are subtracted from the work area first, so restriction
+   severity is computed on the work that is actually left and the task is sized
+   to the residual `work minus covered minus restricted`
+   (`_residual_clip_fractions` over `core/geometry.polygon_difference_area_km2`).
+   The task is dropped only when the unrestricted fraction of the uncovered
+   remainder falls below `RESTRICTION_MIN_WORKABLE_AREA_FRACTION` (effectively
+   fully covered) or the site is a point lying inside a restricted area. This
+   geometry clip runs in the shared chain, so periodic (batch) planning consumes
+   prior coverage carried on the task exactly as the rolling re-solve does.
 2. Build a prime-mover / related-equipment compatibility matrix from power
    capabilities (`solver/feasibility.py`). Matrices are cached by dataset
    hash (a content hash of the power capabilities and margin), so a repeated

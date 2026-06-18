@@ -29,7 +29,11 @@ from fl_op.core.constants import (
     RESTRICTION_MIN_WORKABLE_AREA_FRACTION,
     ROUTING_HORIZON_S,
 )
-from fl_op.core.geometry import unrestricted_area_fraction
+from fl_op.core.geometry import (
+    polygon_difference_area_km2,
+    polygon_rings_area_km2,
+    unrestricted_area_fraction,
+)
 from fl_op.solver.enforcement import ops_set
 from fl_op.solver.task_relations import parse_time_windows
 
@@ -266,6 +270,49 @@ def _restricted_overlap(
     return overlapping, point_block_id
 
 
+def _residual_clip_fractions(
+    order: Any, site: Any, overlapping: list[list[tuple[float, float]]]
+) -> tuple[float, float]:
+    """Restriction severity on the uncovered remainder, and the residual fraction.
+
+    With a task work-area polygon (falling back to the site polygon), restriction
+    severity is the unrestricted share of the *uncovered* remainder
+    (work minus already-covered passes), so a partly-completed task is judged on
+    the work that is actually left; the second value sizes the task to the
+    residual area (work minus covered minus restricted) over the full work area.
+    Without usable work-area geometry it falls back to the planar site-polygon
+    restriction fraction for both, matching the legacy scalar clip.
+    """
+    task_work_ring = parse_polygon(getattr(order, "work_area_geometry", None))
+    covered_ring = parse_polygon(getattr(order, "covered_geometry", None))
+    # Only tasks that carry their own work-area or covered geometry opt into the
+    # geodesic residual clip; everything else keeps the legacy planar site-polygon
+    # fraction so existing scalar-area behaviour is unchanged.
+    if len(task_work_ring) < 3 and len(covered_ring) < 3:
+        fraction = unrestricted_area_fraction(
+            parse_polygon(getattr(site, "polygon", None)), overlapping
+        )
+        return fraction, fraction
+    work_ring = (
+        task_work_ring
+        if len(task_work_ring) >= 3
+        else parse_polygon(getattr(site, "polygon", None))
+    )
+    if len(work_ring) < 3:
+        return 1.0, 1.0
+    work_area = polygon_rings_area_km2([work_ring])
+    if work_area <= 0:
+        return 1.0, 1.0
+    covered_rings = [covered_ring] if len(covered_ring) >= 3 else []
+    uncovered_area = polygon_difference_area_km2(work_ring, covered_rings)
+    residual_area = polygon_difference_area_km2(work_ring, [*overlapping, *covered_rings])
+    restriction_fraction = (
+        residual_area / uncovered_area if uncovered_area > 0 else 0.0
+    )
+    area_fraction = residual_area / work_area
+    return min(1.0, restriction_fraction), max(0.0, min(1.0, area_fraction))
+
+
 def _clip_order_to_area_fraction(order: Any, fraction: float) -> Any:
     """Scale an order's effective work down to the unrestricted area fraction.
 
@@ -340,11 +387,12 @@ def apply_location_restrictions(
                 }
             )
             continue
-        if overlapping:
-            fraction = unrestricted_area_fraction(
-                parse_polygon(site.polygon), overlapping
+        has_covered = len(parse_polygon(getattr(order, "covered_geometry", None))) >= 3
+        if overlapping or has_covered:
+            restriction_fraction, area_fraction = _residual_clip_fractions(
+                order, site, overlapping
             )
-            if fraction <= RESTRICTION_MIN_WORKABLE_AREA_FRACTION:
+            if restriction_fraction <= RESTRICTION_MIN_WORKABLE_AREA_FRACTION:
                 infeasible.append(
                     {
                         "task_id": order.task_id,
@@ -353,13 +401,14 @@ def apply_location_restrictions(
                         "detail": (
                             f"operation {order.operation_type} at "
                             f"{order.location_ref} restricted over "
-                            f"{(1 - fraction) * 100:.0f}% of the work area"
+                            f"{(1 - restriction_fraction) * 100:.0f}% of the "
+                            "uncovered work area"
                         ),
                     }
                 )
                 continue
-            if fraction < 1.0:
-                order = _clip_order_to_area_fraction(order, fraction)
+            if area_fraction < 1.0:
+                order = _clip_order_to_area_fraction(order, area_fraction)
                 clipped += 1
         if not allowed_start_intervals(
             order, site, now_epoch, _deadline_epoch(order, now_epoch)

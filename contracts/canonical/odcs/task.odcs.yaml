@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: canonical-task
-version: 0.3.0
+version: 0.4.0
 status: active
 name: Canonical Task
 domain: canonical
@@ -60,6 +60,20 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: task.areaHa, semanticTerm: urn:xopt:attribute:service-area, canonicalUnit: ha, quantityKind: area, planningUse: [duration-estimation]}
+      - name: workAreaGeometry
+        logicalType: array
+        required: false
+        description: Work-area polygon ([lat, lon] vertices), a sub-region of the site; absent falls back to the whole site polygon.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.workAreaGeometry, semanticTerm: urn:xopt:attribute:work-area-geometry, quantityKind: geometry, planningUse: [restriction]}
+      - name: coveredGeometry
+        logicalType: array
+        required: false
+        description: Union of completed coverage passes ([lat, lon] vertices); subtracted from the work area to leave the uncovered remainder.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: task.coveredGeometry, semanticTerm: urn:xopt:attribute:covered-geometry, quantityKind: geometry, planningUse: [restriction]}
       - name: workQuantity
         logicalType: number
         required: false
