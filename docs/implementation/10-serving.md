@@ -12,9 +12,13 @@
   reads artifacts through `serving/artifacts.py`: by default this is
   `$DATA_DIR`, or `SERVE_ARTIFACT_ROOT` for a shared mounted artifact tree, or
   an object store (below). It never mutates datasets or plans. Exact feasibility
-  responses are cached under `$DATA_DIR/cache/feasibility`, keyed by the source
-  bytes the query reads, schedule.json, and the order payload; uncached requests
-  also reuse the compat and candidate-filter caches.
+  responses are cached under `$DATA_DIR/cache/feasibility`, keyed by the
+  *canonical content* of the source rows the query reads, the parsed
+  `schedule.json`, and the order payload -- so inputs that differ only in JSON
+  key/byte ordering, CSV column order, or format reuse a cached response. Per-file
+  content digests are memoized by `(mtime, size)`, so a repeated request over an
+  unchanged dataset skips re-parsing the sources before the lookup; uncached
+  requests also reuse the compat and candidate-filter caches.
 - Serving security (`serving/security/`) hardens the previous single-token
   check into a composable gateway run on every protected route as
   authenticate -> authorize -> rate-limit -> audit, with each refusal audited
@@ -63,7 +67,15 @@
   its factory on import and opts into the durable dedup store when its source
   can redeliver (Kafka and Redis do; JSONL replays files intentionally and does
   not). Kafka and Redis validate messages through the same `parse_event` and
-  drain the visible backlog before the run publishes revisions. Acknowledgement
+  drain the visible backlog before the run publishes revisions. When a producer
+  leaves `ingested_at` blank, the live adapter stamps it from the broker's own
+  arrival time -- Kafka's record timestamp and the Redis stream entry id's
+  `<millisecondsTime>` (`stream/source.py:stamp_broker_ingested`) -- so a
+  broker-fed observation series orders by a true platform-ingestion time rather
+  than the observed-time proxy; a producer-supplied `ingested_at` always wins,
+  and an unavailable broker timestamp leaves the proxy in place. The broker
+  assigns the timestamp once, so a redelivered or restart-recovered entry keeps
+  the same arrival time. Acknowledgement
   is never automatic: Kafka offsets stay uncommitted and Redis stream entries
   stay unacked (`XACK`) until the run's revisions are written, right after the
   dedup store records the published event ids. A crash before publication

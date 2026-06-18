@@ -62,6 +62,10 @@ def test_drone_logistics_small_plan_uses_ugv_and_uav(tmp_path: pathlib.Path) -> 
         "asset.unavailable",
         "entity.corrected",
     } <= {event["event_type"] for event in events}
+    # Each trigger is stamped with a true arrival time at or after its observed
+    # time, so any event-derived series orders by ingestion across restarts.
+    for event in events:
+        assert event["ingested_at"] >= event["observed_at"]
     metadata = json.loads((out_dir / "metadata.json").read_text())["run_metadata"]
     assert metadata["tuning"]["ugv_share"] == 0.6
     assert metadata["tuning"]["cluster_target_size"] == 36
@@ -112,6 +116,46 @@ def test_drone_logistics_small_plan_uses_ugv_and_uav(tmp_path: pathlib.Path) -> 
     assert kpis["weather_blocked_uav_tasks"] >= 1
     assert kpis["no_fly_exclusion_count"] >= 1
 
+    # 3D airspace deconfliction places every aerial flight in a corridor and
+    # every modelled conflict is either separated or counted as residual.
+    airspace = kpis["airspace_deconfliction"]
+    assert airspace["n_aerial_flights"] >= 1
+    assert airspace["corridors_used"] >= 1
+    assert airspace["corridors_used"] <= airspace["corridors_available"]
+    # Conflicts are resolved by corridor (vertical) plus temporal separation;
+    # the three buckets partition every modelled conflict.
+    assert (
+        airspace["n_corridor_separated_pairs"]
+        + airspace["n_time_separated_pairs"]
+        + airspace["n_residual_conflict_pairs"]
+        == airspace["n_conflict_pairs"]
+    )
+    assert (
+        airspace["n_deconflicted_pairs"] + airspace["n_residual_conflict_pairs"]
+        == airspace["n_conflict_pairs"]
+    )
+    assert airspace["total_deconfliction_delay_s"] >= 0
+    assert all(
+        flight["deconfliction_delay_s"] >= 0 for flight in airspace["flights"]
+    )
+    assert len(airspace["flights"]) == airspace["n_aerial_flights"]
+
+    # Charging-queue scheduling replenishes every used asset's spent energy at
+    # its home hub, bounded by per-hub charging-bay capacity, and reports each
+    # asset's recharge turnaround (queue wait + charge time).
+    charging = kpis["charging_schedule"]
+    assert charging["n_charging_sessions"] >= 1
+    assert charging["n_hubs_with_charging"] >= 1
+    assert charging["total_energy_charged_kwh"] > 0
+    assert charging["n_queued_sessions"] >= 0
+    assert charging["max_turnaround_s"] >= 0
+    assert charging["n_turnaround_at_risk"] >= 0
+    for hub_report in charging["hub_utilization"].values():
+        assert hub_report["slots"] >= 1
+        assert hub_report["n_sessions"] >= 1
+    for session in charging["sessions"]:
+        assert session["turnaround_s"] >= session["wait_s"]
+
     assignments = plan.assignments
     assert assignments
     task_modes = {
@@ -129,6 +173,57 @@ def test_drone_logistics_small_plan_uses_ugv_and_uav(tmp_path: pathlib.Path) -> 
             assert assignment.asset_ids[0].startswith("UAV")
         if assignment.task_id.endswith("-UGV"):
             assert assignment.asset_ids[0].startswith("UGV")
+
+
+def test_airspace_holds_retime_dispatch_within_deadlines(
+    tmp_path: pathlib.Path, monkeypatch
+) -> None:
+    """A single corridor forces temporal holds that re-time dispatch safely."""
+    from fl_op.adapters.ortools_periodic import OrToolsPeriodicAdapter
+    from fl_op.planning import airspace
+    from fl_op.snapshot import SnapshotBuilder
+
+    # One corridor forces same-corridor conflicts into the time dimension.
+    monkeypatch.setattr(airspace, "AIRSPACE_CORRIDOR_COUNT", 1)
+
+    registry = FileRegistry(root=pathlib.Path.cwd() / "contracts")
+    orig_cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        out_dir = run_domain_generator(
+            "drone_logistics",
+            GenerationRequest(
+                vehicles=16, implements=16, orders=28, depots=2, seed=7, fmt="csv"
+            ),
+            registry=registry,
+        )
+        out_dir = (tmp_path / out_dir).resolve()
+    finally:
+        os.chdir(orig_cwd)
+
+    snapshot = SnapshotBuilder(registry).build(out_dir, PlanningMode.PERIODIC)
+    profile = registry.get_profile("drone-logistics")
+    plan = OrToolsPeriodicAdapter().plan(snapshot, profile)
+
+    airspace_kpis = plan.score["drone_logistics_kpis"]["airspace_deconfliction"]
+    assert airspace_kpis["holds_applied_to_dispatch"] is True
+    # With one corridor and several concurrent flights, at least one is held.
+    assert airspace_kpis["n_flights_held"] >= 1
+    assert airspace_kpis["total_deconfliction_delay_s"] > 0
+
+    # Every held flight's re-timed dispatch still respects its deadline.
+    held = {
+        flight["task_id"]
+        for flight in airspace_kpis["flights"]
+        if flight["deconfliction_delay_s"] > 0
+    }
+    assert held
+    tasks = snapshot.task_index()
+    for assignment in plan.assignments:
+        if assignment.task_id in held:
+            deadline = tasks[assignment.task_id].deadline
+            if deadline is not None:
+                assert assignment.planned_finish <= deadline
 
 
 def test_drone_logistics_rolling_demo_events_change_plan(

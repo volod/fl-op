@@ -6,21 +6,25 @@ domains:
   drone_logistics:
     root: domains/drone_logistics
     profile: drone-logistics
+    version: 0.1.0
     semanticModelRef: urn:xopt:model:drone-logistics:0.1.0
     generator: fl_op.data.drone_logistics_entities:generate_drone_logistics_domain
   agricultural:
     root: domains/agricultural
     profile: agricultural-custom-services
+    version: 0.1.0
     semanticModelRef: urn:xopt:model:agricultural-custom-services:0.1.0
     generator: fl_op.data.generator:generate_agricultural_domain
   construction:
     root: domains/construction
     profile: construction-earthworks
+    version: 0.1.0
     semanticModelRef: urn:xopt:model:construction-earthworks:0.1.0
     generator: fl_op.data.generator:generate_construction_domain
   roadside:
     root: domains/roadside
     profile: roadside-infrastructure
+    version: 0.1.0
     semanticModelRef: urn:xopt:model:roadside-infrastructure:0.1.0
     generator: fl_op.data.roadside_entities:generate_roadside_domain
     mappings:
@@ -90,7 +94,7 @@ contracts:
     sourceFile: logistics-hubs.csv
     sourceFormat: csv
     fingerprints:
-      optimizationMetadataHash: 40a129bbbf321594d4e6f8b22fb0dc4c609d7bcffc0fae3e590e324eb4fb9295
+      optimizationMetadataHash: d90e28417097cff5b9dd9905421fe89579068e2f052875287c70ca72700428ea
   drone-delivery-locations:
     id: delivery-locations
     domain: drone_logistics

@@ -21,10 +21,20 @@
   matrix keys (`solver/feasibility.py:compat_cache_key`), preprocessing /
   candidate-filter keys (`solver/preprocessing.py:_hash_payload`), and
   `/feasibility` request keys (`solver/query_pipeline.py:
-  feasibility_request_cache_key`) all share the versioned primitive. Leaf
-  binary digests over raw numpy bytes (`preprocessing._array_digest`) and file
-  bytes (`query_pipeline._file_digest`) stay on a bare SHA-256 and are folded
-  into the namespaced payload, since binary content has no canonical-JSON form.
+  feasibility_request_cache_key`) all share the versioned primitive. The
+  `/feasibility` key is content-addressed end to end: every file-based input is
+  digested by its *parsed canonical content* -- the source rows are read through
+  the codec and the `schedule.json` is parsed to JSON, each hashed via
+  `content_hash("feasibility-source"/"feasibility-schedule", ...)` -- so two
+  requests whose inputs differ only in JSON key ordering, CSV column order,
+  whitespace, or physical format resolve to the same key and reuse the cached
+  response. Each per-file digest is memoized by the file's `(mtime, size)` stat
+  signature (`query_pipeline._stat_memoized_digest`), so a repeated request over
+  an unchanged dataset skips re-parsing every source before the cache lookup; on
+  a miss the parsed rows already read for the key feed the evaluation. The
+  remaining leaf binary digest over raw numpy bytes
+  (`preprocessing._array_digest`) stays on a bare SHA-256 folded into the
+  namespaced payload, since binary array content has no canonical-JSON form.
 - Artifact manifests (`provenance/manifest.py`) are additive provenance
   sidecars. `write_manifest` drops a `manifest.json` next to a run's primary
   artifacts recording the artifact kind, schema versions, generation time,

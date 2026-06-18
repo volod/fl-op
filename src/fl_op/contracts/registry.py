@@ -9,6 +9,7 @@ Fingerprint semantics:
   optimizationMetadataHash - computed from ODCS (semantic)
 """
 
+import copy
 import logging
 import os
 import pathlib
@@ -25,6 +26,11 @@ from fl_op.contracts.mapping_loader import (
     mapping_metadata_blocks,
 )
 from fl_op.contracts.odcs_loader import OdcsContract, load_odcs_contract
+from fl_op.contracts.plugins import (
+    DomainPackContribution,
+    discover_domain_packs,
+    merge_contributions,
+)
 from fl_op.contracts.profile import OptimizationProfile, load_profile
 from fl_op.core.paths import CONTRACTS_ROOT
 
@@ -103,7 +109,22 @@ class FileRegistry:
         self.index_path = self.root / "registry.yaml"
         if not self.index_path.exists():
             raise FileNotFoundError(f"Registry index not found: {self.index_path}")
-        self.index: dict[str, Any] = yaml.safe_load(self.index_path.read_text())
+        # The raw, file-backed index is the only thing ever written back to
+        # registry.yaml (fingerprint persistence); the live ``index`` is that plus
+        # any discovered plugin packs.
+        self._file_index: dict[str, Any] = yaml.safe_load(self.index_path.read_text())
+        contributions = discover_domain_packs()
+        if contributions:
+            self.index: dict[str, Any] = copy.deepcopy(self._file_index)
+            # Domains contributed by installed plugin packs (entry-point
+            # discovery), merged before entries are built so they are
+            # first-class. In-repo keys always win; conflicts skip with a warning.
+            self.plugin_domains: dict[str, DomainPackContribution] = merge_contributions(
+                self.index, contributions
+            )
+        else:
+            self.index = self._file_index
+            self.plugin_domains = {}
         self.entries: dict[str, ContractEntry] = {
             cid: ContractEntry(cid, spec)
             for cid, spec in (self.index.get("contracts") or {}).items()
@@ -443,10 +464,18 @@ class FileRegistry:
             }
         )
         declared = spec.get("capabilities")
+        plugin = self.plugin_domains.get(domain)
         return {
             "domain": domain,
             "generator": spec.get("generator"),
             "profile": spec.get("profile"),
+            "version": spec.get("version"),
+            "source": "plugin" if plugin is not None else "builtin",
+            "plugin": (
+                {"entryPoint": plugin.entry_point, "distribution": plugin.distribution}
+                if plugin is not None
+                else None
+            ),
             "canonicalEntities": self.domain_entities(domain),
             "contracts": contract_ids,
             "sourceFormats": source_formats,
@@ -494,10 +523,18 @@ class FileRegistry:
         return computed
 
     def persist_fingerprints(self, fingerprints_by_contract: dict[str, dict[str, str]]) -> None:
-        """Write recomputed fingerprints back into registry.yaml."""
+        """Write recomputed fingerprints back into registry.yaml.
+
+        Only file-backed contracts are persisted: discovered plugin contracts
+        live in their own distribution and are never written into this repo's
+        registry.yaml, so the dump targets ``_file_index`` (which excludes the
+        merged plugin entries).
+        """
+        file_contracts = self._file_index.get("contracts") or {}
         for cid, fps in fingerprints_by_contract.items():
-            if cid in self.index["contracts"]:
+            if cid in file_contracts:
+                file_contracts[cid]["fingerprints"] = fps
                 self.index["contracts"][cid]["fingerprints"] = fps
                 self.entries[cid].stored_fingerprints = dict(fps)
-        self.index_path.write_text(yaml.safe_dump(self.index, sort_keys=False))
+        self.index_path.write_text(yaml.safe_dump(self._file_index, sort_keys=False))
         logger.info("Persisted fingerprints for %d contracts", len(fingerprints_by_contract))

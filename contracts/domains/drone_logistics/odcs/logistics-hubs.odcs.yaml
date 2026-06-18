@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: logistics-hubs
-version: 1.1.0
+version: 1.2.0
 status: active
 name: Logistics Hubs
 domain: drone-logistics
@@ -28,3 +28,4 @@ schema:
       - {name: energy_units, logicalType: number, physicalType: double, required: false, description: Available energy in fuel-equivalent units., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 5}}}]}
       - {name: battery_available_kwh, logicalType: number, physicalType: double, required: false, description: Available battery energy inventory., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 6}}}]}
       - {name: charging_power_kw, logicalType: number, physicalType: double, required: false, description: Aggregate charger power at the hub., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 7}}}]}
+      - {name: charging_slots, logicalType: integer, physicalType: integer, required: false, description: Number of parallel charging bays (charging queue capacity)., customProperties: [{property: fieldGeneration, value: {avro: {default: 0}, proto: {fieldNumber: 8}}}]}

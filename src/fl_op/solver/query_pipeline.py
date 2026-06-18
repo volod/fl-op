@@ -7,9 +7,8 @@ API); ``run_query`` wraps it with the CLI artifact and stdout behavior.
 import json
 import logging
 import pathlib
-import hashlib
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from fl_op.core import constants
 from fl_op.core.constants import ARTIFACT_SCHEMA_VERSION
@@ -28,6 +27,10 @@ logger = logging.getLogger(__name__)
 
 _TOP_CANDIDATES = 3
 
+# Logical source datasets the feasibility query reads; located in whatever
+# physical format the dataset uses (the ".csv" is only a locate hint).
+_SOURCE_DATASETS = ("vehicles", "implements", "fields")
+
 
 def evaluate_query(
     data_dir: str, schedule_dir: str, order: dict[str, Any]
@@ -41,31 +44,52 @@ def evaluate_query(
     data_path = pathlib.Path(data_dir)
     codec = get_codec(detect_format(data_path))
     sched_path = pathlib.Path(schedule_dir)
-    cache_key = feasibility_request_cache_key(data_path, sched_path, order, codec)
+    schedule_file = sched_path / "schedule.json"
+    source_paths = {
+        name: locate_source(data_path, f"{name}.csv", codec)
+        for name in _SOURCE_DATASETS
+    }
+
+    # Key the cache on each file input's canonical content, but digest it through
+    # a stat-memo so a repeated request over an unchanged dataset reuses the
+    # per-file digest without re-parsing. A file is only (re)parsed when its
+    # (mtime, size) changed -- or, below, when the lookup misses and the rows are
+    # needed for the evaluation. ``parsed`` is the rows/JSON when freshly read.
+    source_digests: dict[str, str] = {}
+    parsed_sources: dict[str, list[dict[str, Any]]] = {}
+    for name, path in source_paths.items():
+        digest, rows = _stat_memoized_digest(path, "feasibility-source", codec.read)
+        source_digests[name] = digest
+        if rows is not None:
+            parsed_sources[name] = rows
+    schedule_digest, schedule_content = _stat_memoized_digest(
+        schedule_file, "feasibility-schedule", _parse_schedule
+    )
+
+    cache_key = feasibility_request_cache_key(source_digests, schedule_digest, order)
     cached = _read_feasibility_cache(cache_key)
     if cached is not None:
         logger.info("Feasibility request cache hit: %s", cache_key[:12])
         return cached
 
     registry = FileRegistry()
-    # Translate raw physical rows (and the new order) into canonical-keyed rows so
+    # Cache miss: parse any inputs the stat-memo served from digest, then
+    # translate raw physical rows (and the new order) into canonical-keyed rows so
     # the solver functions operate on the domain-neutral vocabulary.
-    vehicles_raw = to_canonical_rows(
-        codec.read(locate_source(data_path, "vehicles.csv", codec)), "vehicles", registry
-    )
-    implements_raw = to_canonical_rows(
-        codec.read(locate_source(data_path, "implements.csv", codec)), "implements", registry
-    )
-    fields_raw = to_canonical_rows(
-        codec.read(locate_source(data_path, "fields.csv", codec)), "fields", registry
-    )
+    raw_sources = {
+        name: parsed_sources[name]
+        if name in parsed_sources
+        else codec.read(source_paths[name])
+        for name in _SOURCE_DATASETS
+    }
+    vehicles_raw = to_canonical_rows(raw_sources["vehicles"], "vehicles", registry)
+    implements_raw = to_canonical_rows(raw_sources["implements"], "implements", registry)
+    fields_raw = to_canonical_rows(raw_sources["fields"], "fields", registry)
     new_order = to_canonical_row(order, "orders", registry)
 
-    schedule_file = sched_path / "schedule.json"
-    dispatch_packages: list[dict[str, Any]] = []
-    if schedule_file.exists():
-        with schedule_file.open() as fh:
-            dispatch_packages = json.load(fh).get("schedule", [])
+    if schedule_content is None and schedule_digest != _MISSING_DIGEST:
+        schedule_content = _parse_schedule(schedule_file)
+    dispatch_packages = (schedule_content or {}).get("schedule", [])
 
     time_index = _build_vehicle_time_index(dispatch_packages)
 
@@ -135,41 +159,78 @@ def evaluate_query(
 
 
 def feasibility_request_cache_key(
-    data_path: pathlib.Path,
-    schedule_path: pathlib.Path,
+    source_digests: dict[str, str],
+    schedule_digest: str,
     order: dict[str, Any],
-    codec: Any,
 ) -> str:
-    """Stable hash for one /feasibility request.
+    """Content-addressed hash for one /feasibility request.
 
-    The key includes bytes of every source file the query reads, schedule.json,
-    and the request order payload, so a changed dataset/schedule/order misses
-    even when the path is reused.
+    Each file input is represented by its canonical-content digest (computed by
+    ``_stat_memoized_digest`` over the parsed rows / parsed ``schedule.json``),
+    so two requests whose inputs differ only in JSON key ordering, CSV column
+    order, whitespace, or physical format resolve to the same key and reuse a
+    cached response. A changed dataset/schedule/order still misses. The inline
+    order payload is canonicalized by ``content_hash`` as well.
 
     Routed through the shared provenance primitive so a namespace-version bump
     invalidates every cached feasibility response at once.
     """
-    sources = []
-    for filename in ("vehicles.csv", "implements.csv", "fields.csv"):
-        source = locate_source(data_path, filename, codec)
-        sources.append([source.name, _file_digest(source)])
     payload = {
         "kind": "feasibility-request",
-        "sources": sources,
-        "schedule": _file_digest(schedule_path / "schedule.json"),
+        "sources": [[name, source_digests[name]] for name in sorted(source_digests)],
+        "schedule": schedule_digest,
         "order": order,
     }
     return content_hash("feasibility-request", payload)
 
 
-def _file_digest(path: pathlib.Path) -> str:
-    if not path.exists():
-        return "missing"
-    hasher = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
+# Sentinel digest for an absent file input.
+_MISSING_DIGEST = "missing"
+
+# Per-file content-digest memo, invalidated by the file's (mtime, size) stat
+# signature: str(path) -> (mtime_ns, size, digest).
+_DIGEST_MEMO: dict[str, tuple[int, int, str]] = {}
+
+
+def _stat_memoized_digest(
+    path: pathlib.Path, namespace: str, parse: "Callable[[pathlib.Path], Any]"
+) -> tuple[str, Any]:
+    """Canonical-content digest of a file, memoized by its (mtime, size) stat.
+
+    Returns ``(digest, parsed)`` where ``parsed`` is the freshly parsed content
+    when the file had to be read, or ``None`` when the digest was served from the
+    stat-keyed memo (so an unchanged input is not re-parsed before the cache
+    lookup). An absent file digests to ``_MISSING_DIGEST``. Correctness rests on
+    inputs being immutable run artifacts rather than rewritten in place within
+    the filesystem's mtime resolution.
+    """
+    try:
+        st = path.stat()
+    except OSError:
+        return (_MISSING_DIGEST, None)
+    signature = (st.st_mtime_ns, st.st_size)
+    key = str(path)
+    cached = _DIGEST_MEMO.get(key)
+    if cached is not None and (cached[0], cached[1]) == signature:
+        return (cached[2], None)
+    parsed = parse(path)
+    digest = content_hash(namespace, parsed)
+    _DIGEST_MEMO[key] = (signature[0], signature[1], digest)
+    _evict_digest_memo()
+    return (digest, parsed)
+
+
+def _evict_digest_memo() -> None:
+    """Bound the digest memo; drop oldest insertions past the configured cap."""
+    overflow = len(_DIGEST_MEMO) - constants.FEASIBILITY_DIGEST_MEMO_MAX_ENTRIES
+    for _ in range(max(0, overflow)):
+        _DIGEST_MEMO.pop(next(iter(_DIGEST_MEMO)), None)
+
+
+def _parse_schedule(path: pathlib.Path) -> dict[str, Any]:
+    """Parse an existing ``schedule.json`` into its canonical structure."""
+    with path.open() as fh:
+        return json.load(fh)
 
 
 def _feasibility_cache_path(cache_key: str) -> pathlib.Path:

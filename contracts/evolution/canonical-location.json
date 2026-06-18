@@ -6,6 +6,16 @@
       "physicalType": "",
       "required": false
     },
+    "chargingPowerKw": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
+    },
+    "chargingSlots": {
+      "logicalType": "integer",
+      "physicalType": "",
+      "required": false
+    },
     "inventoryEnergy": {
       "logicalType": "number",
       "physicalType": "",
@@ -191,8 +201,85 @@
       },
       "odcsId": "canonical-location",
       "version": "0.2.0"
+    },
+    {
+      "contractId": "canonical-location",
+      "fields": {
+        "areaHa": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "chargingPowerKw": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "chargingSlots": {
+          "logicalType": "integer",
+          "physicalType": "",
+          "required": false
+        },
+        "inventoryEnergy": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "inventoryFuel": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "inventoryMaterial": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": true
+        },
+        "locationId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "polygon": {
+          "logicalType": "array",
+          "physicalType": "",
+          "required": false
+        },
+        "restrictedOperations": {
+          "logicalType": "array",
+          "physicalType": "",
+          "required": false
+        },
+        "restrictionWindows": {
+          "logicalType": "array",
+          "physicalType": "",
+          "required": false
+        },
+        "soilType": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        }
+      },
+      "odcsId": "canonical-location",
+      "version": "0.3.0"
     }
   ],
   "odcsId": "canonical-location",
-  "version": "0.2.0"
+  "version": "0.3.0"
 }

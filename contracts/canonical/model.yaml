@@ -222,6 +222,12 @@ semanticTerms:
   urn:xopt:inventory:fuel: {valueType: number, quantityKind: volume, canonicalUnit: L}
   urn:xopt:inventory:fertilizer: {valueType: number, quantityKind: mass, canonicalUnit: kg}
   urn:xopt:inventory:energy: {valueType: number, quantityKind: energy, canonicalUnit: kWh}
+  # -- recharge / refuel station capacity ------------------------------------
+  # Generic depot/station replenishment capacity: aggregate charger power and
+  # the number of parallel charging/refuelling bays (queue capacity). Drone
+  # hubs bind these; any depot domain may reuse them.
+  urn:xopt:capacity:charging-power: {valueType: number, quantityKind: power, canonicalUnit: kW}
+  urn:xopt:capacity:charging-slots: {valueType: integer, quantityKind: count}
   # -- forecast values -------------------------------------------------------
   urn:xopt:forecast:wind-speed: {valueType: number, quantityKind: speed, canonicalUnit: m/s}
   urn:xopt:forecast:precipitation-rate: {valueType: number, quantityKind: flow-rate, canonicalUnit: mm/h}

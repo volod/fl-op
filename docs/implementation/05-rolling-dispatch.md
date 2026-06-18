@@ -30,7 +30,14 @@ domain-specific column names. Supported triggers:
   the payload carries one, else the event's `ingested_at`, else its observed
   time as the deterministic arrival proxy -- so a series mixing file readings
   and live events still orders by ingestion instead of falling back to source
-  row order;
+  row order. The in-repo event producers (the rolling demo's `events.jsonl` and
+  the drone scenario stream) now stamp a true event-level `ingested_at` (the
+  observed time plus a bounded delivery delay), sharing one delivery-delay model
+  with the file-reading generators (`data/ingestion.py:stamp_ingested`), so a
+  purely event-fed series also orders by arrival and surfaces arrival-order
+  timestamp regressions instead of looking ordered under the observed-time
+  proxy; the proxy and source-row order stay as the defensive net for any
+  producer that omits the field;
 - `entity.corrected`: a corrected source row upserted by its key column, so
   quality-rejected or wrongly-valued entities re-enter planning.
 

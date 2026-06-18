@@ -11,8 +11,9 @@ from typing import Any
 import numpy as np
 
 from fl_op.canonical.enums import AssetMobility, HealthStatus
-from fl_op.core.constants import BATTERY_LOW_THRESHOLD_PCT, INGESTION_DELAY_MAX_S
+from fl_op.core.constants import BATTERY_LOW_THRESHOLD_PCT
 from fl_op.data.agri_enums import SensorType
+from fl_op.data.ingestion import stamp_ingested
 
 # One station is installed per this many fields.
 _FIELDS_PER_SENSOR = 3
@@ -107,10 +108,6 @@ def _generate_sensor_readings(
             start_battery = rng.uniform(_BATTERY_HEALTHY_MIN_PCT, _BATTERY_HEALTHY_MAX_PCT)
         drain_per_step = _BATTERY_DAILY_DRAIN_PCT / _READINGS_PER_DAY
 
-        def ingested(observed: datetime) -> str:
-            delay = timedelta(seconds=float(rng.uniform(0.0, INGESTION_DELAY_MAX_S)))
-            return (observed + delay).isoformat()
-
         for t in range(n_steps):
             observed_at = now - (n_steps - 1 - t) * step
             battery = max(0.0, start_battery - t * drain_per_step)
@@ -124,7 +121,7 @@ def _generate_sensor_readings(
                     "unit": _BATTERY_UNIT,
                     "observed_at": observed_at.isoformat(),
                     "quality_flag": "ok",
-                    "ingested_at": ingested(observed_at),
+                    "ingested_at": stamp_ingested(observed_at, rng),
                 }
             )
             seq += 1
@@ -138,7 +135,7 @@ def _generate_sensor_readings(
                     "unit": _MOISTURE_UNIT,
                     "observed_at": observed_at.isoformat(),
                     "quality_flag": "ok",
-                    "ingested_at": ingested(observed_at),
+                    "ingested_at": stamp_ingested(observed_at, rng),
                 }
             )
             seq += 1
@@ -154,7 +151,7 @@ def _generate_sensor_readings(
                 "unit": "",
                 "observed_at": now.isoformat(),
                 "quality_flag": "ok",
-                "ingested_at": ingested(now),
+                "ingested_at": stamp_ingested(now, rng),
             }
         )
         seq += 1

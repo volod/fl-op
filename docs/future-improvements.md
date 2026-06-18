@@ -12,23 +12,6 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-9. Event visibility completeness. Remaining work is incremental: producers
-   stamping a true `ingested-at` on events (the event path falls back to the
-   observed time as the arrival proxy today), with the source-row-order fallback
-   staying as the defensive net for any observation source that does not declare
-   the `ingestedAt` binding. The delivered visibility (file and event sources
-   emitting `ingested-at`, and `entity.corrected` advancing its contract's
-   watermark) lives in current-implementation.md.
-10. Multi-domain extensibility and packaging. Add plugin discovery, versioned
-    generator packaging, and generator capability declaration, and key
-    generated schema and evolution-baseline filenames off versioned
-    domain-local refs rather than the global registry id.
-11. Drone logistics fidelity. Model 3D airspace deconfliction, altitude
-    corridor planning, and vehicle-to-vehicle separation, plus charging-station
-    scheduling and charging queue capacity.
-12. Feasibility input caching. Hash file-based feasibility inputs (sources and
-    `schedule.json`) by canonical content rather than raw bytes so
-    byte-order-different inputs reuse cached results.
 21. Routing topology and geography. Remaining work is research-grade and not a
    blocking engine gap: coupled-insertion search support for fully-optional
    reloads, routing the path around restricted sub-polygons, and a dedicated
@@ -71,56 +54,35 @@ Recommended order, optimized for dependency reuse and low rework:
    conflict attribution for window/precedence-driven drops. The delivered primal
    resource-conflict attribution (a binding-resource signal from
    routing-dimension utilization) lives in current-implementation.md.
+28. Event visibility completeness. Remaining work is incremental: future
+   event-client adapters (NATS, RabbitMQ, cloud pub/sub) must carry the
+   broker-arrival stamping the Kafka and Redis adapters already do, a producer
+   on a transport with no broker-arrival metadata still needs to stamp
+   `ingested-at` itself, and a new domain pack's observation source must declare
+   the `ingestedAt` binding. The delivered visibility (file and in-repo event
+   producers emitting a true `ingested-at`, the live Kafka/Redis adapters
+   stamping the broker's own arrival time when a producer omits it, purely
+   event-fed series ordering by arrival and flagging regressions, and
+   `entity.corrected` advancing its contract's watermark) lives in
+   current-implementation.md.
+29. Multi-domain extensibility and packaging. Remaining work is incremental: key
+    generated schema and evolution-baseline filenames off versioned domain-local
+    refs rather than the global registry id, and the declared generator/pack
+    version is recorded but not yet checked for engine compatibility. The
+    delivered extensibility (entry-point domain-pack plugin discovery merged into
+    the registry, generator/pack version and a builtin-vs-plugin source in the
+    capability metadata) lives in current-implementation.md.
+30. Drone logistics fidelity. Remaining work is incremental, not a blocking
+    gap: the airspace deconfliction holds now re-time dispatch, so what is left
+    is the deeper routing coupling (re-routing flights to avoid conflicts rather
+    than only holding them, and a charging-queue-driven reassignment/drop that
+    consumes the turnaround-readiness signal) plus richer energy modelling
+    (per-charger ratings, partial state-of-charge, opportunity charging, battery
+    swap). The delivered behavior (altitude-corridor + deadline-bounded temporal
+    (4D) deconfliction with vehicle-to-vehicle separation whose holds are applied
+    to dispatch, and per-hub charging-bay queue scheduling with turnaround
+    readiness) lives in current-implementation.md.
 
-
-
-## 9. Event visibility completeness
-
-Effect catalog:
-[reference/model-world-divergence.md](reference/model-world-divergence.md).
-
-Delivered behavior lives in current-implementation.md: both observation source
-packs (agricultural sensor-readings, roadside inspection-rounds) bind
-`ingestedAt`, and event-derived observations (`observation.recorded`) are now
-stamped with the observation contract's `ingestedAt` source field -- the
-producer payload value, else the event's `ingested_at`, else its observed time
-as the deterministic arrival proxy -- so a series mixing file readings and live
-events orders by ingestion instead of source row order
-(`stream/apply.py:_observation_ingested_extra`). Event watermarks already cover
-`entity.corrected`: absent from the declared event-to-entity map, it resolves
-its target contract by key column and advances that contract's watermark from
-`_upsert_entity`. The residual open work is:
-
-- The event-derived arrival time falls back to the observed time when neither
-  the producer payload nor the event carries an explicit `ingested_at`; a true
-  arrival timestamp (and arrival-regression detection for purely event-fed
-  series) needs producers to stamp it.
-- A new domain pack's observation source must declare the `ingestedAt` binding;
-  the source-row-order fallback remains the defensive net for any source that
-  does not.
-
-## 10. Multi-domain extensibility and packaging
-
-- There is no plugin discovery, versioned generator packaging, or generator
-  capability declaration yet; external packs still need their Python module
-  importable in the running environment.
-- Generated schema filenames and evolution baseline filenames remain keyed by
-  the global registry id, though registry artifacts now expose versioned
-  domain-local refs.
-
-## 11. Drone logistics fidelity
-
-- No 3D airspace deconfliction, altitude corridor planning, or
-  vehicle-to-vehicle separation is modeled.
-- Charging-station scheduling and charging queue capacity are not modeled.
-
-## 12. Feasibility input caching
-
-- File-based feasibility inputs (sources and `schedule.json`) with different
-  JSON byte ordering still miss cached feasibility results because file inputs
-  are hashed by raw bytes; only the inline order payload is now order-insensitive
-  (canonical JSON via the shared `content_hash` primitive). The endpoint also
-  still hashes source bytes before it can return a cached response.
 
 ## 21. Routing topology and geography
 
@@ -275,3 +237,93 @@ is research-grade:
 - Drops that no aggregate dimension explains are attributed to `other`; pinning
   the specific binding constraint (a particular time window or precedence edge)
   for an individual dropped task is not modelled.
+
+## 28. Event visibility completeness
+
+Effect catalog:
+[reference/model-world-divergence.md](reference/model-world-divergence.md).
+
+Delivered behavior lives in current-implementation.md: file and event sources
+emit a true `ingested-at` through one shared delivery-delay model
+(`data/ingestion.py:stamp_ingested`); the in-repo event producers (the rolling
+demo's `events.jsonl` and the drone scenario stream) stamp it on every emitted
+event, and at the ingestion boundary the live broker adapters (Kafka and Redis
+Streams) stamp the broker's own arrival time -- the Kafka record timestamp, the
+Redis entry id's `<millisecondsTime>` -- as `ingested_at` when a producer omits
+it (`stream/source.py:stamp_broker_ingested`). So a purely event-fed or
+broker-fed observation series orders by arrival and flags arrival-order
+regressions instead of looking ordered under the observed-time proxy. A
+producer-supplied `ingested_at` always wins, and the observed-time proxy (then
+source-row order) stays as the defensive net when neither a producer nor a
+broker arrival time is available. The residual open work is:
+
+- Future event-client adapters (NATS, RabbitMQ, a cloud pub/sub) must carry the
+  same broker-arrival stamping; the shared `stamp_broker_ingested` primitive is
+  ready, but each adapter has to extract its transport's arrival timestamp. A
+  producer publishing over a transport with no broker-arrival metadata still has
+  to stamp `ingested_at` itself, else the consumer falls back to the proxy.
+- A new domain pack's observation source must declare the `ingestedAt` binding;
+  the source-row-order fallback remains the defensive net for any source that
+  does not.
+
+## 29. Multi-domain extensibility and packaging
+
+Delivered behavior lives in current-implementation.md: external domain packs
+self-register through the `fl_op.domain_packs` entry-point group
+(`contracts/plugins.py`), discovered and merged into the registry index at load
+so a plugin domain is first-class across lookups, capabilities, and
+`generate-data` without any in-repo registry.yaml edit; the in-repo registry
+wins key conflicts, discovery is defensive and opt-out (`FL_OP_DISABLE_PLUGINS`),
+and plugin entries never enter the persisted registry.yaml. Generator capability
+metadata now declares a domain/generator `version` and a builtin-vs-plugin
+`source` (with the plugin's entry point and distribution). The residual open
+work is:
+
+- Generated schema filenames and evolution-baseline filenames remain keyed by
+  the global registry id, though registry artifacts already expose versioned
+  domain-local refs; rekeying the committed evolution baselines (and the
+  canonical `canonical-*` ones) off the domain-local ref is a separate,
+  larger change to committed CI artifacts.
+- A pack's declared `version` is recorded but not yet checked for engine
+  compatibility, and a discovered contribution is shape-coerced rather than
+  semantically validated at discovery time (the normal contract-validation path
+  still applies once its contracts are loaded).
+
+## 30. Drone logistics fidelity
+
+Delivered behavior lives in current-implementation.md: two post-solve fidelity
+passes embedded in `score.drone_logistics_kpis`. 4D airspace deconfliction
+(`planning/airspace.py`) reconstructs each aerial flight's lateral path and its
+travel-inclusive airborne window from canonical geometry, builds a
+lateral-proximity + time conflict graph, greedily colours conflicting flights
+into vertically separated altitude corridors (altitude-corridor planning +
+vehicle-to-vehicle separation), then resolves the remaining same-corridor
+conflicts with a deadline-bounded temporal-separation pass (holding the later
+flight until the corridor clears, capped at deadline slack). The resulting holds
+are applied to the published dispatch (`apply_airspace_holds` re-times the held
+flights' assignment start/finish in both adapters, leaving frozen/pinned work
+untouched) and flow into the charging pass's arrival times, so the deconflicted
+schedule is dispatched rather than only annotated. Charging-station scheduling
+(`planning/charging.py`) replenishes each used asset's spent energy at its home
+hub, scheduling sessions into the hub's parallel charging bays (`chargingSlots`,
+a generic canonical Location capacity field) sharing its aggregate
+`chargingPowerKw`, so sessions queue when every bay is busy and the pass reports
+per-hub utilization, queue waits, and each asset's recharge turnaround/readiness
+with an at-risk count. The residual open work is:
+
+- The airspace pass resolves conflicts only by altitude corridor and a temporal
+  hold; it does not yet re-route a flight (different waypoints/corridor geometry)
+  to avoid a conflict, and the temporal-separation list schedule is greedy and
+  earlier-flight-first, not a jointly optimal corridor-and-time assignment. The
+  charging-turnaround readiness signal is still advisory: a hub whose queue
+  cannot keep its fleet charged does not yet drive reassignment to a freer hub or
+  defer/drop dispatch (the queue-aware re-solve coupling remains open).
+- The airborne window spans inbound transit plus service over the straight
+  hub->pickup->drop polyline; exact per-leg airborne intervals
+  (climb/cruise/descent profiles, pickup dwell) and flown corridor geometry are
+  not modelled.
+- Charging energy is a post-solve estimate (consumption rate x on-plan busy
+  hours, capped at battery capacity). Per-bay power is the hub aggregate split
+  evenly across bays (not per-charger ratings), and partial state-of-charge,
+  opportunity charging between deliveries, and battery-swap modelling are not
+  represented.

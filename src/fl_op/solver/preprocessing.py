@@ -648,9 +648,9 @@ def _normalise_for_hash(value: Any) -> Any:
 
 def _array_digest(array: np.ndarray) -> dict[str, Any]:
     # Raw numpy bytes have no canonical-JSON form, so this leaf digest stays on a
-    # bare sha256 (the same choice as `_file_digest`). The returned mapping is
-    # folded into the namespaced `content_hash("candidate-filter", ...)` payload,
-    # which is where provenance framing and version invalidation are applied.
+    # bare sha256. The returned mapping is folded into the namespaced
+    # `content_hash("candidate-filter", ...)` payload, which is where provenance
+    # framing and version invalidation are applied.
     contiguous = np.ascontiguousarray(array)
     return {
         "shape": list(contiguous.shape),

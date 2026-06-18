@@ -2,6 +2,7 @@
 
 import json
 import sys
+from datetime import datetime, timezone
 
 import pytest
 
@@ -10,12 +11,17 @@ from fl_op.stream.broker import (
     EVENT_SOURCE_JSONL,
     EVENT_SOURCE_KAFKA,
     BrokerEventSource,
+    _message_epoch_ms,
     open_dedup_store,
     open_event_source,
     register_event_source,
     registered_event_sources,
 )
-from fl_op.stream.source import ExecutionEvent, JsonlEventSource
+from fl_op.stream.source import ExecutionEvent, JsonlEventSource, stamp_broker_ingested
+
+# A Kafka record's create-time timestamp type (confluent_kafka.TIMESTAMP_CREATE_TIME).
+_TS_CREATE_TIME = 1
+_TS_NOT_AVAILABLE = 0
 
 
 class FakeMessage:
@@ -28,6 +34,22 @@ class FakeMessage:
 
     def error(self) -> str | None:
         return self._error
+
+
+class FakeTimestampedMessage(FakeMessage):
+    """A message that also exposes a Kafka-style (type, ms) record timestamp."""
+
+    def __init__(
+        self,
+        value: str | None = None,
+        error: str | None = None,
+        timestamp: tuple[int, int] | None = None,
+    ) -> None:
+        super().__init__(value=value, error=error)
+        self._timestamp = timestamp
+
+    def timestamp(self) -> tuple[int, int] | None:
+        return self._timestamp
 
 
 class FakeConsumer:
@@ -194,3 +216,80 @@ def test_open_event_source_rejects_unknown_kind(monkeypatch) -> None:
     monkeypatch.setattr(constants, "EVENT_SOURCE_KIND", "unsupported-source")
     with pytest.raises(ValueError, match="EVENT_SOURCE_KIND"):
         open_event_source(None)
+
+
+def _drain(consumer: FakeConsumer) -> list[ExecutionEvent]:
+    source = BrokerEventSource(
+        poll_timeout_s=0.0, max_empty_polls=1, consumer_factory=lambda: consumer
+    )
+    return list(source)
+
+
+def test_broker_stamps_record_timestamp_when_producer_omits_ingested_at() -> None:
+    ms = 1_700_000_000_000
+    consumer = FakeConsumer(
+        [FakeTimestampedMessage(value=_event_json("e-1"), timestamp=(_TS_CREATE_TIME, ms))]
+    )
+    [event] = _drain(consumer)
+    # The record's broker arrival time becomes a true ingested_at.
+    assert event.ingested_at == datetime.fromtimestamp(
+        ms / 1000.0, tz=timezone.utc
+    ).isoformat()
+
+
+def test_broker_keeps_producer_ingested_at_over_record_timestamp() -> None:
+    body = json.dumps(
+        {
+            "event_id": "e-1",
+            "event_type": "observation.recorded",
+            "observed_at": "2026-06-11T08:00:00Z",
+            "entity_ref": "sensor-1",
+            "payload_json": "{}",
+            "ingested_at": "2026-06-11T08:00:30+00:00",
+        }
+    )
+    consumer = FakeConsumer(
+        [FakeTimestampedMessage(value=body, timestamp=(_TS_CREATE_TIME, 1_700_000_000_000))]
+    )
+    [event] = _drain(consumer)
+    assert event.ingested_at == "2026-06-11T08:00:30+00:00"
+
+
+def test_broker_unavailable_timestamp_leaves_ingested_at_to_proxy() -> None:
+    consumer = FakeConsumer(
+        [FakeTimestampedMessage(value=_event_json("e-1"), timestamp=(_TS_NOT_AVAILABLE, -1))]
+    )
+    [event] = _drain(consumer)
+    assert event.ingested_at == ""
+
+
+def test_broker_timestampless_message_leaves_ingested_at_to_proxy() -> None:
+    # The plain FakeMessage has no timestamp(): the proxy applies downstream.
+    [event] = _drain(FakeConsumer([FakeMessage(value=_event_json("e-1"))]))
+    assert event.ingested_at == ""
+
+
+def test_message_epoch_ms_reads_available_timestamps_only() -> None:
+    assert _message_epoch_ms(FakeTimestampedMessage(timestamp=(_TS_CREATE_TIME, 1234))) == 1234.0
+    assert _message_epoch_ms(FakeTimestampedMessage(timestamp=(_TS_NOT_AVAILABLE, -1))) is None
+    assert _message_epoch_ms(FakeMessage()) is None  # no timestamp() at all
+
+
+def test_stamp_broker_ingested_fills_blank_only() -> None:
+    base = ExecutionEvent(
+        event_id="e", event_type="task.started",
+        observed_at="2026-06-11T08:00:00Z", entity_ref="t", payload={},
+    )
+    ms = 1_700_000_000_000
+    expected = datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc).isoformat()
+    assert stamp_broker_ingested(base, ms).ingested_at == expected
+    # A missing or non-positive broker arrival is a no-op (proxy still applies).
+    assert stamp_broker_ingested(base, None).ingested_at == ""
+    assert stamp_broker_ingested(base, 0).ingested_at == ""
+    # A producer-supplied arrival always wins.
+    producer = ExecutionEvent(
+        event_id="e", event_type="task.started",
+        observed_at="2026-06-11T08:00:00Z", entity_ref="t", payload={},
+        ingested_at="2026-06-11T08:00:30+00:00",
+    )
+    assert stamp_broker_ingested(producer, ms).ingested_at == "2026-06-11T08:00:30+00:00"

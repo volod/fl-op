@@ -26,7 +26,7 @@ from typing import Any, Callable, Iterable, Iterator, Optional
 
 from fl_op.core import constants
 from fl_op.stream.broker import register_event_source
-from fl_op.stream.source import ExecutionEvent, parse_event
+from fl_op.stream.source import ExecutionEvent, parse_event, stamp_broker_ingested
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,15 @@ EVENT_SOURCE_REDIS = "redis"
 # consumer's already-delivered-but-unacked backlog.
 _NEW_MESSAGES = ">"
 _PENDING_START = "0"
+
+
+def _entry_id_epoch_ms(entry_id: str) -> Optional[float]:
+    """The broker-assigned ingest time (milliseconds) encoded in a Redis stream
+    entry id ``<millisecondsTime>-<sequenceNumber>``; None if unparseable."""
+    try:
+        return float(str(entry_id).split("-", 1)[0])
+    except (TypeError, ValueError):
+        return None
 
 
 class RedisStreamEventSource:
@@ -152,16 +161,19 @@ class RedisStreamEventSource:
         for _stream_name, entries in response or []:
             for entry_id, fields in entries:
                 self._ids.append(entry_id)
-                results.append((entry_id, self._parse(fields)))
+                results.append((entry_id, self._parse(entry_id, fields)))
         return results
 
-    def _parse(self, fields: dict) -> Optional[ExecutionEvent]:
+    def _parse(self, entry_id: str, fields: dict) -> Optional[ExecutionEvent]:
         body = fields.get(self.body_field)
         try:
-            return parse_event(json.loads(body))
+            event = parse_event(json.loads(body))
         except (TypeError, json.JSONDecodeError, ValueError) as exc:
             logger.warning("Skipping malformed Redis event: %s", exc)
             return None
+        # The entry id carries Redis' own ingest time; stamp it as the arrival
+        # time when the producer left ingested_at blank.
+        return stamp_broker_ingested(event, _entry_id_epoch_ms(entry_id))
 
     def commit(self) -> None:
         """Acknowledge the read entries; call after revisions are published."""

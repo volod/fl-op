@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import ast
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from fl_op.canonical.enums import ReasonCode
+from fl_op.planning.airspace import AIRSPACE_PLAN_KEY, build_airspace_plan
+from fl_op.planning.charging import CHARGING_SCHEDULE_KEY, build_charging_schedule
 from fl_op.solver.restrictions import parse_polygon, point_in_polygon, polygons_intersect
 
 if TYPE_CHECKING:
@@ -26,11 +28,14 @@ def build_drone_logistics_kpis(
     unassigned: list["UnassignedTask"],
     score: dict[str, Any],
     profile: Any = None,
+    airspace: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Build domain KPIs for mixed UGV/UAV logistics plans.
 
     The helper returns an empty dict for non-drone snapshots, so callers can
-    safely invoke it from shared adapters.
+    safely invoke it from shared adapters. ``airspace`` lets the adapter pass the
+    deconfliction report it already computed (to re-time dispatch) so it is not
+    recomputed here; when omitted the pass runs over ``assignments`` directly.
     """
     task_by_id = snapshot.task_index()
     if not _looks_like_drone_snapshot(snapshot):
@@ -86,8 +91,11 @@ def build_drone_logistics_kpis(
         snapshot, profile
     )
     no_fly_excluded = _no_fly_excluded_uav_tasks(snapshot)
+    if airspace is None:
+        airspace = build_airspace_plan(snapshot, assignments)
+    charging = build_charging_schedule(snapshot, assignments)
 
-    return {
+    kpis = {
         "total_deliveries": n_total,
         "assigned_deliveries": n_assigned,
         "unassigned_deliveries": n_unassigned,
@@ -127,6 +135,11 @@ def build_drone_logistics_kpis(
         "weather_infeasible_uav_tasks": len(weather_infeasible),
         "no_fly_exclusion_count": len(no_fly_excluded),
     }
+    if airspace:
+        kpis[AIRSPACE_PLAN_KEY] = airspace
+    if charging:
+        kpis[CHARGING_SCHEDULE_KEY] = charging
+    return kpis
 
 
 def _looks_like_drone_snapshot(snapshot: "PlanningSnapshot") -> bool:
