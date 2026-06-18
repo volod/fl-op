@@ -12,9 +12,6 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-12. Feasibility input caching. Hash file-based feasibility inputs (sources and
-    `schedule.json`) by canonical content rather than raw bytes so
-    byte-order-different inputs reuse cached results.
 21. Routing topology and geography. Remaining work is research-grade and not a
    blocking engine gap: coupled-insertion search support for fully-optional
    reloads, routing the path around restricted sub-polygons, and a dedicated
@@ -86,14 +83,6 @@ Recommended order, optimized for dependency reuse and low rework:
     to dispatch, and per-hub charging-bay queue scheduling with turnaround
     readiness) lives in current-implementation.md.
 
-
-## 12. Feasibility input caching
-
-- File-based feasibility inputs (sources and `schedule.json`) with different
-  JSON byte ordering still miss cached feasibility results because file inputs
-  are hashed by raw bytes; only the inline order payload is now order-insensitive
-  (canonical JSON via the shared `content_hash` primitive). The endpoint also
-  still hashes source bytes before it can return a cached response.
 
 ## 21. Routing topology and geography
 

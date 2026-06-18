@@ -322,3 +322,136 @@ def test_feasibility_request_cache_reuses_response(
     monkeypatch.setattr(query_pipeline, "cached_compat_matrix", fail_rebuild)
     second = query_pipeline.evaluate_query(str(dataset_dir), str(schedule_dir), order)
     assert second == first
+
+
+def test_request_key_frames_digests_and_order() -> None:
+    """The request key is order-insensitive over the order payload and moves on
+    any source/schedule/order change."""
+    from fl_op.solver.query_pipeline import feasibility_request_cache_key
+
+    digests = {"vehicles": "dv", "implements": "di", "fields": "df"}
+    order = {"order_id": "o", "payload": {"a": 1, "b": 2}}
+    base = feasibility_request_cache_key(digests, "ds", order)
+    # Source-dict and order-key reordering do not change the key.
+    same = feasibility_request_cache_key(
+        {"fields": "df", "vehicles": "dv", "implements": "di"},
+        "ds",
+        {"payload": {"b": 2, "a": 1}, "order_id": "o"},
+    )
+    assert base == same
+    changed_source = feasibility_request_cache_key({**digests, "vehicles": "dv2"}, "ds", order)
+    changed_schedule = feasibility_request_cache_key(digests, "ds2", order)
+    changed_order = feasibility_request_cache_key(digests, "ds", {"order_id": "o2"})
+    assert len({base, changed_source, changed_schedule, changed_order}) == 4
+
+
+def test_schedule_digest_is_content_addressed(tmp_path) -> None:
+    """Two byte-different but logically equal JSON files digest identically."""
+    from fl_op.solver import query_pipeline
+
+    query_pipeline._DIGEST_MEMO.clear()
+    a = tmp_path / "a.json"
+    b = tmp_path / "b.json"
+    a.write_text(json.dumps({"schedule": [], "meta": {"x": 1, "y": 2}}))
+    b.write_text(json.dumps({"meta": {"y": 2, "x": 1}, "schedule": []}, indent=2))
+    da, _ = query_pipeline._stat_memoized_digest(
+        a, "feasibility-schedule", query_pipeline._parse_schedule
+    )
+    db, _ = query_pipeline._stat_memoized_digest(
+        b, "feasibility-schedule", query_pipeline._parse_schedule
+    )
+    assert da == db
+
+
+def test_stat_memo_skips_reparse_until_file_changes(tmp_path) -> None:
+    """The stat-memo serves an unchanged file's digest without re-parsing."""
+    from fl_op.solver import query_pipeline
+
+    query_pipeline._DIGEST_MEMO.clear()
+    path = tmp_path / "src.json"
+    path.write_text(json.dumps({"a": 1, "b": 2}))
+    calls = {"n": 0}
+
+    def parse(p):
+        calls["n"] += 1
+        return json.loads(p.read_text())
+
+    first_digest, parsed = query_pipeline._stat_memoized_digest(path, "test", parse)
+    assert parsed is not None and calls["n"] == 1
+    # Unchanged file: digest from memo, no re-parse, no parsed payload.
+    again_digest, parsed_again = query_pipeline._stat_memoized_digest(path, "test", parse)
+    assert again_digest == first_digest and parsed_again is None and calls["n"] == 1
+    # Changed content (and size): re-parsed, new digest.
+    path.write_text(json.dumps({"a": 1, "b": 2, "c": 3}))
+    changed_digest, parsed_changed = query_pipeline._stat_memoized_digest(path, "test", parse)
+    assert parsed_changed is not None and calls["n"] == 2 and changed_digest != first_digest
+    # Absent file digests to the missing sentinel without parsing.
+    missing_digest, missing_parsed = query_pipeline._stat_memoized_digest(
+        tmp_path / "nope.json", "test", parse
+    )
+    assert missing_digest == query_pipeline._MISSING_DIGEST and missing_parsed is None
+    assert calls["n"] == 2
+
+
+def test_feasibility_cache_hit_skips_source_reparse(
+    dataset_dir, small_entities, tmp_path, monkeypatch
+) -> None:
+    """A repeated (cache-hit) request over an unchanged dataset re-reads nothing."""
+    from fl_op.solver import query_pipeline
+
+    query_pipeline._DIGEST_MEMO.clear()
+    schedule_dir = tmp_path / "solve"
+    schedule_dir.mkdir()
+    (schedule_dir / "schedule.json").write_text(json.dumps({"schedule": []}))
+    monkeypatch.setattr(query_pipeline, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(query_pipeline.constants, "FEASIBILITY_CACHE_ENABLED", True)
+
+    order = dict(small_entities["orders"][0])
+    query_pipeline.evaluate_query(str(dataset_dir), str(schedule_dir), order)
+
+    # Warm memo: a second identical request hits the response cache and must not
+    # re-parse any source (codec.read is never called again).
+    def fail_read(*_args, **_kwargs):
+        raise AssertionError("source re-parsed despite warm digest memo + cache hit")
+
+    monkeypatch.setattr(query_pipeline, "_parse_schedule", fail_read)
+    real_get_codec = query_pipeline.get_codec
+
+    def codec_no_read(fmt):
+        codec = real_get_codec(fmt)
+        monkeypatch.setattr(codec, "read", fail_read, raising=False)
+        return codec
+
+    monkeypatch.setattr(query_pipeline, "get_codec", codec_no_read)
+    second = query_pipeline.evaluate_query(str(dataset_dir), str(schedule_dir), order)
+    assert second["task_id"]
+
+
+def test_feasibility_cache_hits_on_reordered_schedule(
+    dataset_dir, small_entities, tmp_path, monkeypatch
+) -> None:
+    """A schedule.json rewritten with reordered keys/whitespace still hits cache."""
+    from fl_op.solver import query_pipeline
+
+    schedule_dir = tmp_path / "solve"
+    schedule_dir.mkdir()
+    (schedule_dir / "schedule.json").write_text(
+        json.dumps({"schedule": [], "generated_at": "t0"})
+    )
+    monkeypatch.setattr(query_pipeline, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(query_pipeline.constants, "FEASIBILITY_CACHE_ENABLED", True)
+
+    order = dict(small_entities["orders"][0])
+    first = query_pipeline.evaluate_query(str(dataset_dir), str(schedule_dir), order)
+
+    # Same logical content, different byte ordering + indentation.
+    (schedule_dir / "schedule.json").write_text(
+        json.dumps({"generated_at": "t0", "schedule": []}, indent=4, sort_keys=False)
+    )
+
+    def fail_rebuild(*_args, **_kwargs):
+        raise AssertionError("query rebuilt despite content-equal inputs")
+
+    monkeypatch.setattr(query_pipeline, "cached_compat_matrix", fail_rebuild)
+    second = query_pipeline.evaluate_query(str(dataset_dir), str(schedule_dir), order)
+    assert second == first

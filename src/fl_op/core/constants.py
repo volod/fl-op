@@ -170,14 +170,24 @@ PREPROCESSING_CACHE_MAX_ENTRIES: int = int(
 )
 
 # Serving feasibility cache: exact /feasibility requests are cached by the
-# dataset/schedule/order content hash. The endpoint still sees file changes
-# because the key includes source bytes, not just paths.
+# dataset/schedule/order canonical-content hash, so byte-order-different inputs
+# reuse a cached response. The endpoint still sees file changes because each
+# file input's content digest is keyed by its (mtime, size) stat signature.
 FEASIBILITY_CACHE_ENABLED: bool = bool(
     int(os.environ.get("FEASIBILITY_CACHE_ENABLED", "1"))
 )
 FEASIBILITY_CACHE_DIRNAME: str = "cache/feasibility"
 FEASIBILITY_CACHE_MAX_ENTRIES: int = int(
     os.environ.get("FEASIBILITY_CACHE_MAX_ENTRIES", "128")
+)
+
+# In-process memo of per-file content digests for the feasibility cache key,
+# keyed by path and invalidated by the file's (mtime, size) stat signature. It
+# lets a repeated request over an unchanged dataset skip re-parsing every source
+# before the cache lookup; correctness rests on inputs being immutable run
+# artifacts (not rewritten in place within the filesystem's mtime resolution).
+FEASIBILITY_DIGEST_MEMO_MAX_ENTRIES: int = int(
+    os.environ.get("FEASIBILITY_DIGEST_MEMO_MAX_ENTRIES", "256")
 )
 
 # Maximum V-I candidate pairs per order before routing model construction.

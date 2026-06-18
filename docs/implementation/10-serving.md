@@ -12,9 +12,13 @@
   reads artifacts through `serving/artifacts.py`: by default this is
   `$DATA_DIR`, or `SERVE_ARTIFACT_ROOT` for a shared mounted artifact tree, or
   an object store (below). It never mutates datasets or plans. Exact feasibility
-  responses are cached under `$DATA_DIR/cache/feasibility`, keyed by the source
-  bytes the query reads, schedule.json, and the order payload; uncached requests
-  also reuse the compat and candidate-filter caches.
+  responses are cached under `$DATA_DIR/cache/feasibility`, keyed by the
+  *canonical content* of the source rows the query reads, the parsed
+  `schedule.json`, and the order payload -- so inputs that differ only in JSON
+  key/byte ordering, CSV column order, or format reuse a cached response. Per-file
+  content digests are memoized by `(mtime, size)`, so a repeated request over an
+  unchanged dataset skips re-parsing the sources before the lookup; uncached
+  requests also reuse the compat and candidate-filter caches.
 - Serving security (`serving/security/`) hardens the previous single-token
   check into a composable gateway run on every protected route as
   authenticate -> authorize -> rate-limit -> audit, with each refusal audited
