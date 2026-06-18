@@ -72,6 +72,12 @@ def build_location(
         polygon=parse_polygon(acc.get("polygon")),
         restricted_operations=[str(op) for op in acc.get("restrictedOperations") or []],
         restriction_windows=parse_time_intervals(acc.get("restrictionWindows")),
+        charging_power_kw=(
+            float(acc["chargingPowerKw"]) if "chargingPowerKw" in acc else None
+        ),
+        charging_slots=(
+            int(float(acc["chargingSlots"])) if "chargingSlots" in acc else None
+        ),
         source_ref=f"{table.contract_id}:{location_id}",
     )
 

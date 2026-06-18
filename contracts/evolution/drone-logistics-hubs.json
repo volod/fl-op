@@ -11,6 +11,11 @@
       "physicalType": "double",
       "required": false
     },
+    "charging_slots": {
+      "logicalType": "integer",
+      "physicalType": "integer",
+      "required": false
+    },
     "energy_units": {
       "logicalType": "number",
       "physicalType": "double",
@@ -38,7 +43,7 @@
     }
   },
   "fingerprints": {
-    "optimizationMetadataHash": "40a129bbbf321594d4e6f8b22fb0dc4c609d7bcffc0fae3e590e324eb4fb9295"
+    "optimizationMetadataHash": "d90e28417097cff5b9dd9905421fe89579068e2f052875287c70ca72700428ea"
   },
   "history": [
     {
@@ -242,16 +247,160 @@
         "mappingVersion": "1.0.0"
       },
       "version": "1.1.0"
+    },
+    {
+      "contractId": "drone-logistics-hubs",
+      "fields": {
+        "battery_available_kwh": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "charging_power_kw": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "charging_slots": {
+          "logicalType": "integer",
+          "physicalType": "integer",
+          "required": false
+        },
+        "energy_units": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "hub_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "lat": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "lon": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        },
+        "name": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "d90e28417097cff5b9dd9905421fe89579068e2f052875287c70ca72700428ea"
+      },
+      "odcsId": "logistics-hubs",
+      "registryArtifact": {
+        "artifactId": "drone_logistics/logistics-hubs",
+        "artifactRef": "drone_logistics/logistics-hubs@odcs:1.2.0+mapping:1.1.0",
+        "contractVersion": "1.2.0",
+        "domain": "drone_logistics",
+        "localId": "logistics-hubs",
+        "mappingVersion": "1.1.0",
+        "odcsId": "logistics-hubs",
+        "qualifiedId": "drone_logistics/logistics-hubs",
+        "registryId": "drone-logistics-hubs"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "assetRole": "depot",
+            "canonicalEntity": "location",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "depotMaster",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "logistics-hubs"
+          },
+          "field:battery_available_kwh": {
+            "binding": "location.inventory.energy",
+            "canonicalUnit": "kWh",
+            "planningUse": [
+              "capacity"
+            ],
+            "quantityKind": "energy",
+            "semanticTerm": "urn:xopt:inventory:energy"
+          },
+          "field:charging_power_kw": {
+            "binding": "location.chargingPowerKw",
+            "canonicalUnit": "kW",
+            "planningUse": [
+              "capacity"
+            ],
+            "quantityKind": "power",
+            "semanticTerm": "urn:xopt:capacity:charging-power"
+          },
+          "field:charging_slots": {
+            "binding": "location.chargingSlots",
+            "planningUse": [
+              "capacity"
+            ],
+            "quantityKind": "count",
+            "semanticTerm": "urn:xopt:capacity:charging-slots"
+          },
+          "field:energy_units": {
+            "binding": "location.inventory.fuel",
+            "canonicalUnit": "L",
+            "planningUse": [
+              "capacity"
+            ],
+            "quantityKind": "volume",
+            "semanticTerm": "urn:xopt:inventory:fuel"
+          },
+          "field:hub_id": {
+            "binding": "location.locationId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:location-id"
+          },
+          "field:lat": {
+            "binding": "location.lat",
+            "canonicalUnit": "deg",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:latitude"
+          },
+          "field:lon": {
+            "binding": "location.lon",
+            "canonicalUnit": "deg",
+            "planningUse": [
+              "geospatial"
+            ],
+            "quantityKind": "angle",
+            "semanticTerm": "urn:xopt:attribute:longitude"
+          },
+          "field:name": {
+            "binding": "location.name",
+            "planningUse": [
+              "classification"
+            ],
+            "semanticTerm": "urn:xopt:attribute:display-name"
+          }
+        },
+        "mappingVersion": "1.1.0"
+      },
+      "version": "1.2.0"
     }
   ],
   "odcsId": "logistics-hubs",
   "registryArtifact": {
     "artifactId": "drone_logistics/logistics-hubs",
-    "artifactRef": "drone_logistics/logistics-hubs@odcs:1.1.0+mapping:1.0.0",
-    "contractVersion": "1.1.0",
+    "artifactRef": "drone_logistics/logistics-hubs@odcs:1.2.0+mapping:1.1.0",
+    "contractVersion": "1.2.0",
     "domain": "drone_logistics",
     "localId": "logistics-hubs",
-    "mappingVersion": "1.0.0",
+    "mappingVersion": "1.1.0",
     "odcsId": "logistics-hubs",
     "qualifiedId": "drone_logistics/logistics-hubs",
     "registryId": "drone-logistics-hubs"
@@ -277,6 +426,23 @@
         ],
         "quantityKind": "energy",
         "semanticTerm": "urn:xopt:inventory:energy"
+      },
+      "field:charging_power_kw": {
+        "binding": "location.chargingPowerKw",
+        "canonicalUnit": "kW",
+        "planningUse": [
+          "capacity"
+        ],
+        "quantityKind": "power",
+        "semanticTerm": "urn:xopt:capacity:charging-power"
+      },
+      "field:charging_slots": {
+        "binding": "location.chargingSlots",
+        "planningUse": [
+          "capacity"
+        ],
+        "quantityKind": "count",
+        "semanticTerm": "urn:xopt:capacity:charging-slots"
       },
       "field:energy_units": {
         "binding": "location.inventory.fuel",
@@ -320,7 +486,7 @@
         "semanticTerm": "urn:xopt:attribute:display-name"
       }
     },
-    "mappingVersion": "1.0.0"
+    "mappingVersion": "1.1.0"
   },
-  "version": "1.1.0"
+  "version": "1.2.0"
 }

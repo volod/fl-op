@@ -183,6 +183,54 @@ def _log_drone_kpis(kpis: dict[str, Any]) -> None:
         kpis.get("weather_blocked_uav_tasks", 0),
         kpis.get("no_fly_exclusion_count", 0),
     )
+    _log_airspace(kpis.get("airspace_deconfliction") or {})
+    _log_charging(kpis.get("charging_schedule") or {})
+
+
+def _log_airspace(airspace: dict[str, Any]) -> None:
+    if not airspace:
+        return
+    logger.info(
+        "  drone airspace  : %d flights in %d/%d corridors, %d/%d conflict pairs "
+        "deconflicted (%d corridor + %d timed, %d residual), peak %d concurrent",
+        airspace.get("n_aerial_flights", 0),
+        airspace.get("corridors_used", 0),
+        airspace.get("corridors_available", 0),
+        airspace.get("n_deconflicted_pairs", 0),
+        airspace.get("n_conflict_pairs", 0),
+        airspace.get("n_corridor_separated_pairs", 0),
+        airspace.get("n_time_separated_pairs", 0),
+        airspace.get("n_residual_conflict_pairs", 0),
+        airspace.get("max_concurrent_flights", 0),
+    )
+    if airspace.get("n_flights_held", 0):
+        logger.info(
+            "  drone holds     : %d flights held, max hold %.0f s, total %.0f s",
+            airspace.get("n_flights_held", 0),
+            airspace.get("max_deconfliction_delay_s", 0.0),
+            airspace.get("total_deconfliction_delay_s", 0.0),
+        )
+
+
+def _log_charging(charging: dict[str, Any]) -> None:
+    if not charging:
+        return
+    logger.info(
+        "  drone charging  : %d sessions over %d hubs, %.1f kWh, %d queued "
+        "(max wait %.0f s, peak depth %d)",
+        charging.get("n_charging_sessions", 0),
+        charging.get("n_hubs_with_charging", 0),
+        charging.get("total_energy_charged_kwh", 0.0),
+        charging.get("n_queued_sessions", 0),
+        charging.get("max_queue_wait_s", 0.0),
+        charging.get("peak_queue_depth", 0),
+    )
+    logger.info(
+        "  drone turnaround: max %.0f s, mean %.0f s, %d at risk",
+        charging.get("max_turnaround_s", 0.0),
+        charging.get("mean_turnaround_s", 0.0),
+        charging.get("n_turnaround_at_risk", 0),
+    )
 
 
 def _energy_usage_label(energy: dict[str, Any]) -> str:

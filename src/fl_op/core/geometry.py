@@ -127,6 +127,39 @@ def to_linestring(latlon_coords: list[tuple[float, float]]) -> LineString:
     return LineString([(lon, lat) for lat, lon in latlon_coords])
 
 
+def segment_min_distance_m(
+    seg_a: tuple[tuple[float, float], tuple[float, float]],
+    seg_b: tuple[tuple[float, float], tuple[float, float]],
+) -> float:
+    """Minimum distance in meters between two short ``(lat, lon)`` segments.
+
+    Each segment is a pair of ``(lat, lon)`` endpoints. Both are projected into
+    a shared local east-north meter frame (longitude scaled by ``cos(lat0)``)
+    centered on their combined centroid, then shapely measures the segment-to-
+    segment distance. This is the lateral separation used for UAV vehicle-to-
+    vehicle deconfliction; the local planar projection is accurate for the small
+    regions airspace separation operates over. A degenerate (zero-length)
+    segment is treated as a point.
+    """
+    pts = [seg_a[0], seg_a[1], seg_b[0], seg_b[1]]
+    lat0 = sum(lat for lat, _ in pts) / len(pts)
+    lon0 = sum(lon for _, lon in pts) / len(pts)
+    scale = max(1e-6, math.cos(math.radians(lat0)))
+
+    def proj(point: tuple[float, float]) -> tuple[float, float]:
+        lat, lon = point
+        return (
+            (lon - lon0) * METERS_PER_DEGREE_LAT * scale,
+            (lat - lat0) * METERS_PER_DEGREE_LAT,
+        )
+
+    def geom(seg: tuple[tuple[float, float], tuple[float, float]]):
+        p0, p1 = proj(seg[0]), proj(seg[1])
+        return Point(p0) if p0 == p1 else LineString([p0, p1])
+
+    return float(geom(seg_a).distance(geom(seg_b)))
+
+
 def unrestricted_area_fraction(
     site_polygon: list[tuple[float, float]],
     restricted_polygons: list[list[tuple[float, float]]],

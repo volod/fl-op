@@ -1172,3 +1172,68 @@ MONITORING_LEAD_TIME_MIN_SAMPLES: int = int(
 # Overlay and audit-trail filenames under DATA_DIR/quality.
 MONITORING_TUNED_POLICY_FILENAME: str = "monitoring-policy-tuned.json"
 MONITORING_TUNE_AUDIT_FILENAME: str = "monitoring-policy-audit.jsonl"
+
+# ---------------------------------------------------------------------------
+# Drone airspace deconfliction (3D corridor planning)
+# ---------------------------------------------------------------------------
+# A post-solve pass places each aerial (UAV) flight into one of a bounded set of
+# vertically separated altitude corridors so that flights whose lateral paths
+# pass within the horizontal-separation buffer during an overlapping time window
+# are kept apart in 3D. Two flights conflict when both their lateral paths come
+# within AIRSPACE_HORIZONTAL_SEPARATION_M and their airborne windows overlap
+# (with AIRSPACE_TIME_BUFFER_S tolerance); a greedy corridor colouring then
+# separates conflicting flights into different flight levels.
+
+# Number of stacked altitude corridors available for deconfliction.
+AIRSPACE_CORRIDOR_COUNT: int = int(os.environ.get("AIRSPACE_CORRIDOR_COUNT", "4"))
+
+# Lowest corridor centre-line altitude (m AGL) and the vertical gap between
+# adjacent corridors (the minimum vertical separation).
+AIRSPACE_BASE_ALTITUDE_M: float = float(
+    os.environ.get("AIRSPACE_BASE_ALTITUDE_M", "60.0")
+)
+AIRSPACE_VERTICAL_SEPARATION_M: float = float(
+    os.environ.get("AIRSPACE_VERTICAL_SEPARATION_M", "30.0")
+)
+
+# Lateral separation buffer (m): closer than this two flight paths are a
+# potential conflict if their airborne windows also overlap.
+AIRSPACE_HORIZONTAL_SEPARATION_M: float = float(
+    os.environ.get("AIRSPACE_HORIZONTAL_SEPARATION_M", "150.0")
+)
+
+# Temporal tolerance (s) added on each side of a flight's airborne window when
+# testing two flights for overlapping presence.
+AIRSPACE_TIME_BUFFER_S: float = float(
+    os.environ.get("AIRSPACE_TIME_BUFFER_S", "60.0")
+)
+
+# ---------------------------------------------------------------------------
+# Charging-station scheduling (hub charging queue capacity)
+# ---------------------------------------------------------------------------
+# A post-solve pass replenishes the energy each used asset spent and schedules
+# the recharge into its home hub's parallel charging bays. The number of bays
+# (charging_slots) bounds concurrency, so sessions queue when every bay is busy;
+# per-bay power is the hub's aggregate charging power split across its bays.
+
+# Fallback bay count when a hub declares no charging_slots.
+CHARGING_DEFAULT_SLOTS: int = int(os.environ.get("CHARGING_DEFAULT_SLOTS", "2"))
+
+# Fallback aggregate charger power (kW) when a hub declares no charging_power_kw.
+CHARGING_DEFAULT_POWER_KW: float = float(
+    os.environ.get("CHARGING_DEFAULT_POWER_KW", "50.0")
+)
+
+# Recharge sessions below this replenished energy are negligible and skipped.
+CHARGING_MIN_SESSION_KWH: float = float(
+    os.environ.get("CHARGING_MIN_SESSION_KWH", "0.5")
+)
+
+# An asset's turnaround is its total downtime from returning to the hub until it
+# is charged again (queue wait + charge time). A turnaround beyond this many
+# seconds is flagged as at-risk: the asset is out of service long enough that a
+# queue-aware scheduler would want to rebalance it onto a freer hub or defer its
+# next dispatch (the readiness signal coupled reassignment would consume).
+CHARGING_TURNAROUND_RISK_S: float = float(
+    os.environ.get("CHARGING_TURNAROUND_RISK_S", "7200.0")
+)

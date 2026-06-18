@@ -28,5 +28,10 @@ class Location(BaseModel):
     restricted_operations: list[str] = Field(default_factory=list)
     # Intervals during which no execution may start here (time-restricted area).
     restriction_windows: list[TimeInterval] = Field(default_factory=list)
+    # Recharge/refuel station capacity (depots/hubs): aggregate charger power and
+    # the number of parallel charging bays (charging queue capacity). Absent for
+    # non-station locations.
+    charging_power_kw: Optional[float] = None
+    charging_slots: Optional[int] = None
     source_ref: str = ""
     extra: dict[str, Any] = Field(default_factory=dict)

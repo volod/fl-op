@@ -188,6 +188,14 @@ def _build_plan(
     ]
     assignments = link_reservation_refs(assignments, reservations)
 
+    # Airspace deconfliction may re-time held aerial flights; apply the holds so
+    # the published dispatch reflects the deconflicted schedule (and downstream
+    # charging arrivals use the held times). The report is reused for the KPIs.
+    from fl_op.planning.airspace import apply_airspace_holds, deconflict_airspace
+
+    airspace_deconfliction = deconflict_airspace(snapshot, assignments)
+    assignments = apply_airspace_holds(assignments, airspace_deconfliction.holds)
+
     from fl_op.solver.solve_telemetry import summarize_cluster_telemetry
 
     kpis = raw.kpis
@@ -240,7 +248,12 @@ def _build_plan(
     )
 
     drone_kpis = build_drone_logistics_kpis(
-        snapshot, assignments, unassigned, score, profile
+        snapshot,
+        assignments,
+        unassigned,
+        score,
+        profile,
+        airspace=airspace_deconfliction.report or None,
     )
     if drone_kpis:
         score[DRONE_KPI_SCORE_KEY] = drone_kpis

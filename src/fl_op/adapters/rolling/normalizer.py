@@ -46,13 +46,24 @@ def normalize_rolling_result(
         *new_assignments,
     ]
     score = _build_score(raw_result, new_assignments, unassigned, kpis)
+    from fl_op.planning.airspace import apply_airspace_holds, deconflict_airspace
     from fl_op.planning.drone_kpis import (
         DRONE_KPI_SCORE_KEY,
         build_drone_logistics_kpis,
     )
 
+    # Re-time held aerial flights into deconflicted dispatch. Frozen/carried work
+    # carries zero slack, so only the freshly planned flights can be held.
+    airspace_deconfliction = deconflict_airspace(snapshot, assignments)
+    assignments = apply_airspace_holds(assignments, airspace_deconfliction.holds)
+
     drone_kpis = build_drone_logistics_kpis(
-        snapshot, assignments, unassigned, score, profile
+        snapshot,
+        assignments,
+        unassigned,
+        score,
+        profile,
+        airspace=airspace_deconfliction.report or None,
     )
     if drone_kpis:
         score[DRONE_KPI_SCORE_KEY] = drone_kpis

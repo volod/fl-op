@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: canonical-location
-version: 0.2.0
+version: 0.3.0
 status: active
 name: Canonical Location
 domain: canonical
@@ -104,3 +104,21 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: location.inventory.energy, semanticTerm: urn:xopt:inventory:energy, canonicalUnit: kWh, quantityKind: energy, planningUse: [capacity]}
+      - name: chargingPowerKw
+        logicalType: number
+        required: false
+        description: >-
+          Aggregate charger/refuel power available at this location, shared
+          across its parallel bays (recharge-station scheduling).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.chargingPowerKw, semanticTerm: urn:xopt:capacity:charging-power, canonicalUnit: kW, quantityKind: power, planningUse: [capacity]}
+      - name: chargingSlots
+        logicalType: integer
+        required: false
+        description: >-
+          Number of parallel charging/refuelling bays at this location; bounds
+          how many assets recharge at once (charging queue capacity).
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.chargingSlots, semanticTerm: urn:xopt:capacity:charging-slots, quantityKind: count, planningUse: [capacity]}

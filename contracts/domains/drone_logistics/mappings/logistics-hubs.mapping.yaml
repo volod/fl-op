@@ -6,7 +6,7 @@ metadata:
   canonicalEntity: location
   assetRole: depot
   canonicalModelRef: urn:xopt:model:canonical:0.1.0
-  mappingVersion: 1.0.0
+  mappingVersion: 1.1.0
   dataProductRole: depotMaster
   permittedPlanningUses: [periodic-planning, rolling-dispatch]
 fieldMappings:
@@ -16,3 +16,5 @@ fieldMappings:
   - {sourceField: lon, binding: location.lon, semanticTerm: urn:xopt:attribute:longitude, canonicalUnit: deg, quantityKind: angle, planningUse: [geospatial]}
   - {sourceField: energy_units, binding: location.inventory.fuel, semanticTerm: urn:xopt:inventory:fuel, canonicalUnit: L, quantityKind: volume, planningUse: [capacity]}
   - {sourceField: battery_available_kwh, binding: location.inventory.energy, semanticTerm: urn:xopt:inventory:energy, canonicalUnit: kWh, quantityKind: energy, planningUse: [capacity]}
+  - {sourceField: charging_power_kw, binding: location.chargingPowerKw, semanticTerm: urn:xopt:capacity:charging-power, canonicalUnit: kW, quantityKind: power, planningUse: [capacity]}
+  - {sourceField: charging_slots, binding: location.chargingSlots, semanticTerm: urn:xopt:capacity:charging-slots, quantityKind: count, planningUse: [capacity]}

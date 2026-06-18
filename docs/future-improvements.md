@@ -12,16 +12,6 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-10. Multi-domain extensibility and packaging. Remaining work is incremental: key
-    generated schema and evolution-baseline filenames off versioned domain-local
-    refs rather than the global registry id, and the declared generator/pack
-    version is recorded but not yet checked for engine compatibility. The
-    delivered extensibility (entry-point domain-pack plugin discovery merged into
-    the registry, generator/pack version and a builtin-vs-plugin source in the
-    capability metadata) lives in current-implementation.md.
-11. Drone logistics fidelity. Model 3D airspace deconfliction, altitude
-    corridor planning, and vehicle-to-vehicle separation, plus charging-station
-    scheduling and charging queue capacity.
 12. Feasibility input caching. Hash file-based feasibility inputs (sources and
     `schedule.json`) by canonical content rather than raw bytes so
     byte-order-different inputs reuse cached results.
@@ -78,38 +68,24 @@ Recommended order, optimized for dependency reuse and low rework:
    event-fed series ordering by arrival and flagging regressions, and
    `entity.corrected` advancing its contract's watermark) lives in
    current-implementation.md.
+29. Multi-domain extensibility and packaging. Remaining work is incremental: key
+    generated schema and evolution-baseline filenames off versioned domain-local
+    refs rather than the global registry id, and the declared generator/pack
+    version is recorded but not yet checked for engine compatibility. The
+    delivered extensibility (entry-point domain-pack plugin discovery merged into
+    the registry, generator/pack version and a builtin-vs-plugin source in the
+    capability metadata) lives in current-implementation.md.
+30. Drone logistics fidelity. Remaining work is incremental, not a blocking
+    gap: the airspace deconfliction holds now re-time dispatch, so what is left
+    is the deeper routing coupling (re-routing flights to avoid conflicts rather
+    than only holding them, and a charging-queue-driven reassignment/drop that
+    consumes the turnaround-readiness signal) plus richer energy modelling
+    (per-charger ratings, partial state-of-charge, opportunity charging, battery
+    swap). The delivered behavior (altitude-corridor + deadline-bounded temporal
+    (4D) deconfliction with vehicle-to-vehicle separation whose holds are applied
+    to dispatch, and per-hub charging-bay queue scheduling with turnaround
+    readiness) lives in current-implementation.md.
 
-
-
-
-## 10. Multi-domain extensibility and packaging
-
-Delivered behavior lives in current-implementation.md: external domain packs
-self-register through the `fl_op.domain_packs` entry-point group
-(`contracts/plugins.py`), discovered and merged into the registry index at load
-so a plugin domain is first-class across lookups, capabilities, and
-`generate-data` without any in-repo registry.yaml edit; the in-repo registry
-wins key conflicts, discovery is defensive and opt-out (`FL_OP_DISABLE_PLUGINS`),
-and plugin entries never enter the persisted registry.yaml. Generator capability
-metadata now declares a domain/generator `version` and a builtin-vs-plugin
-`source` (with the plugin's entry point and distribution). The residual open
-work is:
-
-- Generated schema filenames and evolution-baseline filenames remain keyed by
-  the global registry id, though registry artifacts already expose versioned
-  domain-local refs; rekeying the committed evolution baselines (and the
-  canonical `canonical-*` ones) off the domain-local ref is a separate,
-  larger change to committed CI artifacts.
-- A pack's declared `version` is recorded but not yet checked for engine
-  compatibility, and a discovered contribution is shape-coerced rather than
-  semantically validated at discovery time (the normal contract-validation path
-  still applies once its contracts are loaded).
-
-## 11. Drone logistics fidelity
-
-- No 3D airspace deconfliction, altitude corridor planning, or
-  vehicle-to-vehicle separation is modeled.
-- Charging-station scheduling and charging queue capacity are not modeled.
 
 ## 12. Feasibility input caching
 
@@ -300,3 +276,65 @@ broker arrival time is available. The residual open work is:
 - A new domain pack's observation source must declare the `ingestedAt` binding;
   the source-row-order fallback remains the defensive net for any source that
   does not.
+
+## 29. Multi-domain extensibility and packaging
+
+Delivered behavior lives in current-implementation.md: external domain packs
+self-register through the `fl_op.domain_packs` entry-point group
+(`contracts/plugins.py`), discovered and merged into the registry index at load
+so a plugin domain is first-class across lookups, capabilities, and
+`generate-data` without any in-repo registry.yaml edit; the in-repo registry
+wins key conflicts, discovery is defensive and opt-out (`FL_OP_DISABLE_PLUGINS`),
+and plugin entries never enter the persisted registry.yaml. Generator capability
+metadata now declares a domain/generator `version` and a builtin-vs-plugin
+`source` (with the plugin's entry point and distribution). The residual open
+work is:
+
+- Generated schema filenames and evolution-baseline filenames remain keyed by
+  the global registry id, though registry artifacts already expose versioned
+  domain-local refs; rekeying the committed evolution baselines (and the
+  canonical `canonical-*` ones) off the domain-local ref is a separate,
+  larger change to committed CI artifacts.
+- A pack's declared `version` is recorded but not yet checked for engine
+  compatibility, and a discovered contribution is shape-coerced rather than
+  semantically validated at discovery time (the normal contract-validation path
+  still applies once its contracts are loaded).
+
+## 30. Drone logistics fidelity
+
+Delivered behavior lives in current-implementation.md: two post-solve fidelity
+passes embedded in `score.drone_logistics_kpis`. 4D airspace deconfliction
+(`planning/airspace.py`) reconstructs each aerial flight's lateral path and its
+travel-inclusive airborne window from canonical geometry, builds a
+lateral-proximity + time conflict graph, greedily colours conflicting flights
+into vertically separated altitude corridors (altitude-corridor planning +
+vehicle-to-vehicle separation), then resolves the remaining same-corridor
+conflicts with a deadline-bounded temporal-separation pass (holding the later
+flight until the corridor clears, capped at deadline slack). The resulting holds
+are applied to the published dispatch (`apply_airspace_holds` re-times the held
+flights' assignment start/finish in both adapters, leaving frozen/pinned work
+untouched) and flow into the charging pass's arrival times, so the deconflicted
+schedule is dispatched rather than only annotated. Charging-station scheduling
+(`planning/charging.py`) replenishes each used asset's spent energy at its home
+hub, scheduling sessions into the hub's parallel charging bays (`chargingSlots`,
+a generic canonical Location capacity field) sharing its aggregate
+`chargingPowerKw`, so sessions queue when every bay is busy and the pass reports
+per-hub utilization, queue waits, and each asset's recharge turnaround/readiness
+with an at-risk count. The residual open work is:
+
+- The airspace pass resolves conflicts only by altitude corridor and a temporal
+  hold; it does not yet re-route a flight (different waypoints/corridor geometry)
+  to avoid a conflict, and the temporal-separation list schedule is greedy and
+  earlier-flight-first, not a jointly optimal corridor-and-time assignment. The
+  charging-turnaround readiness signal is still advisory: a hub whose queue
+  cannot keep its fleet charged does not yet drive reassignment to a freer hub or
+  defer/drop dispatch (the queue-aware re-solve coupling remains open).
+- The airborne window spans inbound transit plus service over the straight
+  hub->pickup->drop polyline; exact per-leg airborne intervals
+  (climb/cruise/descent profiles, pickup dwell) and flown corridor geometry are
+  not modelled.
+- Charging energy is a post-solve estimate (consumption rate x on-plan busy
+  hours, capped at battery capacity). Per-bay power is the hub aggregate split
+  evenly across bays (not per-charger ratings), and partial state-of-charge,
+  opportunity charging between deliveries, and battery-swap modelling are not
+  represented.

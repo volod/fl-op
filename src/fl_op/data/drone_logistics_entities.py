@@ -102,6 +102,7 @@ def _generate_hubs(rng: np.random.Generator, n_hubs: int) -> list[dict[str, Any]
                 "energy_units": float(rng.uniform(1200, 4000)),
                 "battery_available_kwh": float(rng.uniform(9000, 32000)),
                 "charging_power_kw": float(rng.uniform(320, 1500)),
+                "charging_slots": int(rng.integers(2, 7)),
             }
         )
     return hubs
@@ -112,6 +113,9 @@ def _apply_scenario_overrides(hubs: list[dict[str, Any]]) -> None:
     if hubs:
         hubs[0]["energy_units"] = 45.0
         hubs[0]["battery_available_kwh"] = 420.0
+        # A single charging bay at the scarce hub forces a deterministic
+        # charging queue when more than one homed asset needs to recharge.
+        hubs[0]["charging_slots"] = 1
 
 
 def _payload_class_capacity(
