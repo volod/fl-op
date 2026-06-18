@@ -19,6 +19,7 @@ from fl_op.core.constants import (
     RATE_TYPE_ELECTRICITY,
     RATE_TYPE_FUEL,
     RATE_TYPE_MATERIAL,
+    SERVICE_FEE_EUR_PER_VISIT,
     TOLL_COST_EUR_PER_KM,
 )
 
@@ -46,6 +47,8 @@ class ResourcePrices:
     labor_eur_per_h: float = LABOR_COST_EUR_PER_H
     machine_wear_eur_per_h: float = MACHINE_WEAR_COST_EUR_PER_H
     toll_eur_per_km: float = TOLL_COST_EUR_PER_KM
+    # Fixed fee charged once per served task, independent of service duration.
+    service_fee_eur_per_visit: float = SERVICE_FEE_EUR_PER_VISIT
 
     def price_for(self, rate_type: str) -> float:
         """Return the resolved unit price for a consumed-resource code."""
@@ -92,6 +95,46 @@ def vehicle_energy_consumption_rate(vehicle: Any) -> float:
         return float(getattr(vehicle, "fuel_consumption_rate", 0.0) or 0.0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _positive_rate(value: Any) -> Optional[float]:
+    """Coerce a declared per-asset rate, returning None when absent/invalid."""
+    try:
+        rate = float(value or 0.0)
+    except (TypeError, ValueError):
+        return None
+    return rate if rate > 0 else None
+
+
+def vehicle_machine_wear_eur_per_h(vehicle: Any, fleet_fallback: float) -> float:
+    """Per-vehicle machine-wear rate, falling back to the fleet wear rate."""
+    explicit = _positive_rate(getattr(vehicle, "machine_wear_eur_per_h", 0.0))
+    return explicit if explicit is not None else fleet_fallback
+
+
+def operator_wage_eur_per_h(operator: Any, fleet_fallback: float) -> float:
+    """Per-operator wage, falling back to the fleet labour rate."""
+    if operator is None:
+        return fleet_fallback
+    explicit = _positive_rate(getattr(operator, "wage_eur_per_h", 0.0))
+    return explicit if explicit is not None else fleet_fallback
+
+
+def vehicle_operating_eur_per_h(
+    vehicle: Any,
+    operator_wage: Optional[float],
+    prices: "ResourcePrices",
+) -> float:
+    """Operating rate (driver wage plus machine wear) for one vehicle/operator.
+
+    Machine wear resolves from the prime mover, the wage from the assigned
+    operator; either falls back to the fleet rate in ``prices`` when the asset
+    declares none. ``operator_wage`` is the already-resolved operator wage for
+    the cluster (None to use the fleet labour rate).
+    """
+    wear = vehicle_machine_wear_eur_per_h(vehicle, prices.machine_wear_eur_per_h)
+    wage = operator_wage if operator_wage is not None else prices.labor_eur_per_h
+    return wear + wage
 
 
 def _parse_ts(raw: Any) -> Optional[datetime]:

@@ -38,6 +38,9 @@ _AREA_LIKE_UNITS = ("", _AREA_UNIT)
 TravelPairLookup = dict[tuple[str, str], int]
 TravelPath = list[tuple[float, float]]
 TravelPathLookup = dict[tuple[str, str], TravelPath]
+# Per-direct-link cost measures: (network distance km, directed toll EUR).
+TravelMeasure = tuple[float, float]
+TravelMeasureLookup = dict[tuple[str, str], TravelMeasure]
 
 
 class ModeAwareTravelLookup(dict[tuple[str, str], int]):
@@ -54,6 +57,8 @@ class ModeAwareTravelLookup(dict[tuple[str, str], int]):
         by_mode: Optional[Mapping[str, Mapping[tuple[str, str], int]]] = None,
         aggregate_paths: Optional[Mapping[tuple[str, str], TravelPath]] = None,
         paths_by_mode: Optional[Mapping[str, Mapping[tuple[str, str], TravelPath]]] = None,
+        aggregate_measures: Optional[Mapping[tuple[str, str], TravelMeasure]] = None,
+        measures_by_mode: Optional[Mapping[str, Mapping[tuple[str, str], TravelMeasure]]] = None,
     ) -> None:
         super().__init__(aggregate or {})
         self.by_mode: dict[str, TravelPairLookup] = {
@@ -69,6 +74,17 @@ class ModeAwareTravelLookup(dict[tuple[str, str], int]):
             }
             for mode, lookup in (paths_by_mode or {}).items()
         }
+        # Direct-link cost measures (distance km, toll EUR), resolved like paths.
+        self.aggregate_measures: TravelMeasureLookup = dict(aggregate_measures or {})
+        self.measures_by_mode: dict[str, TravelMeasureLookup] = {
+            _normalise_mode(mode): dict(lookup)
+            for mode, lookup in (measures_by_mode or {}).items()
+        }
+        # True when any link declares a positive toll, so the routing model can
+        # skip building per-vehicle toll matrices for an entirely untolled network.
+        self.has_tolls: bool = any(
+            toll > 0 for _, toll in self.aggregate_measures.values()
+        )
 
     def get_seconds(
         self,
@@ -106,6 +122,22 @@ class ModeAwareTravelLookup(dict[tuple[str, str], int]):
         path = self.aggregate_paths.get(pair)
         return list(path) if path is not None else None
 
+    def get_measure(
+        self,
+        from_ref: str,
+        to_ref: str,
+        travel_mode: Optional[str] = None,
+    ) -> Optional[TravelMeasure]:
+        """Direct-link (distance_km, toll_eur) for one pair, when a link exists."""
+        mode = _normalise_mode(travel_mode)
+        pair = (from_ref, to_ref)
+        if mode and mode != "any":
+            measure = self.measures_by_mode.get(mode, {}).get(pair)
+            if measure is not None:
+                return measure
+            return self.measures_by_mode.get("any", {}).get(pair)
+        return self.aggregate_measures.get(pair)
+
 
 TravelLookup = dict[tuple[str, str], int] | ModeAwareTravelLookup
 
@@ -117,6 +149,8 @@ def build_travel_lookup(travel_links: list[Any]) -> ModeAwareTravelLookup:
     direct_by_mode: dict[str, TravelPairLookup] = {}
     paths_any: TravelPathLookup = {}
     paths_by_mode: dict[str, TravelPathLookup] = {}
+    measures_any: TravelMeasureLookup = {}
+    measures_by_mode: dict[str, TravelMeasureLookup] = {}
     for link in travel_links:
         seconds = _nonnegative(link.travel_time_s)
         if seconds <= 0:
@@ -126,9 +160,16 @@ def build_travel_lookup(travel_links: list[Any]) -> ModeAwareTravelLookup:
         mode = _normalise_mode(getattr(link, "network_mode", "any"))
         target = direct_any if mode == "any" else direct_by_mode.setdefault(mode, {})
         path_target = paths_any if mode == "any" else paths_by_mode.setdefault(mode, {})
+        measure_target = (
+            measures_any if mode == "any" else measures_by_mode.setdefault(mode, {})
+        )
         existing = target.get(pair)
         if existing is None or value < existing:
             target[pair] = value
+            measure_target[pair] = (
+                max(0.0, float(getattr(link, "distance_km", 0.0) or 0.0)),
+                max(0.0, float(getattr(link, "toll_eur", 0.0) or 0.0)),
+            )
             path = _coerce_route_geometry(getattr(link, "route_geometry", None))
             if path and not _route_geometry_matches_distance(
                 path, getattr(link, "distance_km", 0.0), getattr(link, "link_id", "")
@@ -169,11 +210,17 @@ def build_travel_lookup(travel_links: list[Any]) -> ModeAwareTravelLookup:
                     aggregate_paths[pair] = path
                 else:
                     aggregate_paths.pop(pair, None)
+    aggregate_measures: TravelMeasureLookup = {}
+    for mode_measures in measures_by_mode.values():
+        aggregate_measures.update(mode_measures)
+    aggregate_measures.update(measures_any)
     return ModeAwareTravelLookup(
         aggregate,
         by_mode,
         aggregate_paths,
         composed_paths_by_mode,
+        aggregate_measures,
+        {"any": measures_any, **measures_by_mode},
     )
 
 
@@ -393,6 +440,51 @@ def network_path(
     if not isinstance(travel_lookup, ModeAwareTravelLookup):
         return None
     return travel_lookup.get_path(from_ref, to_ref, travel_mode)
+
+
+def _network_measure(
+    travel_lookup: Optional[TravelLookup],
+    from_ref: str,
+    to_ref: str,
+    travel_mode: Optional[str],
+) -> Optional[TravelMeasure]:
+    if (
+        not isinstance(travel_lookup, ModeAwareTravelLookup)
+        or not from_ref
+        or not to_ref
+        or from_ref == to_ref
+    ):
+        return None
+    return travel_lookup.get_measure(from_ref, to_ref, travel_mode)
+
+
+def network_distance_km(
+    travel_lookup: Optional[TravelLookup],
+    from_ref: str,
+    to_ref: str,
+    travel_mode: Optional[str] = None,
+) -> Optional[float]:
+    """Directed network-link distance (km) for one pair, when a link exists."""
+    measure = _network_measure(travel_lookup, from_ref, to_ref, travel_mode)
+    if measure is None or measure[0] <= 0:
+        return None
+    return measure[0]
+
+
+def network_toll_eur(
+    travel_lookup: Optional[TravelLookup],
+    from_ref: str,
+    to_ref: str,
+    travel_mode: Optional[str] = None,
+) -> Optional[float]:
+    """Directed per-link toll (EUR) for one pair, when a travel link exists.
+
+    Returns the link's toll (0.0 for an untolled link) so callers can tell a
+    declared-untolled network leg from an off-network leg (None) that should
+    fall back to the fleet per-kilometre rate.
+    """
+    measure = _network_measure(travel_lookup, from_ref, to_ref, travel_mode)
+    return None if measure is None else measure[1]
 
 
 def _lookup_seconds(

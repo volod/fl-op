@@ -28,10 +28,13 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    (`RESTRICTED_ZONE`, `solver/restrictions.py`) -- and, transitively,
    dependents of any excluded predecessor
    (`PREDECESSOR_UNSERVED`). Fuel, electricity, material, driver-labour,
-   machine-wear, and toll prices are resolved from the snapshot's cost-rate
-   entities (`solver/cost_rates.py`), falling back to the engine cost constants
-   for unpriced resources (the operating rates -- labour, wear, toll -- fall
-   back to zero, so they stay inert unless the data prices them).
+   machine-wear, toll, and per-visit `service-fee` prices are resolved from the
+   snapshot's cost-rate entities (`solver/cost_rates.py`), falling back to the
+   engine cost constants for unpriced resources (the operating rates -- labour,
+   wear, toll, service fee -- fall back to zero, so they stay inert unless the
+   data prices them). Labour and machine wear additionally resolve **per asset**:
+   a prime mover's `machineWearEurPerH` and an operator's `wageEurPerH` override
+   the fleet rate, and tolls resolve **per travel link** from `tollEur`.
    Geometric restrictions are a pre-solve filter: a task's site polygon
    (or centroid when the site has no polygon) is tested against other
    locations whose polygon declares the task's operation as prohibited. A
@@ -205,13 +208,23 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    the leg in the same objective currency as the drop penalties (1 EUR = 600
    penalty seconds): travel energy cost (consumption rate x the resolved
    resource price), an operating surcharge for driver labour and machine wear
-   over travel plus on-task service hours, and a per-kilometre toll over the
-   leg distance. The operating and toll rates default to zero, so without
+   over travel plus on-task service hours, a toll, and a fixed per-visit service
+   fee charged on every arc into a task node (so the serve-vs-drop trade-off
+   shifts independent of service duration). The operating rate is resolved
+   **per asset**: machine wear from the prime mover's `machineWearEurPerH` and
+   the wage from the cluster operator's `wageEurPerH`, each falling back to the
+   fleet `machine-wear`/`labor` cost-rate. Tolls are priced per directed travel
+   link: where a link exists between two nodes the leg pays that link's `tollEur`
+   (so only genuinely tolled segments charge) and distance comes from the link's
+   declared `distanceKm`; off-network legs fall back to the fleet per-kilometre
+   toll rate over the geodesic distance (`solver/routing_model.py:build_vehicle_cost_matrices`).
+   The operating, toll, and service-fee rates default to zero, so without
    cost-rate data the arc cost collapses to the energy-only term; when priced,
-   they let driver time, wear, and tolls change the choice (an idle-fuel-cheap
-   but slow bundle can lose to a faster one once labour is priced). An
-   energy-efficient machine still wins time-equal legs, and dropping an order is
-   weighed against the money cost of serving it. Time mode prices arcs as
+   they let driver time, wear, tolls, and per-visit fees change the choice (an
+   idle-fuel-cheap but slow bundle can lose to a faster one once labour is
+   priced, and a cheaper-to-run machine or operator wins on a time-equal route).
+   An energy-efficient machine still wins time-equal legs, and dropping an order
+   is weighed against the money cost of serving it. Time mode prices arcs as
    travel plus service seconds and adds soft cumulative-time costs on task
    nodes, so served tasks are pulled earlier without changing the hard
    deadline/window/drop-disjunction mechanics. Those completion-time costs are
@@ -319,15 +332,16 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
 9. Aggregate dispatch packages, canonical reason codes, KPIs (priced with the
    resolved cost rates), and reports. Each dispatch package's energy estimate
    covers the operation plus the inbound travel leg, carries explicit resource
-   type and unit fields, reports the per-leg driver labour, machine wear, and
-   toll costs (the toll cost and the inbound distance it is priced from are
-   non-zero only when a toll rate is supplied, which is what builds the
-   geodesic distance matrix), and its `estimated_margin_eur` is the order
-   revenue net of energy, material, labour, wear, and tolls at the resolved
+   type and unit fields, reports the per-leg driver labour (at the operator's
+   wage), machine wear (at the vehicle's rate), per-link toll, and the fixed
+   per-visit service fee (these are non-zero only when their rates or tolled
+   links are supplied; toll and distance come from the per-vehicle network-aware
+   cost matrices), and its `estimated_margin_eur` is the order revenue net of
+   energy, material, labour, wear, tolls, and the service fee at the resolved
    prices (`ResourcePrices`), so per-dispatch margins and KPI aggregates (which
    also surface `total_labor_cost_eur`, `total_machine_wear_cost_eur`,
-   `total_toll_cost_eur`, and `total_distance_km`) are priced from the same
-   cost-rate data. A task whose predecessor
+   `total_toll_cost_eur`, `total_service_fee_eur`, and `total_distance_km`) are
+   priced from the same cost-rate data. A task whose predecessor
    went unserved in the solve is withdrawn post-solve
    (`PREDECESSOR_UNSERVED`), so no plan dispatches work whose precondition was
    dropped. Every cluster solve yields a machine-readable telemetry record

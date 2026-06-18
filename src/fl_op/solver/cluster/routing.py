@@ -22,6 +22,7 @@ from fl_op.solver.cost_rates import (
     ResourcePrices,
     vehicle_energy_consumption_rate,
     vehicle_energy_resource_type,
+    vehicle_machine_wear_eur_per_h,
 )
 from fl_op.solver.routing_model import (
     NODE_PICKUP,
@@ -29,8 +30,8 @@ from fl_op.solver.routing_model import (
     NODE_TASK,
     RoutingNode,
     _extract_dispatch_packages,
-    build_distance_matrix,
     build_node_table,
+    build_vehicle_cost_matrices,
     build_vehicle_time_matrices,
     pickup_node_indices,
     task_node_indices,
@@ -150,13 +151,26 @@ def solve_routing_context(
         _route_time_overrides or {}
     ).items():
         time_matrices[vehicle_idx][from_node][to_node] = seconds
-    # Single geodesic distance matrix shared by every vehicle; priced only when
-    # a per-kilometre toll rate is supplied (zero by default).
-    distance_matrix = (
-        build_distance_matrix(nodes)
-        if resource_prices.toll_eur_per_km > 0
-        else None
+    # Per-operator wage band of the cluster's assigned operator (fleet labour
+    # fallback) and per-vehicle network-aware distance/toll matrices, built only
+    # when a toll is in play (a fleet per-km rate or any tolled link).
+    operator_wages = cluster_dict.get("operator_wages", {})
+    cluster_operator_wage = operator_wages.get(
+        cluster_dict.get("operator_ref", ""), resource_prices.labor_eur_per_h
     )
+    toll_active = resource_prices.toll_eur_per_km > 0 or getattr(
+        context.travel_lookup, "has_tolls", False
+    )
+    if toll_active:
+        distance_matrices, toll_matrices = build_vehicle_cost_matrices(
+            nodes,
+            context.routing_vehicles,
+            context.travel_lookup,
+            resource_prices.toll_eur_per_km,
+        )
+    else:
+        distance_matrices = None
+        toll_matrices = None
     service_times = _vehicle_service_times(context, nodes)
     manager = pywrapcp.RoutingIndexManager(
         len(nodes),
@@ -172,7 +186,9 @@ def solve_routing_context(
         context,
         resource_prices,
         optimization_objective,
-        distance_matrix,
+        toll_matrices,
+        nodes,
+        cluster_operator_wage,
     )
     time_dim = _add_time_dimension(routing, manager, time_matrices, service_times)
     _add_operation_vehicle_constraints(routing, manager, context, nodes)
@@ -323,10 +339,13 @@ def solve_routing_context(
         now_epoch,
         time_matrices,
         resource_prices,
-        distance_matrix,
+        distance_matrices,
+        toll_matrices,
         list(context.field_map.values()),
         context.travel_lookup,
         route_restrictions,
+        resource_prices.service_fee_eur_per_visit,
+        operator_wages,
     )
     infeasible = unserved_orders(
         context.task_ids,
@@ -362,7 +381,9 @@ def _add_arc_costs(
     context: ClusterContext,
     resource_prices: ResourcePrices,
     optimization_objective: str,
-    distance_matrix: Optional[list[list[float]]] = None,
+    toll_matrices: Optional[list[list[list[float]]]] = None,
+    nodes: Optional[list[RoutingNode]] = None,
+    operator_wage: Optional[float] = None,
 ) -> None:
     """Price arcs by the selected objective.
 
@@ -372,23 +393,31 @@ def _add_arc_costs(
 
     - energy: travel hours x the prime mover's consumption rate x the resolved
       resource price;
-    - operating time: travel plus on-task service hours x the operating rate
-      (driver labour plus machine wear), so a faster bundle saves wages and
-      wear, not just energy;
-    - tolls: leg distance x the per-kilometre toll rate.
+    - operating time: travel plus on-task service hours x the per-vehicle
+      operating rate (this prime mover's machine wear plus the cluster operator's
+      wage, each falling back to the fleet rate), so a faster or cheaper-to-run
+      bundle saves wages and wear, not just energy;
+    - tolls: the per-link toll where a travel link exists, else the fleet per-km
+      rate on the geodesic leg (``toll_matrices`` already in EUR);
+    - service fee: a fixed per-visit fee charged on every arc into a task node,
+      shifting the serve-vs-drop trade-off independent of service duration.
 
-    The operating and toll rates default to zero, so with no cost-rate data the
-    arc cost collapses to the energy-only term. Per-vehicle evaluators let
-    efficient machines win long repositioning legs over expensive ones on
-    time-equal routes.
+    The operating, toll, and service-fee rates default to zero, so with no
+    cost-rate data the arc cost collapses to the energy-only term. Per-vehicle
+    evaluators let efficient machines win long repositioning legs over expensive
+    ones on time-equal routes.
 
     In time mode, arc cost uses travel seconds plus service seconds at the
     departing node, matching the Time dimension scale.
     """
-    operating_cost_per_second = (
-        resource_prices.operating_eur_per_h * EUR_TO_DROP_PENALTY_SECONDS / 3600.0
+    service_fee_penalty = (
+        resource_prices.service_fee_eur_per_visit * EUR_TO_DROP_PENALTY_SECONDS
     )
-    toll_cost_per_km = resource_prices.toll_eur_per_km * EUR_TO_DROP_PENALTY_SECONDS
+    task_nodes = (
+        {i for i, node in enumerate(nodes) if node.kind == NODE_TASK}
+        if nodes is not None
+        else set()
+    )
     for rv_idx, routing_vehicle in enumerate(context.routing_vehicles):
         if _is_time_objective(optimization_objective):
 
@@ -416,12 +445,24 @@ def _add_arc_costs(
             * EUR_TO_DROP_PENALTY_SECONDS
             / 3600.0
         )
+        wage = (
+            operator_wage if operator_wage is not None
+            else resource_prices.labor_eur_per_h
+        )
+        operating_cost_per_second = (
+            (vehicle_machine_wear_eur_per_h(prime, resource_prices.machine_wear_eur_per_h) + wage)
+            * EUR_TO_DROP_PENALTY_SECONDS
+            / 3600.0
+        )
+        toll_matrix = toll_matrices[rv_idx] if toll_matrices is not None else None
 
         def cost_callback(
             from_index: int,
             to_index: int,
             rv_idx: int = rv_idx,
             energy_cost_per_travel_second: float = energy_cost_per_travel_second,
+            operating_cost_per_second: float = operating_cost_per_second,
+            toll_matrix: Optional[list[list[float]]] = toll_matrix,
         ) -> int:
             from_node = manager.IndexToNode(from_index)
             to_node = manager.IndexToNode(to_index)
@@ -431,8 +472,10 @@ def _add_arc_costs(
                 cost += (
                     travel_s + service_times[rv_idx][from_node]
                 ) * operating_cost_per_second
-            if distance_matrix is not None and toll_cost_per_km:
-                cost += distance_matrix[from_node][to_node] * toll_cost_per_km
+            if toll_matrix is not None:
+                cost += toll_matrix[from_node][to_node] * EUR_TO_DROP_PENALTY_SECONDS
+            if service_fee_penalty and to_node in task_nodes:
+                cost += service_fee_penalty
             return int(round(cost))
 
         cost_cb_idx = routing.RegisterTransitCallback(cost_callback)

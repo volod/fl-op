@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: canonical-asset
-version: 0.4.0
+version: 0.5.0
 status: active
 name: Canonical Asset
 domain: canonical
@@ -222,6 +222,20 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: asset.capabilities.certifiedOperations, semanticTerm: urn:xopt:capability:operator-certification, quantityKind: categorical-set, planningUse: [compatibility-filter]}
+      - name: machineWearEurPerH
+        logicalType: number
+        required: false
+        description: Per-vehicle machine-wear/operating rate (EUR per operating hour); 0/absent falls back to the fleet rate.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.machineWearEurPerH, semanticTerm: urn:xopt:capability:machine-wear-rate, canonicalUnit: EUR, quantityKind: money, planningUse: [cost]}
+      - name: wageEurPerH
+        logicalType: number
+        required: false
+        description: Per-operator wage band (EUR per operating hour); 0/absent falls back to the fleet labour rate.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: asset.capabilities.wageEurPerH, semanticTerm: urn:xopt:capability:operator-wage, canonicalUnit: EUR, quantityKind: money, planningUse: [cost]}
       - name: shiftStart
         logicalType: integer
         required: false

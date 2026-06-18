@@ -24,4 +24,6 @@ class TravelLink(BaseModel):
     # Ordered [lat, lon] vertices of the travelled network path. Optional for
     # distance-matrix sources that carry measures but no spatial geometry.
     route_geometry: list[list[float]] = Field(default_factory=list)
+    # Directed toll charged to traverse the edge (EUR); 0 means untolled.
+    toll_eur: float = 0.0
     source_ref: str = ""

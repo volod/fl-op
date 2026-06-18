@@ -358,9 +358,12 @@ def _solve_expanded(
         [expanded_matrix],
         resource_prices,
         None,
+        None,
         list(context.field_map.values()),
         context.travel_lookup,
         [restrictions],
+        resource_prices.service_fee_eur_per_visit,
+        cluster_dict.get("operator_wages", {}),
     )
     infeasible = unserved_orders(
         context.task_ids,

@@ -152,6 +152,11 @@ semanticTerms:
   # coverage model. Units absent from the map fall back to that model (area)
   # or to the nominal effort (other units).
   urn:xopt:capability:work-rates: {valueType: object, quantityKind: rate-map}
+  # Per-asset operating cost rates (EUR per operating hour). Machine-wear is a
+  # prime-mover attribute, operator-wage an operator attribute; either overrides
+  # the fleet-level cost-rate fallback when the asset declares it.
+  urn:xopt:capability:machine-wear-rate: {valueType: number, quantityKind: money, canonicalUnit: EUR}
+  urn:xopt:capability:operator-wage: {valueType: number, quantityKind: money, canonicalUnit: EUR}
   # -- availability ----------------------------------------------------------
   urn:xopt:availability:shift-start: {valueType: integer, quantityKind: time, canonicalUnit: s}
   urn:xopt:availability:shift-end: {valueType: integer, quantityKind: time, canonicalUnit: s}
@@ -185,6 +190,8 @@ semanticTerms:
   urn:xopt:travel:travel-time: {valueType: number, quantityKind: duration, canonicalUnit: s}
   urn:xopt:travel:distance: {valueType: number, quantityKind: length, canonicalUnit: km}
   urn:xopt:travel:network-mode: {valueType: string, quantityKind: categorical}
+  # Directed toll charged to traverse the link (EUR); absent/zero means untolled.
+  urn:xopt:travel:toll: {valueType: number, quantityKind: money, canonicalUnit: EUR}
   # -- cost rates --------------------------------------------------------------
   # rate-type uses canonical resource codes the engine interprets ("fuel",
   # "fertilizer", "electricity"); per-unit declares what one unit-price buys

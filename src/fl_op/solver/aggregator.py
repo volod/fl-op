@@ -88,6 +88,9 @@ def _compute_kpis(
         d.get("estimated_machine_wear_cost_eur", 0) for d in dispatch_packages
     )
     total_toll_cost = sum(d.get("estimated_toll_cost_eur", 0) for d in dispatch_packages)
+    total_service_fee = sum(
+        d.get("estimated_service_fee_eur", 0) for d in dispatch_packages
+    )
 
     greedy_baseline = _compute_greedy_baseline_margin(
         orders,
@@ -133,6 +136,7 @@ def _compute_kpis(
         "total_labor_cost_eur": round(total_labor_cost, 2),
         "total_machine_wear_cost_eur": round(total_wear_cost, 2),
         "total_toll_cost_eur": round(total_toll_cost, 2),
+        "total_service_fee_eur": round(total_service_fee, 2),
         "infeasibility_reasons": infeasibility_reasons,
         **completion,
     }

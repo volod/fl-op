@@ -12,12 +12,6 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-22. Cost model expansion. Remaining work is incremental polish, not a blocking
-   engine gap: network-distance and per-link (toll-road) toll pricing, fixed
-   per-visit service fees, and per-vehicle/per-operator operating rates. The
-   delivered cost model (driver-time, machine-wear, and toll cost-rate types
-   priced into arc costs, dispatch margins, and KPIs) lives in
-   current-implementation.md.
 23. Spatial execution feedback. Remaining work is incremental: measuring
    coverage against the restriction-clipped (workable) remainder and threading
    the residual work-area polygon into the solver's partial-area clip, and
@@ -76,30 +70,11 @@ Recommended order, optimized for dependency reuse and low rework:
     (4D) deconfliction with vehicle-to-vehicle separation whose holds are applied
     to dispatch, and per-hub charging-bay queue scheduling with turnaround
     readiness) lives in current-implementation.md.
+41. Cost model expansion -- advanced refinements. Remaining work is research-grade
+    or incremental polish left after the core cost model expansion (per-link
+    tolls priced off network-link distance, fixed per-visit service fees, and
+    per-vehicle wear / per-operator wage rates) shipped to current-implementation.md.
 
-
-## 22. Cost model expansion
-
-Delivered behavior (the `labor`, `machine-wear`, and `toll` cost-rate types
-resolved through `solver/cost_rates.py` and priced into arc costs, dispatch
-margins, greedy scoring, and KPIs) lives in current-implementation.md. The
-residual open work is:
-
-- Tolls are priced per kilometre of geodesic (haversine) arc distance applied
-  uniformly to every leg. Two refinements remain open: pricing toll distance
-  off network-link distance where a travel link exists (the travel lookup
-  carries seconds, not distance, today), and a per-link toll attribute so only
-  genuinely tolled road segments are charged rather than a flat fleet-wide
-  EUR/km.
-- Richer service costs are modelled as driver labour plus machine wear over
-  on-task service hours. A fixed per-visit service fee (a per-node cost that
-  shifts the serve-vs-drop trade-off independent of service duration) is not
-  modelled; OR-Tools routing has no direct per-node fixed serve cost, so it
-  would need a drop-penalty offset or an equivalent encoding.
-- Labour and machine-wear rates are fleet-level (one resolved rate per run).
-  Per-vehicle wear curves and per-operator wage bands would let the objective
-  prefer cheaper-to-run machines or operators, but need per-asset cost-rate
-  resolution rather than the single fleet rate.
 
 ## 23. Spatial execution feedback
 
@@ -301,3 +276,37 @@ with an at-risk count. The residual open work is:
   evenly across bays (not per-charger ratings), and partial state-of-charge,
   opportunity charging between deliveries, and battery-swap modelling are not
   represented.
+
+## 41. Cost model expansion -- advanced refinements
+
+Delivered behavior lives in current-implementation.md: tolls priced per directed
+travel link (`travelLink.tollEur`) off the link's declared `distanceKm`, with the
+fleet per-kilometre rate over the geodesic distance as the off-network fallback
+(`solver/routing_model.py:build_vehicle_cost_matrices`); a fixed per-visit
+`service-fee` cost-rate charged on every arc into a task node (shifting the
+serve-vs-drop trade-off independent of service duration); and per-asset operating
+rates -- a prime mover's `machineWearEurPerH` and an operator's `wageEurPerH`
+override the fleet `machine-wear`/`labor` rates in arc costs and dispatch margins.
+The residual open work is:
+
+- Non-linear per-asset rates. Per-vehicle wear and per-operator wage are single
+  scalars (EUR per operating hour). Usage/age-dependent wear curves and tiered
+  wage bands (overtime thresholds, shift premiums) need a rate *function* per
+  asset rather than a constant, and per-asset cost-rate entities with their own
+  validity windows (today per-asset rates are static asset master-data
+  attributes, while fleet rates are the time-windowed cost-rate entities).
+- Per-task and per-location service fees. The per-visit fee is a single
+  fleet-level rate; a per-task or per-location override (a costly-access site, a
+  premium customer) would need the fee carried on the task/location rather than
+  resolved once per run.
+- Toll/distance over multi-hop network paths. Per-link toll and network distance
+  resolve from a *direct* travel link between two nodes; a pair reachable only
+  through composed intermediate links pays the geodesic + fleet-rate fallback,
+  not the summed per-link tolls/distances along the shortest path. Composing the
+  cost measures along the same shortest-time path the time lookup already tracks
+  remains open.
+- Heuristic-stage parity. The greedy warm-start and aggregator repositioning
+  *estimates* still use the fleet toll-per-km and fleet operating rate; only the
+  authoritative arc costs, dispatch margins, and KPIs use the per-link toll and
+  per-asset rates. Threading the network-aware measures into those heuristics
+  would tighten warm starts but does not change the published economics.

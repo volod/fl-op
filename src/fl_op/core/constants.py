@@ -382,8 +382,12 @@ RATE_TYPE_ELECTRICITY: str = "electricity"
 RATE_TYPE_LABOR: str = "labor"
 # Machine wear / depreciation, priced per operating hour.
 RATE_TYPE_MACHINE_WEAR: str = "machine-wear"
-# Road tolls, priced per kilometre travelled.
+# Road tolls, priced per kilometre travelled (fallback for off-network legs;
+# genuinely tolled segments carry their own per-link toll, see travelLink.tollEur).
 RATE_TYPE_TOLL: str = "toll"
+# Fixed fee charged once per served task (a per-visit cost independent of service
+# duration that shifts the serve-vs-drop trade-off).
+RATE_TYPE_SERVICE_FEE: str = "service-fee"
 
 # Canonical unit of depot material inventory and of the material-reservation
 # quantities derived from it (urn:xopt:inventory:fertilizer is kept in kg).
@@ -411,6 +415,12 @@ MACHINE_WEAR_COST_EUR_PER_H: float = float(
     os.environ.get("MACHINE_WEAR_COST_EUR_PER_H", "0.0")
 )
 TOLL_COST_EUR_PER_KM: float = float(os.environ.get("TOLL_COST_EUR_PER_KM", "0.0"))
+
+# Fixed per-visit service fee fallback (EUR per served task). Zero by default so
+# the term stays inert unless a `service-fee` cost-rate row prices it.
+SERVICE_FEE_EUR_PER_VISIT: float = float(
+    os.environ.get("SERVICE_FEE_EUR_PER_VISIT", "0.0")
+)
 
 # Share of a related-equipment material tank assumed consumed by one task.
 RELATED_MATERIAL_FILL_RATIO: float = 0.8

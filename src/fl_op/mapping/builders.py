@@ -232,6 +232,7 @@ def build_travel_link(table: BindingTable, acc: dict[str, Any]) -> TravelLink:
         distance_km=float(acc["distanceKm"]) if "distanceKm" in acc else None,
         network_mode=str(acc.get("networkMode", "any") or "any"),
         route_geometry=parse_route_geometry(acc.get("routeGeometry")),
+        toll_eur=max(0.0, float(acc.get("tollEur", 0.0) or 0.0)),
         source_ref=f"{table.contract_id}:{acc['linkId']}",
     )
 
