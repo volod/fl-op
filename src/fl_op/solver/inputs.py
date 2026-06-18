@@ -45,6 +45,8 @@ logger = logging.getLogger(__name__)
 SECTION_PRIME_MOVERS = "prime_movers"
 SECTION_RELATED = "related_equipment"
 SECTION_OPERATORS = "operators"
+# Every non-depot routable location. Besides work sites this includes canonical
+# suppliers/loading stations used by paired pickup-and-delivery tasks.
 SECTION_SITES = "sites"
 SECTION_DEPOTS = "depots"
 SECTION_TASKS = "tasks"
@@ -141,11 +143,14 @@ _CANONICAL_KEY: dict[str, str] = {
     "asset.capabilities.workRates": "work_rates",
     "asset.capabilities.loadCapacity": "load_capacity",
     "asset.capabilities.loadCapacities": "load_capacities",
+    "asset.capabilities.machineWearEurPerH": "machine_wear_eur_per_h",
+    "asset.capabilities.wageEurPerH": "wage_eur_per_h",
     "asset.capabilities.compatibleOperations": "compatible_operations",
     "asset.capabilities.certifiedOperations": "certified_operations",
     "asset.availability.shiftStart": "shift_start",
     "asset.availability.shiftEnd": "shift_end",
     "location.locationId": "location_id",
+    "location.locationType": "location_type",
     "location.name": "name",
     "location.lat": "lat",
     "location.lon": "lon",
@@ -163,6 +168,8 @@ _CANONICAL_KEY: dict[str, str] = {
     "task.locationRef": "location_ref",
     "task.operationType": "operation_type",
     "task.areaHa": "area",
+    "task.workAreaGeometry": "work_area_geometry",
+    "task.coveredGeometry": "covered_geometry",
     "task.workQuantity": "work_quantity",
     "task.workQuantityUnit": "work_quantity_unit",
     "task.serviceDurationMinutes": "service_duration_min",
@@ -190,6 +197,8 @@ _CANONICAL_KEY: dict[str, str] = {
     "travelLink.travelTimeS": "travel_time_s",
     "travelLink.distanceKm": "distance_km",
     "travelLink.networkMode": "network_mode",
+    "travelLink.routeGeometry": "route_geometry",
+    "travelLink.tollEur": "toll_eur",
     "costRate.costRateId": "rate_id",
     "costRate.rateType": "rate_type",
     "costRate.unitPrice": "unit_price",
@@ -230,6 +239,8 @@ def _location_value(
     path = tokens[1:]
     if path == ["locationId"]:
         return loc.location_id
+    if path == ["locationType"]:
+        return loc.location_type
     if path == ["name"]:
         return loc.name
     if path == ["lat"]:
@@ -287,6 +298,7 @@ def _travel_link_value(link: "TravelLink", binding: FieldBinding) -> Any:
         ("travelTimeS",): link.travel_time_s,
         ("distanceKm",): link.distance_km,
         ("networkMode",): link.network_mode,
+        ("routeGeometry",): link.route_geometry,
     }
     return mapping.get(tuple(path))
 
@@ -364,6 +376,8 @@ def _task_value(task: "Task", binding: FieldBinding) -> Any:
         ("locationRef",): task.location_ref,
         ("operationType",): task.operation_type,
         ("areaHa",): task.area_ha,
+        ("workAreaGeometry",): task.work_area_geometry,
+        ("coveredGeometry",): task.covered_geometry,
         ("workQuantity",): task.work_quantity,
         ("workQuantityUnit",): task.work_quantity_unit,
         ("serviceDurationMinutes",): task.service_duration_minutes,
@@ -471,7 +485,7 @@ def build_solver_inputs(
                 _project_many(fld_ts, lambda b, l=l: _location_value(l, b, inv_lookup))
             )
             for l in snapshot.locations
-            if l.location_type == "field"
+            if l.location_type != "depot"
         ]
         if fld_ts
         else [],

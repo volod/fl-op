@@ -5,7 +5,7 @@ metadata:
   sourceContract: travel-links
   canonicalEntity: travel-link
   canonicalModelRef: urn:xopt:model:canonical:0.1.0
-  mappingVersion: 1.0.0
+  mappingVersion: 1.1.0
   dataProductRole: multimodalNetwork
   permittedPlanningUses: [periodic-planning, rolling-dispatch]
 fieldMappings:
@@ -15,3 +15,4 @@ fieldMappings:
   - {sourceField: travel_time_s, binding: travelLink.travelTimeS, semanticTerm: urn:xopt:travel:travel-time, canonicalUnit: s, quantityKind: duration, planningUse: [routing], missingValuePolicy: reject-for-planning}
   - {sourceField: distance_km, binding: travelLink.distanceKm, semanticTerm: urn:xopt:travel:distance, canonicalUnit: km, quantityKind: length, planningUse: [cost]}
   - {sourceField: network_mode, binding: travelLink.networkMode, semanticTerm: urn:xopt:travel:network-mode, planningUse: [routing]}
+  - {sourceField: route_geometry, binding: travelLink.routeGeometry, semanticTerm: urn:xopt:attribute:route-geometry, quantityKind: geometry, planningUse: [routing, restriction], missingValuePolicy: accept-optional}

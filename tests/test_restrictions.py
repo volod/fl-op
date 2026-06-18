@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fl_op.canonical.enums import ReasonCode
+from fl_op.core import constants
 from fl_op.solver.restrictions import (
     allowed_start_intervals,
     apply_location_restrictions,
@@ -312,3 +313,275 @@ class TestRoutingOccupancy:
         start = datetime.fromisoformat(dispatch[0]["scheduled_start"]).timestamp()
         end = datetime.fromisoformat(dispatch[0]["scheduled_end"]).timestamp()
         assert end <= block_start + 300 or start >= block_end - 300
+
+
+class TestTimeDependentRouteRestriction:
+    @staticmethod
+    def _solve(zone_window: list[str]):
+        from fl_op.solver.cluster_solver import solve_cluster
+        from fl_op.solver.types import DepotRow, PrimeMoverRow, RelatedRow
+
+        now = datetime(2026, 6, 18, 8, 0, tzinfo=timezone.utc)
+        now_epoch = int(now.timestamp())
+        cluster = {
+            "cluster_id": "cl-route-window",
+            "depot_ref": "d0",
+            "task_ids": ["o0"],
+            "allocated_prime_related": {"v0": ["i0"]},
+            "total_penalty_per_day": 100.0,
+        }
+        order = TaskRow.from_canonical_dict({
+            "task_id": "o0",
+            "location_ref": "f0",
+            "operation_type": "SPRAYING",
+            "deadline": (now + timedelta(days=1)).isoformat(),
+            "revenue": 2000.0,
+        })
+        vehicle = PrimeMoverRow.from_canonical_dict({
+            "asset_id": "v0",
+            "rated_power": 150.0,
+            "travel_speed": 60.0,
+            "home_depot_ref": "d0",
+        })
+        implement = RelatedRow.from_canonical_dict({
+            "asset_id": "i0",
+            "required_power": 100.0,
+            "compatible_operations": ["SPRAYING"],
+        })
+        field = SiteRow.from_canonical_dict({
+            "location_id": "f0", "lat": 0.0, "lon": 0.04,
+        })
+        zone = SiteRow.from_canonical_dict({
+            "location_id": "route-zone",
+            "lat": 0.0,
+            "lon": 0.02,
+            "polygon": [
+                [-0.01, 0.01],
+                [-0.01, 0.03],
+                [0.01, 0.03],
+                [0.01, 0.01],
+            ],
+            "restricted_operations": ["SPRAYING"],
+            "restriction_windows": zone_window,
+        })
+        depot = DepotRow.from_canonical_dict({
+            "location_id": "d0", "lat": 0.0, "lon": 0.0,
+        })
+
+        dispatch, infeasible = solve_cluster(
+            cluster,
+            [order],
+            [vehicle],
+            [implement],
+            [field, zone],
+            [depot],
+            {},
+            {"v0": 0},
+            {"i0": 0},
+            now_epoch=now_epoch,
+        )
+        assert not infeasible
+        return now, dispatch[0]
+
+    def test_active_window_uses_detour_duration_and_waypoints(self):
+        now = datetime(2026, 6, 18, 8, 0, tzinfo=timezone.utc)
+        window = [
+            f"{(now - timedelta(minutes=5)).isoformat()}/"
+            f"{(now + timedelta(hours=2)).isoformat()}"
+        ]
+
+        origin, dispatch = self._solve(window)
+
+        elapsed = datetime.fromisoformat(dispatch["scheduled_start"]) - origin
+        assert elapsed > timedelta(minutes=6)
+        assert len(dispatch["route_waypoints"]) > 1
+
+    def test_future_window_keeps_direct_route(self):
+        now = datetime(2026, 6, 18, 8, 0, tzinfo=timezone.utc)
+        window = [
+            f"{(now + timedelta(hours=2)).isoformat()}/"
+            f"{(now + timedelta(hours=3)).isoformat()}"
+        ]
+
+        origin, dispatch = self._solve(window)
+
+        elapsed = datetime.fromisoformat(dispatch["scheduled_start"]) - origin
+        assert elapsed < timedelta(minutes=6)
+        assert len(dispatch["route_waypoints"]) == 1
+
+
+class TestRouteRestrictionPrimitives:
+    """Direct unit coverage for the time-dependent route-restriction helpers."""
+
+    _POLY = "[[-0.01, 0.01], [-0.01, 0.03], [0.01, 0.03], [0.01, 0.01]]"
+
+    @staticmethod
+    def _vehicle():
+        from fl_op.solver.types import PrimeMoverRow, RelatedRow
+
+        return {
+            "prime": PrimeMoverRow.from_canonical_dict({"asset_id": "v0"}),
+            "related": RelatedRow.from_canonical_dict(
+                {"asset_id": "i0", "compatible_operations": ["SPRAYING"]}
+            ),
+        }
+
+    def _zone(self, windows: str = "[]", ops: str = "['SPRAYING']") -> SiteRow:
+        return _site(
+            fid="zone", restricted_ops=ops, windows=windows, polygon=self._POLY
+        )
+
+    def test_windowless_restriction_is_always_active(self):
+        from fl_op.solver.routing_geography import route_restrictions_for_vehicle
+
+        restrictions = route_restrictions_for_vehicle(
+            [self._zone()], self._vehicle(), int(_now().timestamp())
+        )
+
+        assert len(restrictions) == 1
+        assert restrictions[0].windows == ()
+
+    def test_incompatible_operation_is_skipped(self):
+        from fl_op.solver.routing_geography import route_restrictions_for_vehicle
+
+        restrictions = route_restrictions_for_vehicle(
+            [self._zone(ops="['SEEDING']")], self._vehicle(), int(_now().timestamp())
+        )
+
+        assert restrictions == []
+
+    def test_window_entirely_in_past_is_inactive(self):
+        from fl_op.solver.routing_geography import route_restrictions_for_vehicle
+
+        now = _now()
+        window = str(
+            [f"{_iso(now - timedelta(hours=3))}/{_iso(now - timedelta(hours=1))}"]
+        )
+
+        restrictions = route_restrictions_for_vehicle(
+            [self._zone(windows=window)], self._vehicle(), int(now.timestamp())
+        )
+
+        assert restrictions == []
+
+    def test_active_polygons_track_arc_occupancy_window(self):
+        from fl_op.solver.routing_geography import (
+            active_polygons,
+            route_restrictions_for_vehicle,
+        )
+
+        now = _now()
+        now_epoch = int(now.timestamp())
+        window = str(
+            [f"{_iso(now - timedelta(minutes=5))}/{_iso(now + timedelta(hours=2))}"]
+        )
+        restrictions = route_restrictions_for_vehicle(
+            [self._zone(windows=window)], self._vehicle(), now_epoch
+        )
+
+        assert len(restrictions) == 1
+        # An arc traversed inside the window sees the polygon; one after it does not.
+        assert (
+            len(active_polygons(restrictions, now_epoch + 3600, now_epoch + 3700)) == 1
+        )
+        assert (
+            active_polygons(
+                restrictions, now_epoch + 5 * 3600, now_epoch + 5 * 3600 + 100
+            )
+            == []
+        )
+
+    def test_active_polygons_include_unconditional_and_overlapping(self):
+        from fl_op.solver.routing_geography import RouteRestriction, active_polygons
+
+        always = RouteRestriction([(0.0, 0.0), (0.0, 1.0), (1.0, 1.0)], ())
+        timed = RouteRestriction(
+            [(2.0, 2.0), (2.0, 3.0), (3.0, 3.0)], ((1000, 2000),)
+        )
+
+        # Within the timed window both polygons are active.
+        assert active_polygons([always, timed], 1500, 1800) == [
+            always.polygon,
+            timed.polygon,
+        ]
+        # Past the timed window only the always-active polygon remains.
+        assert active_polygons([always, timed], 3000, 3500) == [always.polygon]
+
+    def test_horizon_segments_split_on_window_edges(self):
+        from fl_op.solver.routing_geography import (
+            RouteRestriction,
+            horizon_restriction_segments,
+        )
+
+        poly = [(0.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
+        now = 1_000_000
+        timed = RouteRestriction(poly, ((now + 2000, now + 5000),))
+
+        segments = horizon_restriction_segments([timed], now, 10_000)
+
+        bounds = [
+            (s.start_offset_s, s.end_offset_s, len(s.polygons)) for s in segments
+        ]
+        # Inactive -> active (window) -> inactive, cut at the window edges.
+        assert bounds == [(0, 2000, 0), (2000, 5001, 1), (5001, 10000, 0)]
+
+    def test_horizon_segments_single_without_windows(self):
+        from fl_op.solver.routing_geography import (
+            RouteRestriction,
+            horizon_restriction_segments,
+        )
+
+        always = RouteRestriction([(0.0, 0.0), (0.0, 1.0), (1.0, 1.0)], ())
+
+        segments = horizon_restriction_segments([always], 1_000_000, 10_000)
+
+        assert len(segments) == 1
+        assert len(segments[0].polygons) == 1
+
+
+class TestTimeExpandedRouting:
+    """The opt-in single-pass time-expanded path matches the refinement path."""
+
+    def test_active_window_detours_in_single_pass(self, monkeypatch):
+        monkeypatch.setattr(constants, "ROUTE_TIME_EXPANDED_ENABLED", True)
+        now = datetime(2026, 6, 18, 8, 0, tzinfo=timezone.utc)
+        window = [
+            f"{(now - timedelta(minutes=5)).isoformat()}/"
+            f"{(now + timedelta(hours=2)).isoformat()}"
+        ]
+
+        origin, dispatch = TestTimeDependentRouteRestriction._solve(window)
+
+        elapsed = datetime.fromisoformat(dispatch["scheduled_start"]) - origin
+        assert elapsed > timedelta(minutes=6)
+        assert len(dispatch["route_waypoints"]) > 1
+
+    def test_future_window_keeps_direct_route_single_pass(self, monkeypatch):
+        monkeypatch.setattr(constants, "ROUTE_TIME_EXPANDED_ENABLED", True)
+        now = datetime(2026, 6, 18, 8, 0, tzinfo=timezone.utc)
+        window = [
+            f"{(now + timedelta(hours=2)).isoformat()}/"
+            f"{(now + timedelta(hours=3)).isoformat()}"
+        ]
+
+        origin, dispatch = TestTimeDependentRouteRestriction._solve(window)
+
+        elapsed = datetime.fromisoformat(dispatch["scheduled_start"]) - origin
+        assert elapsed < timedelta(minutes=6)
+        assert len(dispatch["route_waypoints"]) == 1
+
+    def test_disabled_flag_uses_refinement_path(self):
+        # With the flag off (default) the time-expanded entry declines, so the
+        # refinement path produces the schedule; the detour result is identical.
+        assert constants.ROUTE_TIME_EXPANDED_ENABLED is False
+        now = datetime(2026, 6, 18, 8, 0, tzinfo=timezone.utc)
+        window = [
+            f"{(now - timedelta(minutes=5)).isoformat()}/"
+            f"{(now + timedelta(hours=2)).isoformat()}"
+        ]
+
+        origin, dispatch = TestTimeDependentRouteRestriction._solve(window)
+
+        elapsed = datetime.fromisoformat(dispatch["scheduled_start"]) - origin
+        assert elapsed > timedelta(minutes=6)
+        assert len(dispatch["route_waypoints"]) > 1

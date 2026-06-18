@@ -134,9 +134,16 @@ optimization profile; policy merging across domains is not automatic.
 Deliberately not yet modeled (tracked in
 [future-improvements.md](../future-improvements.md)):
 
-- Reload stops are still a bounded construction. Geometric restricted areas are
-  implemented as intersection filters, but partial-overlap severity and
-  routing around a restricted sub-area are not modelled.
+- Reload stops remain a bounded construction. Routing topology and geography are
+  otherwise fully modeled: geometric restricted areas clip work-area severity,
+  operation-specific arcs (fallback legs and declared `routeGeometry` links)
+  route around active polygon interiors, and polygons activate per arc from their
+  `restrictionWindows` (a post-solve refinement loop by default, plus an opt-in
+  single-pass time-expanded model for single-vehicle clusters). Two boundaries
+  are intentional, not tracked work: promoting the time-expanded model to full
+  feature parity as the default, and map-matching a declared link polyline's
+  interior against a real road network (its endpoints, length, and
+  self-consistency are validated; its interior path is trusted).
 - Domain packs do not yet provide unit-conversion vocabularies or productivity
   modifiers beyond flat work-rate maps.
 - Shared-fleet projection is supported, but composite multi-domain policy

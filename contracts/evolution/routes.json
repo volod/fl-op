@@ -16,6 +16,11 @@
       "physicalType": "string",
       "required": false
     },
+    "route_geometry": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": false
+    },
     "route_id": {
       "logicalType": "string",
       "physicalType": "string",
@@ -34,7 +39,7 @@
   },
   "fingerprints": {
     "avroParsingFingerprint": "b0522d90dcdbc547fea9c92cb3a19ee202ced5964f7fc1a8676a3c6b600232c8",
-    "optimizationMetadataHash": "71034d72b7a2c8b4ec00ea37d957350e05422cbc376ad517ae9e30740f02abe9"
+    "optimizationMetadataHash": "90864d20fdd39323611944bbf77525247a21467324e278858e9117c7830d0ec2"
   },
   "history": [
     {
@@ -224,16 +229,141 @@
         "mappingVersion": "1.0.0"
       },
       "version": "1.0.0"
+    },
+    {
+      "contractId": "routes",
+      "fields": {
+        "distance_km": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "from_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "road_class": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": false
+        },
+        "route_geometry": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "route_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "to_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "travel_time_s": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "avroParsingFingerprint": "b0522d90dcdbc547fea9c92cb3a19ee202ced5964f7fc1a8676a3c6b600232c8",
+        "optimizationMetadataHash": "90864d20fdd39323611944bbf77525247a21467324e278858e9117c7830d0ec2"
+      },
+      "odcsId": "routes",
+      "registryArtifact": {
+        "artifactId": "agricultural/routes",
+        "artifactRef": "agricultural/routes@odcs:1.1.0+mapping:1.1.0",
+        "contractVersion": "1.1.0",
+        "domain": "agricultural",
+        "localId": "routes",
+        "mappingVersion": "1.1.0",
+        "odcsId": "routes",
+        "qualifiedId": "agricultural/routes",
+        "registryId": "routes"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "travel-link",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "roadNetwork",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "routes"
+          },
+          "field:distance_km": {
+            "binding": "travelLink.distanceKm",
+            "canonicalUnit": "km",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "length",
+            "semanticTerm": "urn:xopt:travel:distance"
+          },
+          "field:from_id": {
+            "binding": "travelLink.fromLocationRef",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "routing"
+            ],
+            "semanticTerm": "urn:xopt:relationship:from-location"
+          },
+          "field:route_geometry": {
+            "binding": "travelLink.routeGeometry",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "routing",
+              "restriction"
+            ],
+            "quantityKind": "geometry",
+            "semanticTerm": "urn:xopt:attribute:route-geometry"
+          },
+          "field:route_id": {
+            "binding": "travelLink.linkId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:travel-link-id"
+          },
+          "field:to_id": {
+            "binding": "travelLink.toLocationRef",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "routing"
+            ],
+            "semanticTerm": "urn:xopt:relationship:to-location"
+          },
+          "field:travel_time_s": {
+            "binding": "travelLink.travelTimeS",
+            "canonicalUnit": "s",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "routing"
+            ],
+            "quantityKind": "duration",
+            "semanticTerm": "urn:xopt:travel:travel-time"
+          }
+        },
+        "mappingVersion": "1.1.0"
+      },
+      "version": "1.1.0"
     }
   ],
   "odcsId": "routes",
   "registryArtifact": {
     "artifactId": "agricultural/routes",
-    "artifactRef": "agricultural/routes@odcs:1.0.0+mapping:1.0.0",
-    "contractVersion": "1.0.0",
+    "artifactRef": "agricultural/routes@odcs:1.1.0+mapping:1.1.0",
+    "contractVersion": "1.1.0",
     "domain": "agricultural",
     "localId": "routes",
-    "mappingVersion": "1.0.0",
+    "mappingVersion": "1.1.0",
     "odcsId": "routes",
     "qualifiedId": "agricultural/routes",
     "registryId": "routes"
@@ -268,6 +398,16 @@
         ],
         "semanticTerm": "urn:xopt:relationship:from-location"
       },
+      "field:route_geometry": {
+        "binding": "travelLink.routeGeometry",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "routing",
+          "restriction"
+        ],
+        "quantityKind": "geometry",
+        "semanticTerm": "urn:xopt:attribute:route-geometry"
+      },
       "field:route_id": {
         "binding": "travelLink.linkId",
         "planningUse": [
@@ -294,7 +434,7 @@
         "semanticTerm": "urn:xopt:travel:travel-time"
       }
     },
-    "mappingVersion": "1.0.0"
+    "mappingVersion": "1.1.0"
   },
-  "version": "1.0.0"
+  "version": "1.1.0"
 }

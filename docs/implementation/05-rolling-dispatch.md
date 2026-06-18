@@ -49,10 +49,12 @@ scalar: either an explicit `covered_polygon` ([lat, lon] vertices) or a
 (buffered in a longitude space scaled by `cos(latitude)` so the swath is
 metrically round). Passes accumulate per task and union geometrically, so two
 passes over the same strip are not double-counted; the overlap-corrected covered
-geodesic area over the task's original work area gives the completed share, which
-shrinks every work column from its original value (cumulative, never re-shrinking
-an already-reduced value). Reaching `COVERAGE_COMPLETE_FRACTION` (default 0.99)
-finishes the task. Each pass appends one record (covered/remaining area, covered
+geodesic area gives the completed share, which shrinks every work column from its
+original value (cumulative, never re-shrinking an already-reduced value). The
+coverage reference is the task's work-area polygon (`task.workAreaGeometry`) by
+its true geodesic area when the task carries one, falling back to the scalar work
+area otherwise, so the covered share reflects the actual ground worked. Reaching
+`COVERAGE_COMPLETE_FRACTION` (default 0.99) finishes the task. Each pass appends one record (covered/remaining area, covered
 fraction, pass count) to `$DATA_DIR/quality/coverage-passes.jsonl`, and
 `coverage_stats` aggregates the rolling spatial-progress summary logged after
 stream runs.

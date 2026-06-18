@@ -12,12 +12,12 @@ from fl_op.canonical.common import TimeInterval
 
 
 class Location(BaseModel):
-    """A point of interest: field-entry point, depot, or loading station."""
+    """A point of interest: work site, depot, supplier, or loading station."""
 
     model_config = ConfigDict(frozen=True)
 
     location_id: str
-    location_type: str  # field | depot | loading-station
+    location_type: str  # field | depot | supplier | loading-station
     lat: float
     lon: float
     name: str = ""

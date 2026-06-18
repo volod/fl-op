@@ -20,6 +20,7 @@ Coordinate convention: callers pass ``(lat, lon)`` in degrees. Shapely geometry
 uses ``(x=lon, y=lat)`` so emitted features are GeoJSON/map friendly.
 """
 
+import heapq
 import math
 
 import numpy as np
@@ -160,6 +161,122 @@ def segment_min_distance_m(
     return float(geom(seg_a).distance(geom(seg_b)))
 
 
+def shortest_path_around_polygons(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    restricted_polygons: list[list[tuple[float, float]]],
+) -> list[tuple[float, float]]:
+    """Shortest visible path from ``start`` to ``end`` around polygon interiors.
+
+    Points and polygon vertices use the public ``(lat, lon)`` convention. The
+    visibility graph contains the endpoints and every obstacle vertex; an edge
+    is admitted only when its interior does not enter a restricted polygon.
+    Geodesic distance weights the graph, while Shapely performs the visibility
+    predicates in map-order coordinates. Polygon boundaries are traversable,
+    which lets a shortest path follow obstacle edges without entering them.
+
+    An empty result means an endpoint lies inside a restricted polygon or no
+    visible path exists. Callers can then treat the route as infeasible or use a
+    domain-specific fallback.
+    """
+    polygons: list[Polygon] = []
+    for ring in restricted_polygons:
+        if len(ring) < 3:
+            continue
+        polygon = Polygon([(lon, lat) for lat, lon in ring])
+        repaired = polygon if polygon.is_valid else polygon.buffer(0)
+        candidates = [repaired] if isinstance(repaired, Polygon) else [
+            geom for geom in repaired.geoms if isinstance(geom, Polygon)
+        ]
+        polygons.extend(
+            candidate
+            for candidate in candidates
+            if not candidate.is_empty and candidate.area > 0
+        )
+    if not polygons or start == end:
+        return [start, end]
+
+    start_point = Point(start[1], start[0])
+    end_point = Point(end[1], end[0])
+    if any(poly.contains(start_point) or poly.contains(end_point) for poly in polygons):
+        return []
+
+    direct = LineString([(start[1], start[0]), (end[1], end[0])])
+    if all(direct.relate_pattern(poly, "F********") for poly in polygons):
+        return [start, end]
+
+    points = [start, end]
+    seen = {start, end}
+    for polygon in polygons:
+        for lon, lat in list(polygon.exterior.coords)[:-1]:
+            point = (float(lat), float(lon))
+            if point not in seen:
+                seen.add(point)
+                points.append(point)
+
+    adjacency: list[list[tuple[int, float]]] = [[] for _ in points]
+    for left in range(len(points)):
+        for right in range(left + 1, len(points)):
+            segment = LineString(
+                [
+                    (points[left][1], points[left][0]),
+                    (points[right][1], points[right][0]),
+                ]
+            )
+            if not all(segment.relate_pattern(poly, "F********") for poly in polygons):
+                continue
+            distance = haversine_km(*points[left], *points[right])
+            adjacency[left].append((right, distance))
+            adjacency[right].append((left, distance))
+
+    best = [math.inf] * len(points)
+    predecessor = [-1] * len(points)
+    best[0] = 0.0
+    queue: list[tuple[float, int]] = [(0.0, 0)]
+    while queue:
+        distance, node = heapq.heappop(queue)
+        if distance > best[node]:
+            continue
+        if node == 1:
+            break
+        for neighbor, edge_distance in adjacency[node]:
+            candidate = distance + edge_distance
+            if candidate < best[neighbor]:
+                best[neighbor] = candidate
+                predecessor[neighbor] = node
+                heapq.heappush(queue, (candidate, neighbor))
+
+    if not math.isfinite(best[1]):
+        return []
+    path_indices = [1]
+    while path_indices[-1] != 0:
+        path_indices.append(predecessor[path_indices[-1]])
+    return [points[index] for index in reversed(path_indices)]
+
+
+def path_distance_km(path: list[tuple[float, float]]) -> float:
+    """Geodesic length of a ``(lat, lon)`` polyline in kilometres."""
+    return sum(haversine_km(*start, *end) for start, end in zip(path, path[1:]))
+
+
+def reroute_path_around_polygons(
+    path: list[tuple[float, float]],
+    restricted_polygons: list[list[tuple[float, float]]],
+) -> list[tuple[float, float]]:
+    """Replace each blocked polyline segment with its obstacle-avoiding path."""
+    if len(path) < 2 or not restricted_polygons:
+        return list(path)
+    rerouted = [path[0]]
+    for start, end in zip(path, path[1:]):
+        segment_path = shortest_path_around_polygons(
+            start, end, restricted_polygons
+        )
+        if not segment_path:
+            return []
+        rerouted.extend(segment_path[1:])
+    return rerouted
+
+
 def unrestricted_area_fraction(
     site_polygon: list[tuple[float, float]],
     restricted_polygons: list[list[tuple[float, float]]],
@@ -243,6 +360,40 @@ def polygon_rings_area_km2(rings: list[list[tuple[float, float]]]) -> float:
     if not polys:
         return 0.0
     area_m2, _ = _GEOD_SPHERE.geometry_area_perimeter(unary_union(polys))
+    return abs(float(area_m2)) / 1.0e6
+
+
+def polygon_difference_area_km2(
+    base_ring: list[tuple[float, float]],
+    subtract_rings: list[list[tuple[float, float]]],
+) -> float:
+    """Geodesic area (km2) of ``base_ring`` minus the union of ``subtract_rings``.
+
+    Rings are ``(x=lon, y=lat)`` lists (as ``parse_polygon`` emits). Used to size
+    the residual workable area of a task -- its work-area polygon with restricted
+    and already-covered regions removed. Returns 0.0 when the base has no positive
+    area or the subtracted regions cover it entirely.
+    """
+    if len(base_ring) < 3:
+        return 0.0
+    base = Polygon(base_ring)
+    if not base.is_valid:
+        base = base.buffer(0)
+    if base.is_empty or base.area <= 0:
+        return 0.0
+    subs = []
+    for ring in subtract_rings:
+        if len(ring) < 3:
+            continue
+        poly = Polygon(ring)
+        if not poly.is_valid:
+            poly = poly.buffer(0)
+        if not poly.is_empty:
+            subs.append(poly)
+    remainder = base.difference(unary_union(subs)) if subs else base
+    if remainder.is_empty:
+        return 0.0
+    area_m2, _ = _GEOD_SPHERE.geometry_area_perimeter(remainder)
     return abs(float(area_m2)) / 1.0e6
 
 

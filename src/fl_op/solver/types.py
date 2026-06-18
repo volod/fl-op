@@ -161,6 +161,9 @@ class PrimeMoverRow(_SolverRow):
     energy_unit: str = "L"
     energy_capacity: float = 0.0
     energy_consumption_rate: float = 0.0
+    # Per-vehicle machine-wear/operating rate (EUR per operating hour); 0 falls
+    # back to the fleet machine-wear rate.
+    machine_wear_eur_per_h: float = 0.0
     travel_speed: float = TRAVEL_SPEED_DEFAULT_KMH
     # Total mass carried on one route; 0 means the load is unconstrained.
     load_capacity: float = 0.0
@@ -199,6 +202,9 @@ class OperatorRow(_SolverRow):
     home_depot_ref: str = ""
     shift_start: str = ""
     shift_end: str = ""
+    # Per-operator wage band (EUR per operating hour); 0 falls back to the fleet
+    # labour rate.
+    wage_eur_per_h: float = 0.0
     certified_operations: Any = dataclasses.field(default_factory=list)
 
 
@@ -207,6 +213,7 @@ class SiteRow(_SolverRow):
     """A work site (field) where tasks are executed."""
 
     location_id: str
+    location_type: str = "field"
     name: str = ""
     lat: float = 0.0
     lon: float = 0.0
@@ -258,6 +265,10 @@ class TravelLinkRow(_SolverRow):
     travel_time_s: float = 0.0
     distance_km: float = 0.0
     network_mode: str = "any"
+    route_geometry: Any = dataclasses.field(default_factory=list)
+    # Directed toll charged to traverse this link (EUR); 0 means untolled. Only
+    # genuinely tolled segments carry a positive value.
+    toll_eur: float = 0.0
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -282,6 +293,12 @@ class TaskRow(_SolverRow):
     location_ref: str = ""
     operation_type: str = ""
     area: float = 0.0
+    # Work-area polygon ([lat, lon] vertices) of the specific region to work; a
+    # sub-region of the site. Empty falls back to the whole site polygon.
+    work_area_geometry: Any = dataclasses.field(default_factory=list)
+    # Union of completed coverage passes ([lat, lon] vertices), subtracted from
+    # the work area (with restricted areas) to leave the uncovered remainder.
+    covered_geometry: Any = dataclasses.field(default_factory=list)
     # Generic work demand; preferred over area for duration estimation.
     work_quantity: float = 0.0
     work_quantity_unit: str = ""

@@ -66,9 +66,11 @@ Compare your needs against the **known ontology gaps** (the engine deliberately
 does not yet model these; tracked in
 [../future-improvements.md](../future-improvements.md)):
 
-- Routing the path *around* a restricted sub-polygon (restrictions clip the work
-  area by the unrestricted fraction instead).
-- Fully-optional reload insertions (one reload per vehicle stays mandatory).
+- Map-matched network geometry. Time-restricted no-go zones and declared
+  network-link geometry are fully handled (polygons activate per arc from their
+  `restrictionWindows`; declared `routeGeometry` is validated for endpoints,
+  length, and self-consistency and rerouted around obstacles), but a declared
+  polyline's interior is not map-matched against a real road network.
 - Standalone `commitment` entities (today deadline/penalty are consumed
   task-embedded).
 - Composite multi-domain policy *merging* (shared-fleet projection works, but the

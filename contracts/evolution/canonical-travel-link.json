@@ -21,10 +21,20 @@
       "physicalType": "",
       "required": false
     },
+    "routeGeometry": {
+      "logicalType": "array",
+      "physicalType": "",
+      "required": false
+    },
     "toLocationRef": {
       "logicalType": "string",
       "physicalType": "",
       "required": true
+    },
+    "tollEur": {
+      "logicalType": "number",
+      "physicalType": "",
+      "required": false
     },
     "travelTimeS": {
       "logicalType": "number",
@@ -101,8 +111,97 @@
       },
       "odcsId": "canonical-travel-link",
       "version": "0.2.0"
+    },
+    {
+      "contractId": "canonical-travel-link",
+      "fields": {
+        "distanceKm": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "fromLocationRef": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "linkId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "networkMode": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "routeGeometry": {
+          "logicalType": "array",
+          "physicalType": "",
+          "required": false
+        },
+        "toLocationRef": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "travelTimeS": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": true
+        }
+      },
+      "odcsId": "canonical-travel-link",
+      "version": "0.3.0"
+    },
+    {
+      "contractId": "canonical-travel-link",
+      "fields": {
+        "distanceKm": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "fromLocationRef": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "linkId": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "networkMode": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": false
+        },
+        "routeGeometry": {
+          "logicalType": "array",
+          "physicalType": "",
+          "required": false
+        },
+        "toLocationRef": {
+          "logicalType": "string",
+          "physicalType": "",
+          "required": true
+        },
+        "tollEur": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": false
+        },
+        "travelTimeS": {
+          "logicalType": "number",
+          "physicalType": "",
+          "required": true
+        }
+      },
+      "odcsId": "canonical-travel-link",
+      "version": "0.4.0"
     }
   ],
   "odcsId": "canonical-travel-link",
-  "version": "0.2.0"
+  "version": "0.4.0"
 }

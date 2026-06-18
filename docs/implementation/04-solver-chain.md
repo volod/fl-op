@@ -28,10 +28,13 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    (`RESTRICTED_ZONE`, `solver/restrictions.py`) -- and, transitively,
    dependents of any excluded predecessor
    (`PREDECESSOR_UNSERVED`). Fuel, electricity, material, driver-labour,
-   machine-wear, and toll prices are resolved from the snapshot's cost-rate
-   entities (`solver/cost_rates.py`), falling back to the engine cost constants
-   for unpriced resources (the operating rates -- labour, wear, toll -- fall
-   back to zero, so they stay inert unless the data prices them).
+   machine-wear, toll, and per-visit `service-fee` prices are resolved from the
+   snapshot's cost-rate entities (`solver/cost_rates.py`), falling back to the
+   engine cost constants for unpriced resources (the operating rates -- labour,
+   wear, toll, service fee -- fall back to zero, so they stay inert unless the
+   data prices them). Labour and machine wear additionally resolve **per asset**:
+   a prime mover's `machineWearEurPerH` and an operator's `wageEurPerH` override
+   the fleet rate, and tolls resolve **per travel link** from `tollEur`.
    Geometric restrictions are a pre-solve filter: a task's site polygon
    (or centroid when the site has no polygon) is tested against other
    locations whose polygon declares the task's operation as prohibited. A
@@ -39,10 +42,19 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    (and area-like work quantity) and its revenue scaled to the unrestricted
    fraction of the site polygon (`core/geometry.unrestricted_area_fraction` via
    shapely), so only the genuinely off-limits part of a field is removed and the
-   objective credits only the work that can actually be done. The task is
-   dropped only when the unrestricted fraction falls below
-   `RESTRICTION_MIN_WORKABLE_AREA_FRACTION` (effectively fully covered) or the
-   site is a point lying inside a restricted area.
+   objective credits only the work that can actually be done. When the task
+   carries its own work-area geometry (`task.workAreaGeometry`, falling back to
+   the site polygon) the clip is geodesic and operates on the *uncovered
+   remainder*: already-covered passes (`task.coveredGeometry`, fed by spatial
+   execution feedback) are subtracted from the work area first, so restriction
+   severity is computed on the work that is actually left and the task is sized
+   to the residual `work minus covered minus restricted`
+   (`_residual_clip_fractions` over `core/geometry.polygon_difference_area_km2`).
+   The task is dropped only when the unrestricted fraction of the uncovered
+   remainder falls below `RESTRICTION_MIN_WORKABLE_AREA_FRACTION` (effectively
+   fully covered) or the site is a point lying inside a restricted area. This
+   geometry clip runs in the shared chain, so periodic (batch) planning consumes
+   prior coverage carried on the task exactly as the rolling re-solve does.
 2. Build a prime-mover / related-equipment compatibility matrix from power
    capabilities (`solver/feasibility.py`). Matrices are cached by dataset
    hash (a content hash of the power capabilities and margin), so a repeated
@@ -152,6 +164,35 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    `TRAVEL_NETWORK_MAX_COMPOSE_NODES`) and is indexed by `networkMode`
    (`road`, `air`, or `any`), with a reverse-direction and haversine fallback
    for pairs without any network path (`solver/travel_time.py`). That fallback
+   is obstacle-aware: for each bundle, operation-compatible restricted polygons
+   feed a visibility graph over the arc endpoints and polygon vertices; Dijkstra
+   chooses the shortest geodesic path that never enters a polygon interior
+   (`solver/routing_geography.py`, `core/geometry.py`), and its intermediate
+   vertices are published as route waypoints. A declared network link carrying
+   `travelLink.routeGeometry` is treated the same way: at ingest the polyline is
+   de-duplicated (no zero-length segments) and dropped if its traced geodesic
+   length exceeds the link's declared distance by more than
+   `ROUTE_GEOMETRY_MAX_LENGTH_RATIO` (`build_travel_lookup`), and at routing time
+   it is validated at its endpoints (each within
+   `ROUTE_GEOMETRY_ENDPOINT_TOLERANCE_KM` of the arc's coordinates) and rerouted
+   around any blocking polygon; geometry whose ends diverge from the arc is
+   logged and ignored as not topology-aware, and the straight network arc is
+   rerouted instead. Restricted polygons activate by
+   traversal time: each polygon's `restrictionWindows` are clamped to the
+   planning horizon, the initial per-vehicle matrix detours only the
+   always-active (window-less) polygons, then a post-solve refinement loop reads
+   each solved arc's actual occupancy interval, activates every window-bounded
+   polygon it overlaps (`active_polygons`), recomputes those arcs, and re-solves
+   -- bounded by `ROUTE_RESTRICTION_MAX_REFINEMENTS` with a conservative
+   all-window final pass that guarantees termination. An opt-in single-pass
+   alternative (`ROUTE_TIME_EXPANDED_ENABLED`, off by default,
+   `solver/cluster/time_expanded.py`) instead partitions the horizon into
+   stable-restriction segments (`horizon_restriction_segments`) and replicates
+   each task node per segment, binding every copy's Time-dimension cumul to its
+   segment so one solve prices each arc by the polygons active in its departure
+   segment -- no re-solve iterations. It currently handles the single-vehicle,
+   no-load subset and falls back to the refinement loop for any richer cluster.
+   The fallback
    leg duration, like every distance in the engine, routes through the
    centralized `core/geometry.py` module: a `pyproj` geodesic engine configured
    as a sphere of mean Earth radius reproduces the legacy haversine results to
@@ -176,13 +217,23 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    the leg in the same objective currency as the drop penalties (1 EUR = 600
    penalty seconds): travel energy cost (consumption rate x the resolved
    resource price), an operating surcharge for driver labour and machine wear
-   over travel plus on-task service hours, and a per-kilometre toll over the
-   leg distance. The operating and toll rates default to zero, so without
+   over travel plus on-task service hours, a toll, and a fixed per-visit service
+   fee charged on every arc into a task node (so the serve-vs-drop trade-off
+   shifts independent of service duration). The operating rate is resolved
+   **per asset**: machine wear from the prime mover's `machineWearEurPerH` and
+   the wage from the cluster operator's `wageEurPerH`, each falling back to the
+   fleet `machine-wear`/`labor` cost-rate. Tolls are priced per directed travel
+   link: where a link exists between two nodes the leg pays that link's `tollEur`
+   (so only genuinely tolled segments charge) and distance comes from the link's
+   declared `distanceKm`; off-network legs fall back to the fleet per-kilometre
+   toll rate over the geodesic distance (`solver/routing_model.py:build_vehicle_cost_matrices`).
+   The operating, toll, and service-fee rates default to zero, so without
    cost-rate data the arc cost collapses to the energy-only term; when priced,
-   they let driver time, wear, and tolls change the choice (an idle-fuel-cheap
-   but slow bundle can lose to a faster one once labour is priced). An
-   energy-efficient machine still wins time-equal legs, and dropping an order is
-   weighed against the money cost of serving it. Time mode prices arcs as
+   they let driver time, wear, tolls, and per-visit fees change the choice (an
+   idle-fuel-cheap but slow bundle can lose to a faster one once labour is
+   priced, and a cheaper-to-run machine or operator wins on a time-equal route).
+   An energy-efficient machine still wins time-equal legs, and dropping an order
+   is weighed against the money cost of serving it. Time mode prices arcs as
    travel plus service seconds and adds soft cumulative-time costs on task
    nodes, so served tasks are pulled earlier without changing the hard
    deadline/window/drop-disjunction mechanics. Those completion-time costs are
@@ -239,11 +290,14 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    offers each routing vehicle enough reload stops to clear the cluster's
    heaviest single-material demand in successive fills
    (`ceil(total / smallest matching compartment) - 1`, capped by
-   `DEPOT_RELOAD_MAX_TRIPS_PER_VEHICLE`); the first stop per vehicle is
-   mandatory (it sits at the depot, costs only its handling time, and keeps a
-   refill a single cheapest-insertion move) while the additional multi-trip
-   stops carry a zero-penalty disjunction, so a route reloads only as often as
-   its demand requires. Loads are per-material capacity dimensions: a
+   `DEPOT_RELOAD_MAX_TRIPS_PER_VEHICLE`). Every reload carries a zero-penalty
+   disjunction. The warm-start builder now seeds every compatible cluster task,
+   retains the allocation-level greedy vehicle preference, tracks each
+   material compartment, and inserts a reload immediately before a task that
+   would overflow it. This coupled reload/task seed removes the former
+   mandatory first-reload anchor, so a route with one fill makes no reload visit
+   and heavier routes reload only as often as their demand requires. Loads are
+   per-material capacity dimensions: a
    task's `load-material` charges the vehicle's matching compartment
    (`load-capacities`), falling back to the aggregate `load-capacity`
    (vehicles declaring neither are unconstrained). The drone-logistics pack
@@ -262,9 +316,10 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    declaring `pickup-location` becomes a paired pickup-and-delivery: same
    vehicle, pickup before the task, served or dropped together, with the
    load on board only between the pair. The pickup location resolves against
-   every known location (sites plus depots/hubs), so a pickup at a hub outside
-   the cluster's site table lands at the hub's coordinates; a ref absent from
-   both tables logs a warning and falls back to the depot. All four packs
+   every known location (work sites, canonical `supplier` locations, and
+   depots/hubs), so a pickup at a supplier or hub outside the task-site subset
+   lands at that location's coordinates; an absent ref logs a warning and falls
+   back to the depot. All four packs
    exercise pickup-and-delivery: drone deliveries pair a hub pickup, the
    agricultural pack collects material at the field's nearest yard, the
    construction pack collects equipment at the nearest yard, and the roadside
@@ -286,15 +341,16 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
 9. Aggregate dispatch packages, canonical reason codes, KPIs (priced with the
    resolved cost rates), and reports. Each dispatch package's energy estimate
    covers the operation plus the inbound travel leg, carries explicit resource
-   type and unit fields, reports the per-leg driver labour, machine wear, and
-   toll costs (the toll cost and the inbound distance it is priced from are
-   non-zero only when a toll rate is supplied, which is what builds the
-   geodesic distance matrix), and its `estimated_margin_eur` is the order
-   revenue net of energy, material, labour, wear, and tolls at the resolved
+   type and unit fields, reports the per-leg driver labour (at the operator's
+   wage), machine wear (at the vehicle's rate), per-link toll, and the fixed
+   per-visit service fee (these are non-zero only when their rates or tolled
+   links are supplied; toll and distance come from the per-vehicle network-aware
+   cost matrices), and its `estimated_margin_eur` is the order revenue net of
+   energy, material, labour, wear, tolls, and the service fee at the resolved
    prices (`ResourcePrices`), so per-dispatch margins and KPI aggregates (which
    also surface `total_labor_cost_eur`, `total_machine_wear_cost_eur`,
-   `total_toll_cost_eur`, and `total_distance_km`) are priced from the same
-   cost-rate data. A task whose predecessor
+   `total_toll_cost_eur`, `total_service_fee_eur`, and `total_distance_km`) are
+   priced from the same cost-rate data. A task whose predecessor
    went unserved in the solve is withdrawn post-solve
    (`PREDECESSOR_UNSERVED`), so no plan dispatches work whose precondition was
    dropped. Every cluster solve yields a machine-readable telemetry record

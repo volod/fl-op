@@ -76,6 +76,13 @@ class TestConstruction:
         })
         assert row.network_mode == "air"
 
+    def test_travel_link_geometry_projects(self):
+        row = TravelLinkRow.from_canonical_dict({
+            "link_id": "l1",
+            "route_geometry": [[48.5, 32.0], [48.6, 32.1]],
+        })
+        assert row.route_geometry == [[48.5, 32.0], [48.6, 32.1]]
+
 
 class TestDefaultsComeFromConstants:
     def test_prime_mover_defaults(self):

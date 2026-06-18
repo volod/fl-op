@@ -8,7 +8,7 @@ metadata:
   sourceContract: routes
   canonicalEntity: travel-link
   canonicalModelRef: urn:xopt:model:canonical:0.1.0
-  mappingVersion: 1.0.0
+  mappingVersion: 1.1.0
   dataProductRole: roadNetwork
   permittedPlanningUses: [periodic-planning, rolling-dispatch]
 
@@ -40,4 +40,10 @@ fieldMappings:
     canonicalUnit: km
     quantityKind: length
     planningUse: [cost]
+    missingValuePolicy: accept-optional
+  - sourceField: route_geometry
+    binding: travelLink.routeGeometry
+    semanticTerm: urn:xopt:attribute:route-geometry
+    quantityKind: geometry
+    planningUse: [routing, restriction]
     missingValuePolicy: accept-optional

@@ -37,7 +37,8 @@ condition-based monitoring, and governed plan outputs.
 4. [Solver chain](implementation/04-solver-chain.md) - the shared OR-Tools chain:
    enforcement and pre-filters, compatibility matrix, operation filter, depot
    clustering, CP-SAT pre-allocation, greedy warm start, per-cluster routing
-   (cost/time objectives, windows, loads, reloads, pickups, LNS), and aggregation.
+   (cost/time objectives, windows, loads, fully optional capacity-aware reloads,
+   supplier pickups, restricted-polygon detours, LNS), and aggregation.
 5. [Rolling dispatch](implementation/05-rolling-dispatch.md) - binding-driven
    event application, per-pass coverage geometry, idempotency/dedup,
    freeze/carry/re-solve revisions, corrective rescheduling, and watermark-driven

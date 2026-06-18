@@ -8,13 +8,18 @@ overlap-corrected covered area.
 import copy
 import math
 import pathlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from fl_op.core.constants import METERS_PER_DEGREE_LAT
-from fl_op.core.geometry import polygon_rings_area_km2, swept_polygon
-from fl_op.solver.restrictions import parse_polygon
+from fl_op.core.geometry import (
+    polygon_difference_area_km2,
+    polygon_rings_area_km2,
+    swept_polygon,
+)
+from fl_op.solver.restrictions import apply_location_restrictions, parse_polygon
+from fl_op.solver.types import SiteRow, TaskRow
 from fl_op.stream.apply import EventApplicator
 from fl_op.stream.coverage import (
     PAYLOAD_COVERED_PATH,
@@ -23,6 +28,7 @@ from fl_op.stream.coverage import (
     coverage_state,
     has_coverage_payload,
     pass_ring_from_payload,
+    work_area_area_ha,
 )
 from fl_op.stream.source import EVENT_TASK_PROGRESS, ExecutionEvent
 
@@ -289,3 +295,106 @@ def _order_area_ha(sources: dict, oid: str):
             if str(row.get("order_id")) == oid and "area_ha" in row:
                 return float(row["area_ha"])
     return None
+
+
+# ---------------------------------------------------------------------------
+# Geometry-based partial-area clip on the uncovered remainder
+# ---------------------------------------------------------------------------
+
+# [lat, lon] rings of a ~0.1deg square and its left/right halves.
+_WORK = [[0.0, 0.0], [0.0, 0.1], [0.1, 0.1], [0.1, 0.0]]
+_LEFT_HALF = [[0.0, 0.0], [0.0, 0.05], [0.1, 0.05], [0.1, 0.0]]
+_RIGHT_HALF = [[0.0, 0.05], [0.0, 0.1], [0.1, 0.1], [0.1, 0.05]]
+
+
+def _clip_now() -> datetime:
+    return datetime(2026, 6, 18, 8, 0, tzinfo=timezone.utc)
+
+
+def _clip_task(**extra) -> TaskRow:
+    row = {
+        "task_id": "o0", "location_ref": "f0", "operation_type": "SPRAYING",
+        "area": 10.0, "revenue": 1000.0,
+        "deadline": (_clip_now() + timedelta(days=30)).isoformat(),
+    }
+    row.update({k: str(v) if isinstance(v, list) else v for k, v in extra.items()})
+    return TaskRow.from_canonical_dict(row)
+
+
+def _clip_site(**extra) -> SiteRow:
+    row = {"location_id": "f0", "lat": 0.05, "lon": 0.05}
+    row.update({k: str(v) if isinstance(v, list) else v for k, v in extra.items()})
+    return SiteRow.from_canonical_dict(row)
+
+
+class TestPolygonDifferenceArea:
+    def test_subtracting_half_leaves_half(self):
+        work = [(0.0, 0.0), (0.1, 0.0), (0.1, 0.1), (0.0, 0.1)]  # (lon, lat)
+        left = [(0.0, 0.0), (0.05, 0.0), (0.05, 0.1), (0.0, 0.1)]
+        full = polygon_rings_area_km2([work])
+        residual = polygon_difference_area_km2(work, [left])
+        assert abs(residual / full - 0.5) < 0.02
+
+    def test_no_subtraction_returns_full_area(self):
+        work = [(0.0, 0.0), (0.1, 0.0), (0.1, 0.1), (0.0, 0.1)]
+        full = polygon_rings_area_km2([work])
+        assert abs(polygon_difference_area_km2(work, []) - full) < 1e-9
+
+    def test_full_cover_returns_zero(self):
+        work = [(0.0, 0.0), (0.1, 0.0), (0.1, 0.1), (0.0, 0.1)]
+        assert polygon_difference_area_km2(work, [work]) == 0.0
+
+
+class TestGeometryClip:
+    def test_covered_geometry_reduces_area_to_residual(self):
+        kept, infeasible = apply_location_restrictions(
+            [_clip_task(work_area_geometry=_WORK, covered_geometry=_LEFT_HALF)],
+            [_clip_site(polygon=_WORK)],
+            _clip_now(),
+        )
+        assert not infeasible
+        assert abs(kept[0].area - 5.0) < 0.2
+
+    def test_restriction_outside_uncovered_remainder_keeps_task(self):
+        zone = _clip_site(
+            location_id="z", lat=0.05, lon=0.025,
+            polygon=_LEFT_HALF, restricted_operations="['SPRAYING']",
+        )
+        kept, infeasible = apply_location_restrictions(
+            [_clip_task(work_area_geometry=_WORK, covered_geometry=_LEFT_HALF)],
+            [_clip_site(polygon=_WORK), zone],
+            _clip_now(),
+        )
+        assert not infeasible
+        assert abs(kept[0].area - 5.0) < 0.2
+
+    def test_restriction_on_uncovered_remainder_drops_task(self):
+        zone = _clip_site(
+            location_id="z", lat=0.05, lon=0.075,
+            polygon=_RIGHT_HALF, restricted_operations="['SPRAYING']",
+        )
+        kept, infeasible = apply_location_restrictions(
+            [_clip_task(work_area_geometry=_WORK, covered_geometry=_LEFT_HALF)],
+            [_clip_site(polygon=_WORK), zone],
+            _clip_now(),
+        )
+        assert not kept
+        assert infeasible and infeasible[0]["reason_code"] == "RESTRICTED_ZONE"
+
+    def test_no_geometry_keeps_scalar_behaviour(self):
+        kept, infeasible = apply_location_restrictions(
+            [_clip_task()], [_clip_site(polygon=_WORK)], _clip_now()
+        )
+        assert not infeasible
+        assert kept[0].area == 10.0
+
+
+class TestWorkAreaReference:
+    def test_work_area_area_matches_polygon_area(self):
+        work_lonlat = [(0.0, 0.0), (0.1, 0.0), (0.1, 0.1), (0.0, 0.1)]
+        expected_ha = polygon_rings_area_km2([work_lonlat]) * 100.0
+        assert abs(work_area_area_ha(str(_WORK)) - expected_ha) < 1e-6
+
+    def test_empty_geometry_has_no_reference_area(self):
+        assert work_area_area_ha("[]") == 0.0
+        assert work_area_area_ha(None) == 0.0

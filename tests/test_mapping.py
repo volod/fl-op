@@ -4,6 +4,9 @@ import pytest
 
 from fl_op.canonical.enums import QualitySeverity
 from fl_op.mapping import MappingEngine
+from fl_op.mapping.bindings import BindingTable
+from fl_op.mapping.builders import build_location
+from fl_op.mapping.result import MappingResult
 
 
 @pytest.fixture(scope="module")
@@ -82,3 +85,25 @@ def test_unit_conversion_applied(engine: MappingEngine) -> None:
     # Identity path: canonical unit kW, source already kW -> unchanged.
     res = engine.map_dataset("vehicles", [_vehicle_row(rated_power_kw="200")])
     assert res.assets[0].capability_value("urn:xopt:capability:rated-power") == 200.0
+
+
+def test_supplier_location_role_maps_to_canonical_location_type() -> None:
+    table = BindingTable(
+        contract_id="external-suppliers",
+        canonical_entity="location",
+        asset_role="supplier",
+        bindings=[],
+    )
+
+    location = build_location(
+        table,
+        {
+            "locationId": "supplier-1",
+            "lat": 48.25,
+            "lon": 32.75,
+            "_inventory": [],
+        },
+        MappingResult(),
+    )
+
+    assert location.location_type == "supplier"

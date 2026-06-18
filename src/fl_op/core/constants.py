@@ -382,8 +382,12 @@ RATE_TYPE_ELECTRICITY: str = "electricity"
 RATE_TYPE_LABOR: str = "labor"
 # Machine wear / depreciation, priced per operating hour.
 RATE_TYPE_MACHINE_WEAR: str = "machine-wear"
-# Road tolls, priced per kilometre travelled.
+# Road tolls, priced per kilometre travelled (fallback for off-network legs;
+# genuinely tolled segments carry their own per-link toll, see travelLink.tollEur).
 RATE_TYPE_TOLL: str = "toll"
+# Fixed fee charged once per served task (a per-visit cost independent of service
+# duration that shifts the serve-vs-drop trade-off).
+RATE_TYPE_SERVICE_FEE: str = "service-fee"
 
 # Canonical unit of depot material inventory and of the material-reservation
 # quantities derived from it (urn:xopt:inventory:fertilizer is kept in kg).
@@ -411,6 +415,12 @@ MACHINE_WEAR_COST_EUR_PER_H: float = float(
     os.environ.get("MACHINE_WEAR_COST_EUR_PER_H", "0.0")
 )
 TOLL_COST_EUR_PER_KM: float = float(os.environ.get("TOLL_COST_EUR_PER_KM", "0.0"))
+
+# Fixed per-visit service fee fallback (EUR per served task). Zero by default so
+# the term stays inert unless a `service-fee` cost-rate row prices it.
+SERVICE_FEE_EUR_PER_VISIT: float = float(
+    os.environ.get("SERVICE_FEE_EUR_PER_VISIT", "0.0")
+)
 
 # Share of a related-equipment material tank assumed consumed by one task.
 RELATED_MATERIAL_FILL_RATIO: float = 0.8
@@ -833,6 +843,57 @@ HOLD_CAPACITY_HORIZON_S: int = ROLLING_HORIZON_HOURS * 3600
 # Maximum CP-SAT/routing feedback iterations before stopping.
 MAX_ASSIGNMENT_ROUTING_ITERATIONS: int = int(
     os.environ.get("MAX_ASSIGNMENT_ROUTING_ITERATIONS", "3")
+)
+
+# Time-dependent polygon routing uses solve -> inspect actual arc occupancy ->
+# rebuild with newly activated detours. A final all-window pass guarantees
+# termination if route changes consume every refinement attempt.
+ROUTE_RESTRICTION_MAX_REFINEMENTS: int = int(
+    os.environ.get("ROUTE_RESTRICTION_MAX_REFINEMENTS", "3")
+)
+
+# A declared travel-link route polyline is trusted only when its first and last
+# vertices fall within this distance of the arc's actual endpoint coordinates.
+# Beyond it the geometry is treated as not topology-aware for this pair, ignored,
+# and the link falls back to a straight network arc (still obstacle-rerouted).
+ROUTE_GEOMETRY_ENDPOINT_TOLERANCE_KM: float = float(
+    os.environ.get("ROUTE_GEOMETRY_ENDPOINT_TOLERANCE_KM", "0.5")
+)
+
+# A declared route polyline whose traced geodesic length exceeds the link's own
+# declared distance by more than this factor is inconsistent with the link and
+# dropped at ingest (the link keeps its straight network arc). Generous by
+# default so a simplified or precise polyline is never rejected -- only one that
+# wanders far from the route it claims to describe. Validated only when the link
+# carries a positive declared distance.
+ROUTE_GEOMETRY_MAX_LENGTH_RATIO: float = float(
+    os.environ.get("ROUTE_GEOMETRY_MAX_LENGTH_RATIO", "2.0")
+)
+
+# Opt-in single-pass time-expanded restriction routing. When enabled, a cluster
+# in the supported subset (one routing vehicle, no loads/reloads, no pickups, no
+# held windows, no task time windows) replicates its task nodes across the
+# horizon's stable-restriction segments and solves once -- each arc priced by the
+# polygons active during its departure segment -- instead of the iterative
+# post-solve refinement. Off by default; richer clusters keep the refinement
+# path. See solver/cluster/time_expanded.py.
+ROUTE_TIME_EXPANDED_ENABLED: bool = bool(
+    int(os.environ.get("ROUTE_TIME_EXPANDED_ENABLED", "0"))
+)
+
+# Bounds that keep the replicated model small; a cluster exceeding either falls
+# back to the refinement path.
+ROUTE_TIME_EXPANDED_MAX_ORDERS: int = int(
+    os.environ.get("ROUTE_TIME_EXPANDED_MAX_ORDERS", "30")
+)
+ROUTE_TIME_EXPANDED_MAX_SEGMENTS: int = int(
+    os.environ.get("ROUTE_TIME_EXPANDED_MAX_SEGMENTS", "8")
+)
+
+# Drop penalty for an unserved task in the time-expanded model: large enough that
+# any feasible task is served in preference to dropping it.
+ROUTE_TIME_EXPANDED_DROP_PENALTY: int = int(
+    os.environ.get("ROUTE_TIME_EXPANDED_DROP_PENALTY", "1000000000")
 )
 
 # Score penalty applied per assignment changed after the freeze window.

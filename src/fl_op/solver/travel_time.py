@@ -10,6 +10,7 @@ input.
 
 import heapq
 import logging
+import ast
 from collections.abc import Mapping
 from typing import Any, Optional
 
@@ -17,9 +18,10 @@ from fl_op.core.constants import (
     AIR_TRAVEL_CIRCUITY,
     FALLBACK_TRAVEL_SPEED_KMH,
     GROUND_TRAVEL_CIRCUITY,
+    ROUTE_GEOMETRY_MAX_LENGTH_RATIO,
     TRAVEL_NETWORK_MAX_COMPOSE_NODES,
 )
-from fl_op.core.geometry import travel_time_seconds
+from fl_op.core.geometry import path_distance_km, travel_time_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,11 @@ _AREA_LIKE_UNITS = ("", _AREA_UNIT)
 
 # (from_location_ref, to_location_ref) -> travel time in integer seconds.
 TravelPairLookup = dict[tuple[str, str], int]
+TravelPath = list[tuple[float, float]]
+TravelPathLookup = dict[tuple[str, str], TravelPath]
+# Per-direct-link cost measures: (network distance km, directed toll EUR).
+TravelMeasure = tuple[float, float]
+TravelMeasureLookup = dict[tuple[str, str], TravelMeasure]
 
 
 class ModeAwareTravelLookup(dict[tuple[str, str], int]):
@@ -48,12 +55,36 @@ class ModeAwareTravelLookup(dict[tuple[str, str], int]):
         self,
         aggregate: Optional[Mapping[tuple[str, str], int]] = None,
         by_mode: Optional[Mapping[str, Mapping[tuple[str, str], int]]] = None,
+        aggregate_paths: Optional[Mapping[tuple[str, str], TravelPath]] = None,
+        paths_by_mode: Optional[Mapping[str, Mapping[tuple[str, str], TravelPath]]] = None,
+        aggregate_measures: Optional[Mapping[tuple[str, str], TravelMeasure]] = None,
+        measures_by_mode: Optional[Mapping[str, Mapping[tuple[str, str], TravelMeasure]]] = None,
     ) -> None:
         super().__init__(aggregate or {})
         self.by_mode: dict[str, TravelPairLookup] = {
             _normalise_mode(mode): dict(lookup)
             for mode, lookup in (by_mode or {}).items()
         }
+        self.aggregate_paths: TravelPathLookup = {
+            pair: list(path) for pair, path in (aggregate_paths or {}).items()
+        }
+        self.paths_by_mode: dict[str, TravelPathLookup] = {
+            _normalise_mode(mode): {
+                pair: list(path) for pair, path in lookup.items()
+            }
+            for mode, lookup in (paths_by_mode or {}).items()
+        }
+        # Direct-link cost measures (distance km, toll EUR), resolved like paths.
+        self.aggregate_measures: TravelMeasureLookup = dict(aggregate_measures or {})
+        self.measures_by_mode: dict[str, TravelMeasureLookup] = {
+            _normalise_mode(mode): dict(lookup)
+            for mode, lookup in (measures_by_mode or {}).items()
+        }
+        # True when any link declares a positive toll, so the routing model can
+        # skip building per-vehicle toll matrices for an entirely untolled network.
+        self.has_tolls: bool = any(
+            toll > 0 for _, toll in self.aggregate_measures.values()
+        )
 
     def get_seconds(
         self,
@@ -73,6 +104,40 @@ class ModeAwareTravelLookup(dict[tuple[str, str], int]):
             return None
         return self.get(pair)
 
+    def get_path(
+        self,
+        from_ref: str,
+        to_ref: str,
+        travel_mode: Optional[str] = None,
+    ) -> Optional[TravelPath]:
+        """Declared or composed route geometry for the selected network path."""
+        mode = _normalise_mode(travel_mode)
+        pair = (from_ref, to_ref)
+        if mode and mode != "any":
+            path = self.paths_by_mode.get(mode, {}).get(pair)
+            if path is not None:
+                return list(path)
+            path = self.paths_by_mode.get("any", {}).get(pair)
+            return list(path) if path is not None else None
+        path = self.aggregate_paths.get(pair)
+        return list(path) if path is not None else None
+
+    def get_measure(
+        self,
+        from_ref: str,
+        to_ref: str,
+        travel_mode: Optional[str] = None,
+    ) -> Optional[TravelMeasure]:
+        """Direct-link (distance_km, toll_eur) for one pair, when a link exists."""
+        mode = _normalise_mode(travel_mode)
+        pair = (from_ref, to_ref)
+        if mode and mode != "any":
+            measure = self.measures_by_mode.get(mode, {}).get(pair)
+            if measure is not None:
+                return measure
+            return self.measures_by_mode.get("any", {}).get(pair)
+        return self.aggregate_measures.get(pair)
+
 
 TravelLookup = dict[tuple[str, str], int] | ModeAwareTravelLookup
 
@@ -82,6 +147,10 @@ def build_travel_lookup(travel_links: list[Any]) -> ModeAwareTravelLookup:
     then close the graph under shortest paths so multi-hop connections count."""
     direct_any: TravelPairLookup = {}
     direct_by_mode: dict[str, TravelPairLookup] = {}
+    paths_any: TravelPathLookup = {}
+    paths_by_mode: dict[str, TravelPathLookup] = {}
+    measures_any: TravelMeasureLookup = {}
+    measures_by_mode: dict[str, TravelMeasureLookup] = {}
     for link in travel_links:
         seconds = _nonnegative(link.travel_time_s)
         if seconds <= 0:
@@ -90,24 +159,69 @@ def build_travel_lookup(travel_links: list[Any]) -> ModeAwareTravelLookup:
         value = max(1, int(seconds))
         mode = _normalise_mode(getattr(link, "network_mode", "any"))
         target = direct_any if mode == "any" else direct_by_mode.setdefault(mode, {})
+        path_target = paths_any if mode == "any" else paths_by_mode.setdefault(mode, {})
+        measure_target = (
+            measures_any if mode == "any" else measures_by_mode.setdefault(mode, {})
+        )
         existing = target.get(pair)
-        target[pair] = value if existing is None else min(existing, value)
+        if existing is None or value < existing:
+            target[pair] = value
+            measure_target[pair] = (
+                max(0.0, float(getattr(link, "distance_km", 0.0) or 0.0)),
+                max(0.0, float(getattr(link, "toll_eur", 0.0) or 0.0)),
+            )
+            path = _coerce_route_geometry(getattr(link, "route_geometry", None))
+            if path and not _route_geometry_matches_distance(
+                path, getattr(link, "distance_km", 0.0), getattr(link, "link_id", "")
+            ):
+                path = []
+            if path:
+                path_target[pair] = path
+            else:
+                path_target.pop(pair, None)
 
-    any_lookup = _compose_shortest_paths(direct_any) if direct_any else {}
+    any_lookup, any_paths = _compose_network(direct_any, paths_any)
     by_mode: dict[str, TravelPairLookup] = {"any": any_lookup}
+    composed_paths_by_mode: dict[str, TravelPathLookup] = {"any": any_paths}
     for mode, direct in direct_by_mode.items():
         merged = dict(direct_any)
+        merged_paths = dict(paths_any)
         for pair, seconds in direct.items():
             existing = merged.get(pair)
-            merged[pair] = seconds if existing is None else min(existing, seconds)
-        by_mode[mode] = _compose_shortest_paths(merged)
+            if existing is None or seconds < existing:
+                merged[pair] = seconds
+                if pair in paths_by_mode.get(mode, {}):
+                    merged_paths[pair] = paths_by_mode[mode][pair]
+                else:
+                    merged_paths.pop(pair, None)
+        by_mode[mode], composed_paths_by_mode[mode] = _compose_network(
+            merged, merged_paths
+        )
 
     aggregate: TravelPairLookup = {}
-    for lookup in by_mode.values():
+    aggregate_paths: TravelPathLookup = {}
+    for mode, lookup in by_mode.items():
         for pair, seconds in lookup.items():
             existing = aggregate.get(pair)
-            aggregate[pair] = seconds if existing is None else min(existing, seconds)
-    return ModeAwareTravelLookup(aggregate, by_mode)
+            if existing is None or seconds < existing:
+                aggregate[pair] = seconds
+                path = composed_paths_by_mode.get(mode, {}).get(pair)
+                if path is not None:
+                    aggregate_paths[pair] = path
+                else:
+                    aggregate_paths.pop(pair, None)
+    aggregate_measures: TravelMeasureLookup = {}
+    for mode_measures in measures_by_mode.values():
+        aggregate_measures.update(mode_measures)
+    aggregate_measures.update(measures_any)
+    return ModeAwareTravelLookup(
+        aggregate,
+        by_mode,
+        aggregate_paths,
+        composed_paths_by_mode,
+        aggregate_measures,
+        {"any": measures_any, **measures_by_mode},
+    )
 
 
 def _compose_shortest_paths(direct: TravelPairLookup) -> TravelPairLookup:
@@ -119,6 +233,16 @@ def _compose_shortest_paths(direct: TravelPairLookup) -> TravelPairLookup:
     the direct lookup only, so an oversized graph degrades gracefully
     instead of stalling the solve.
     """
+    return _compose_network(direct, {})[0]
+
+
+def _compose_network(
+    direct: TravelPairLookup,
+    direct_paths: TravelPathLookup,
+) -> tuple[TravelPairLookup, TravelPathLookup]:
+    """Shortest-path closure plus composed geometry when every edge declares it."""
+    if not direct:
+        return {}, {}
     nodes = sorted({node for pair in direct for node in pair})
     if len(nodes) > TRAVEL_NETWORK_MAX_COMPOSE_NODES:
         logger.warning(
@@ -127,15 +251,17 @@ def _compose_shortest_paths(direct: TravelPairLookup) -> TravelPairLookup:
             len(nodes),
             TRAVEL_NETWORK_MAX_COMPOSE_NODES,
         )
-        return dict(direct)
+        return dict(direct), dict(direct_paths)
 
     adjacency: dict[str, list[tuple[str, int]]] = {}
     for (from_ref, to_ref), seconds in direct.items():
         adjacency.setdefault(from_ref, []).append((to_ref, seconds))
 
     composed: TravelPairLookup = {}
+    composed_paths: TravelPathLookup = {}
     for source in nodes:
         best: dict[str, int] = {source: 0}
+        predecessor: dict[str, str] = {}
         heap: list[tuple[int, str]] = [(0, source)]
         while heap:
             dist, node = heapq.heappop(heap)
@@ -145,11 +271,79 @@ def _compose_shortest_paths(direct: TravelPairLookup) -> TravelPairLookup:
                 candidate = dist + seconds
                 if candidate < best.get(neighbor, candidate + 1):
                     best[neighbor] = candidate
+                    predecessor[neighbor] = node
                     heapq.heappush(heap, (candidate, neighbor))
         for target, dist in best.items():
             if target != source:
                 composed[(source, target)] = dist
-    return composed
+                edges: list[tuple[str, str]] = []
+                cursor = target
+                while cursor != source and cursor in predecessor:
+                    previous = predecessor[cursor]
+                    edges.append((previous, cursor))
+                    cursor = previous
+                edges.reverse()
+                if cursor == source and edges and all(
+                    edge in direct_paths for edge in edges
+                ):
+                    path: TravelPath = []
+                    for edge in edges:
+                        segment = direct_paths[edge]
+                        path.extend(segment if not path else segment[1:])
+                    composed_paths[(source, target)] = path
+    return composed, composed_paths
+
+
+def _coerce_route_geometry(raw: Any) -> TravelPath:
+    """Normalize a canonical/stringified ``[[lat, lon], ...]`` route polyline."""
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            return []
+    if not isinstance(raw, (list, tuple)):
+        return []
+    path: TravelPath = []
+    for pair in raw:
+        if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+            continue
+        try:
+            vertex = (float(pair[0]), float(pair[1]))
+        except (TypeError, ValueError):
+            continue
+        # Drop consecutive duplicates so the polyline carries no zero-length
+        # segments; degenerate vertices distort length and detour computations.
+        if not path or vertex != path[-1]:
+            path.append(vertex)
+    return path if len(path) >= 2 else []
+
+
+def _route_geometry_matches_distance(
+    path: TravelPath, distance_km: float, link_id: str
+) -> bool:
+    """Whether a polyline's traced length is consistent with the link distance.
+
+    A declared route polyline should trace roughly the route its link measures;
+    one whose geodesic length dwarfs the declared distance describes a different
+    (or malformed) path and is dropped so it never seeds an obstacle detour.
+    Skipped when the link declares no positive distance to validate against.
+    """
+    if not distance_km or distance_km <= 0:
+        return True
+    traced_km = path_distance_km(path)
+    if traced_km <= distance_km * ROUTE_GEOMETRY_MAX_LENGTH_RATIO:
+        return True
+    logger.warning(
+        "Dropping travel-link %s route geometry: traced length %.3f km exceeds "
+        "declared distance %.3f km by over %.1fx",
+        link_id or "<unknown>",
+        traced_km,
+        float(distance_km),
+        ROUTE_GEOMETRY_MAX_LENGTH_RATIO,
+    )
+    return False
 
 
 def vehicle_fallback_speed_kmh(prime: Any) -> float:
@@ -234,6 +428,63 @@ def network_seconds(
     if not travel_lookup or not from_ref or not to_ref or from_ref == to_ref:
         return None
     return _lookup_seconds(travel_lookup, from_ref, to_ref, travel_mode)
+
+
+def network_path(
+    travel_lookup: Optional[TravelLookup],
+    from_ref: str,
+    to_ref: str,
+    travel_mode: Optional[str] = None,
+) -> Optional[TravelPath]:
+    """Directed network polyline for one pair, when link geometry is declared."""
+    if not isinstance(travel_lookup, ModeAwareTravelLookup):
+        return None
+    return travel_lookup.get_path(from_ref, to_ref, travel_mode)
+
+
+def _network_measure(
+    travel_lookup: Optional[TravelLookup],
+    from_ref: str,
+    to_ref: str,
+    travel_mode: Optional[str],
+) -> Optional[TravelMeasure]:
+    if (
+        not isinstance(travel_lookup, ModeAwareTravelLookup)
+        or not from_ref
+        or not to_ref
+        or from_ref == to_ref
+    ):
+        return None
+    return travel_lookup.get_measure(from_ref, to_ref, travel_mode)
+
+
+def network_distance_km(
+    travel_lookup: Optional[TravelLookup],
+    from_ref: str,
+    to_ref: str,
+    travel_mode: Optional[str] = None,
+) -> Optional[float]:
+    """Directed network-link distance (km) for one pair, when a link exists."""
+    measure = _network_measure(travel_lookup, from_ref, to_ref, travel_mode)
+    if measure is None or measure[0] <= 0:
+        return None
+    return measure[0]
+
+
+def network_toll_eur(
+    travel_lookup: Optional[TravelLookup],
+    from_ref: str,
+    to_ref: str,
+    travel_mode: Optional[str] = None,
+) -> Optional[float]:
+    """Directed per-link toll (EUR) for one pair, when a travel link exists.
+
+    Returns the link's toll (0.0 for an untolled link) so callers can tell a
+    declared-untolled network leg from an off-network leg (None) that should
+    fall back to the fleet per-kilometre rate.
+    """
+    measure = _network_measure(travel_lookup, from_ref, to_ref, travel_mode)
+    return None if measure is None else measure[1]
 
 
 def _lookup_seconds(

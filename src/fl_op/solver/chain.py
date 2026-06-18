@@ -156,7 +156,9 @@ def run_solver_chain(
         RATE_TYPE_LABOR,
         RATE_TYPE_MACHINE_WEAR,
         RATE_TYPE_MATERIAL,
+        RATE_TYPE_SERVICE_FEE,
         RATE_TYPE_TOLL,
+        SERVICE_FEE_EUR_PER_VISIT,
         TOLL_COST_EUR_PER_KM,
     )
     from fl_op.solver.aggregator import _compute_kpis
@@ -233,6 +235,9 @@ def run_solver_chain(
     toll_price = resolve_unit_price(
         cost_rates_raw, RATE_TYPE_TOLL, now, TOLL_COST_EUR_PER_KM
     )
+    service_fee_price = resolve_unit_price(
+        cost_rates_raw, RATE_TYPE_SERVICE_FEE, now, SERVICE_FEE_EUR_PER_VISIT
+    )
     resource_prices = ResourcePrices(
         fuel_eur_per_l=fuel_price,
         material_eur_per_kg=material_price,
@@ -240,7 +245,15 @@ def run_solver_chain(
         labor_eur_per_h=labor_price,
         machine_wear_eur_per_h=machine_wear_price,
         toll_eur_per_km=toll_price,
+        service_fee_eur_per_visit=service_fee_price,
     )
+    # Per-operator wage band (EUR/h) keyed by operator asset id; absent operators
+    # fall back to the fleet labour rate when arc costs and margins are priced.
+    operator_wages = {
+        str(op.asset_id): float(getattr(op, "wage_eur_per_h", 0.0) or 0.0)
+        for op in operators_raw
+        if float(getattr(op, "wage_eur_per_h", 0.0) or 0.0) > 0
+    }
 
     orders_raw, enforcement_infeasible, weather_blocked = apply_weather_filter(
         orders_raw, fields_raw, forecasts_raw, enforcement.weather, now=now
@@ -311,6 +324,13 @@ def run_solver_chain(
     greedy_assignment = greedy_assign(
         _scored_for_cluster_tasks(scored, clusters), vehicle_index, implement_index
     )
+
+    # Per-operator wage bands ride on each cluster spec (a shared reference), so
+    # arc costs and dispatch margins can price the cluster's assigned operator
+    # without threading a new parameter through the worker pool.
+    if operator_wages:
+        for cluster in clusters:
+            cluster["operator_wages"] = operator_wages
 
     all_dispatch, all_infeasible, cluster_telemetry = pool_solve(
         clusters, orders_raw, vehicles_raw, implements_raw, fields_raw, depots_raw,

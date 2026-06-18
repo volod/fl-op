@@ -20,7 +20,7 @@ entities:
     description: A schedulable resource (prime mover, implement, operator).
   location:
     contract: odcs/location.odcs.yaml
-    description: A point of interest (work site, depot, loading station).
+    description: A point of interest (work site, depot, supplier, loading station).
   task:
     contract: odcs/task.odcs.yaml
     description: A unit of work requested by a contract/order.
@@ -81,6 +81,7 @@ semanticTerms:
   urn:xopt:identity:snapshot-id: {valueType: string, quantityKind: identifier}
   # -- attributes ------------------------------------------------------------
   urn:xopt:attribute:asset-type: {valueType: string, quantityKind: categorical}
+  urn:xopt:attribute:location-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:display-name: {valueType: string, quantityKind: text}
   urn:xopt:attribute:latitude: {valueType: number, quantityKind: angle, canonicalUnit: deg}
   urn:xopt:attribute:longitude: {valueType: number, quantityKind: angle, canonicalUnit: deg}
@@ -102,6 +103,14 @@ semanticTerms:
   # shared load dimension bounded by the plain load capacity).
   urn:xopt:attribute:load-material: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:polygon: {valueType: array, quantityKind: geometry}
+  urn:xopt:attribute:route-geometry: {valueType: array, quantityKind: geometry}
+  # The specific work-area polygon a task must cover ([lat, lon] vertices), a
+  # sub-region of its site; absent falls back to the whole site polygon. The
+  # covered-geometry is the union of completed passes accumulated from spatial
+  # execution feedback, subtracted (with restricted areas) to leave the residual
+  # uncovered work the partial-area clip and duration estimate are sized on.
+  urn:xopt:attribute:work-area-geometry: {valueType: array, quantityKind: geometry}
+  urn:xopt:attribute:covered-geometry: {valueType: array, quantityKind: geometry}
   urn:xopt:attribute:soil-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:operation-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:priority-class: {valueType: integer, quantityKind: ordinal}
@@ -150,6 +159,11 @@ semanticTerms:
   # coverage model. Units absent from the map fall back to that model (area)
   # or to the nominal effort (other units).
   urn:xopt:capability:work-rates: {valueType: object, quantityKind: rate-map}
+  # Per-asset operating cost rates (EUR per operating hour). Machine-wear is a
+  # prime-mover attribute, operator-wage an operator attribute; either overrides
+  # the fleet-level cost-rate fallback when the asset declares it.
+  urn:xopt:capability:machine-wear-rate: {valueType: number, quantityKind: money, canonicalUnit: EUR}
+  urn:xopt:capability:operator-wage: {valueType: number, quantityKind: money, canonicalUnit: EUR}
   # -- availability ----------------------------------------------------------
   urn:xopt:availability:shift-start: {valueType: integer, quantityKind: time, canonicalUnit: s}
   urn:xopt:availability:shift-end: {valueType: integer, quantityKind: time, canonicalUnit: s}
@@ -183,6 +197,8 @@ semanticTerms:
   urn:xopt:travel:travel-time: {valueType: number, quantityKind: duration, canonicalUnit: s}
   urn:xopt:travel:distance: {valueType: number, quantityKind: length, canonicalUnit: km}
   urn:xopt:travel:network-mode: {valueType: string, quantityKind: categorical}
+  # Directed toll charged to traverse the link (EUR); absent/zero means untolled.
+  urn:xopt:travel:toll: {valueType: number, quantityKind: money, canonicalUnit: EUR}
   # -- cost rates --------------------------------------------------------------
   # rate-type uses canonical resource codes the engine interprets ("fuel",
   # "fertilizer", "electricity"); per-unit declares what one unit-price buys

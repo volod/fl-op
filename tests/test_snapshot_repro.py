@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import pytest
 
 from fl_op.canonical.enums import PlanningMode
+from fl_op.canonical.location import Location
 from fl_op.io import detect_format, get_codec, locate_source
 from fl_op.snapshot import SnapshotBuilder
 from fl_op.solver.inputs import (
@@ -54,6 +55,29 @@ def test_solver_inputs_have_all_sections(builder: SnapshotBuilder, dataset_dir: 
     ):
         assert section in rows, section
     assert len(rows[SECTION_TASKS]) == len(snap.tasks)
+
+
+def test_supplier_location_projects_for_pickup_routing(
+    builder: SnapshotBuilder, dataset_dir: pathlib.Path
+) -> None:
+    snap = builder.build(dataset_dir, PlanningMode.PERIODIC, effective_at=_EFFECTIVE)
+    supplier = Location(
+        location_id="supplier-1",
+        location_type="supplier",
+        lat=48.25,
+        lon=32.75,
+    )
+    with_supplier = snap.model_copy(
+        update={"locations": [*snap.locations, supplier]}
+    )
+
+    rows = build_solver_inputs(with_supplier)
+
+    projected = {row.location_id: row for row in rows[SECTION_SITES]}
+    assert (projected["supplier-1"].lat, projected["supplier-1"].lon) == (
+        48.25,
+        32.75,
+    )
 
 
 def test_projected_rows_use_canonical_keys_and_match_entities(

@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: travel-links
-version: 1.0.0
+version: 1.1.0
 status: active
 name: Drone Logistics Travel Links
 domain: drone-logistics
@@ -27,3 +27,4 @@ schema:
       - {name: travel_time_s, logicalType: number, physicalType: double, required: true, description: Travel time., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 4}}}]}
       - {name: distance_km, logicalType: number, physicalType: double, required: false, description: Link distance., customProperties: [{property: fieldGeneration, value: {avro: {default: 0.0}, proto: {fieldNumber: 5}}}]}
       - {name: network_mode, logicalType: string, physicalType: string, required: true, description: road, air, or any., customProperties: [{property: fieldGeneration, value: {proto: {fieldNumber: 6}}}]}
+      - {name: route_geometry, logicalType: array, physicalType: string, required: false, description: "Ordered route vertices as [[lat, lon], ...].", customProperties: [{property: fieldGeneration, value: {avro: {default: ""}, proto: {fieldNumber: 7}}}]}

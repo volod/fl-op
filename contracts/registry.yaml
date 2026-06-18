@@ -130,7 +130,7 @@ contracts:
     sourceFile: travel-links.csv
     sourceFormat: csv
     fingerprints:
-      optimizationMetadataHash: 28d8cd8d9a16304d4eb4b06a18a663a7505a2044fa1e2b217605809144c13d2c
+      optimizationMetadataHash: edc646d47e5ae14a1d04039e5a05a25a9e584226d7d7241be18d13ba1960b65b
   drone-weather:
     id: weather
     domain: drone_logistics
@@ -218,7 +218,7 @@ contracts:
     sourceFormat: csv
     fingerprints:
       avroParsingFingerprint: b0522d90dcdbc547fea9c92cb3a19ee202ced5964f7fc1a8676a3c6b600232c8
-      optimizationMetadataHash: 71034d72b7a2c8b4ec00ea37d957350e05422cbc376ad517ae9e30740f02abe9
+      optimizationMetadataHash: 90864d20fdd39323611944bbf77525247a21467324e278858e9117c7830d0ec2
   prices:
     domain: agricultural
     odcs: domains/agricultural/odcs/prices.odcs.yaml

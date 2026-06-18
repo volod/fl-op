@@ -4,9 +4,10 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from fl_op.canonical.enums import ReasonCode
+from fl_op.solver.cluster.bundles import bundle_supports_operation
 from fl_op.solver.cluster.infeasible import mark_all_infeasible
 from fl_op.solver.enforcement import BlockedWindows
-from fl_op.solver.travel_time import TravelLookup, operation_set
+from fl_op.solver.travel_time import TravelLookup
 
 
 @dataclass(frozen=True)
@@ -18,8 +19,8 @@ class ClusterContext:
     depot_id: str
     cluster_orders: list[dict[str, Any]]
     field_map: dict[str, dict[str, Any]]
-    # Every known location (sites + depots/hubs) keyed by id, for resolving
-    # pickup locations that sit outside the cluster's site table.
+    # Every known location (work sites, suppliers, and depots/hubs) keyed by id,
+    # for resolving pickup locations outside the task-site subset.
     pickup_location_map: dict[str, dict[str, Any]]
     routing_vehicles: list[dict[str, Any]]
     depot_lat: float
@@ -56,8 +57,9 @@ def prepare_cluster_context(
     order_map = {o.task_id: o for o in all_orders}
     field_map = {f.location_id: f for f in all_fields}
     depot_map = {d.location_id: d for d in all_depots}
-    # Pickups may reference a depot/hub outside the site table; resolve against
-    # both. Sites win id collisions (they carry the work-area geometry).
+    # Pickups may reference a supplier or depot/hub outside the task-site
+    # subset; resolve against every projected location. Non-depots win id
+    # collisions because they carry the richer geometry.
     pickup_location_map = {**depot_map, **field_map}
     vehicle_map = {v.asset_id: v for v in all_vehicles}
     implement_map = {im.asset_id: im for im in all_implements}
@@ -128,7 +130,7 @@ def _filter_orders_by_allocated_bundles(
     incompatible: list[dict[str, Any]] = []
     for order in cluster_orders:
         op = str(getattr(order, "operation_type", "") or "").upper()
-        if any(_bundle_supports_operation(rv, op) for rv in routing_vehicles):
+        if any(bundle_supports_operation(rv, op) for rv in routing_vehicles):
             compatible.append(order)
             continue
         incompatible.append(
@@ -143,15 +145,3 @@ def _filter_orders_by_allocated_bundles(
             }
         )
     return compatible, incompatible
-
-
-def _bundle_supports_operation(routing_vehicle: dict[str, Any], operation: str) -> bool:
-    prime_ops = operation_set(
-        getattr(routing_vehicle.get("prime"), "compatible_operations", [])
-    )
-    related_ops = operation_set(
-        getattr(routing_vehicle.get("related"), "compatible_operations", [])
-    )
-    return (not prime_ops or operation in prime_ops) and (
-        not related_ops or operation in related_ops
-    )

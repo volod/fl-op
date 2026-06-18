@@ -6,20 +6,31 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fl_op.core.constants import RELATED_MATERIAL_FILL_RATIO
 from fl_op.core.constants import FALLBACK_TRAVEL_SPEED_KMH
 from fl_op.core.constants import RATE_TYPE_FUEL
+from fl_op.core.constants import RELATED_MATERIAL_FILL_RATIO
 from fl_op.core.geometry import haversine_km
 from fl_op.solver.cost_rates import (
     ResourcePrices,
+    operator_wage_eur_per_h,
     vehicle_energy_consumption_rate,
     vehicle_energy_resource_type,
     vehicle_energy_unit,
+    vehicle_machine_wear_eur_per_h,
+)
+from fl_op.solver.routing_geography import (
+    RouteRestriction,
+    active_polygons,
+    detour_waypoints,
+    obstacle_aware_travel_seconds,
+    restricted_polygons_for_vehicle,
+    unconditional_polygons,
 )
 from fl_op.solver.travel_time import (
     TravelLookup,
     _estimate_operation_seconds,
-    travel_seconds,
+    network_distance_km,
+    network_toll_eur,
     travel_mode_for_vehicle,
     vehicle_fallback_speed_kmh,
 )
@@ -61,12 +72,10 @@ def build_node_table(
 ) -> list[RoutingNode]:
     """Build the routing node table: depot, pickups/tasks, reload visits.
 
-    Pickup locations resolve against ``pickup_map`` (every known location:
-    sites and depots/hubs), falling back to ``field_map`` so single-domain
-    callers that only pass sites are unaffected. A pickup ref absent from both
-    is a supplier location outside the modelled tables: it falls back to the
-    cluster depot coordinates and is logged, since the canonical model has no
-    standalone supplier-location source yet.
+    Pickup locations resolve against ``pickup_map`` (every known work site,
+    supplier, and depot/hub), falling back to ``field_map`` so single-domain
+    callers that only pass sites are unaffected. A ref absent from both falls
+    back to the cluster depot coordinates and is logged as invalid input.
     """
     pickup_lookup = pickup_map if pickup_map is not None else field_map
     nodes = [RoutingNode(NODE_DEPOT, -1, depot_id, depot_lat, depot_lon)]
@@ -76,8 +85,8 @@ def build_node_table(
             pickup = pickup_lookup.get(pickup_ref) or field_map.get(pickup_ref)
             if pickup is None:
                 logger.warning(
-                    "Pickup location %r for task %s is outside the site and "
-                    "depot tables; falling back to depot coordinates",
+                    "Pickup location %r for task %s is absent from canonical "
+                    "locations; falling back to depot coordinates",
                     pickup_ref,
                     getattr(order, "task_id", "?"),
                 )
@@ -120,14 +129,23 @@ def build_time_matrix(
     travel_lookup: Optional[TravelLookup] = None,
     travel_mode: Optional[str] = None,
     fallback_speed_kmh: float = FALLBACK_TRAVEL_SPEED_KMH,
+    restricted_polygons: Optional[list[list[tuple[float, float]]]] = None,
 ) -> list[list[int]]:
     """Pairwise arc times: network shortest path where one exists, haversine
-    otherwise. ``fallback_speed_kmh`` prices the haversine leg per vehicle."""
+    otherwise. Geometric fallbacks detour around ``restricted_polygons`` when
+    supplied. ``fallback_speed_kmh`` prices the fallback leg per vehicle."""
+    obstacles = restricted_polygons or []
     return [
         [
-            travel_seconds(
-                a.location_ref, b.location_ref, a.lat, a.lon, b.lat, b.lon,
-                travel_lookup, travel_mode, fallback_speed_kmh,
+            obstacle_aware_travel_seconds(
+                a.location_ref,
+                b.location_ref,
+                (a.lat, a.lon),
+                (b.lat, b.lon),
+                travel_lookup,
+                travel_mode,
+                fallback_speed_kmh,
+                obstacles,
             )
             for b in nodes
         ]
@@ -139,6 +157,8 @@ def build_vehicle_time_matrices(
     nodes: list[RoutingNode],
     routing_vehicles: list[dict[str, Any]],
     travel_lookup: Optional[TravelLookup] = None,
+    restricted_locations: Optional[list[Any]] = None,
+    route_restrictions: Optional[list[list[RouteRestriction]]] = None,
 ) -> list[list[list[int]]]:
     """Pairwise arc times per routing vehicle.
 
@@ -147,31 +167,66 @@ def build_vehicle_time_matrices(
     legs, so a genuinely faster mover gets shorter fallback legs and
     ``--objective time`` can prefer it.
     """
-    return [
-        build_time_matrix(
-            nodes,
-            travel_lookup,
-            travel_mode_for_vehicle(rv["prime"]),
-            vehicle_fallback_speed_kmh(rv["prime"]),
+    locations = restricted_locations or []
+    matrices: list[list[list[int]]] = []
+    for vehicle_idx, routing_vehicle in enumerate(routing_vehicles):
+        polygons = (
+            unconditional_polygons(route_restrictions[vehicle_idx])
+            if route_restrictions is not None
+            else restricted_polygons_for_vehicle(locations, routing_vehicle)
         )
-        for rv in routing_vehicles
-    ]
+        matrices.append(
+            build_time_matrix(
+                nodes,
+                travel_lookup,
+                travel_mode_for_vehicle(routing_vehicle["prime"]),
+                vehicle_fallback_speed_kmh(routing_vehicle["prime"]),
+                polygons,
+            )
+        )
+    return matrices
 
 
-def build_distance_matrix(nodes: list[RoutingNode]) -> list[list[float]]:
-    """Pairwise arc distances (km) between node positions.
+def build_vehicle_cost_matrices(
+    nodes: list[RoutingNode],
+    routing_vehicles: list[dict[str, Any]],
+    travel_lookup: Optional[TravelLookup],
+    toll_eur_per_km: float,
+) -> tuple[list[list[list[float]]], list[list[list[float]]]]:
+    """Per-vehicle (distance_km, toll_eur) arc matrices, network-aware.
 
-    Geometric (geodesic) arc length, mode-independent and shared by every
-    vehicle, used to price per-kilometre tolls. The travel-time layer prefers
-    network links where they exist, but the network lookup carries seconds, not
-    distance, so toll distance stays the straight-line estimate (matching the
-    haversine repositioning estimate in greedy scoring); network toll distance
-    is a future refinement.
+    Distance prefers the vehicle mode's network-link distance and falls back to
+    the geodesic estimate. Toll uses the per-link toll where a travel link exists
+    (so only genuinely tolled segments charge) and falls back to the fleet
+    per-kilometre rate on the geodesic distance for off-network legs.
     """
-    return [
-        [haversine_km(a.lat, a.lon, b.lat, b.lon) for b in nodes]
-        for a in nodes
-    ]
+    n = len(nodes)
+    distance_matrices: list[list[list[float]]] = []
+    toll_matrices: list[list[list[float]]] = []
+    for routing_vehicle in routing_vehicles:
+        mode = travel_mode_for_vehicle(routing_vehicle["prime"])
+        dist_matrix = [[0.0] * n for _ in range(n)]
+        toll_matrix = [[0.0] * n for _ in range(n)]
+        for i, a in enumerate(nodes):
+            for j, b in enumerate(nodes):
+                if i == j:
+                    continue
+                geodesic_km = haversine_km(a.lat, a.lon, b.lat, b.lon)
+                net_km = network_distance_km(
+                    travel_lookup, a.location_ref, b.location_ref, mode
+                )
+                dist_matrix[i][j] = net_km if net_km is not None else geodesic_km
+                net_toll = network_toll_eur(
+                    travel_lookup, a.location_ref, b.location_ref, mode
+                )
+                toll_matrix[i][j] = (
+                    net_toll
+                    if net_toll is not None
+                    else geodesic_km * toll_eur_per_km
+                )
+        distance_matrices.append(dist_matrix)
+        toll_matrices.append(toll_matrix)
+    return distance_matrices, toll_matrices
 
 
 def _build_initial_routes(
@@ -222,7 +277,13 @@ def _extract_dispatch_packages(
     now_epoch: int,
     time_matrix: Optional[list[list[int]] | list[list[list[int]]]] = None,
     resource_prices: Optional[ResourcePrices] = None,
-    distance_matrix: Optional[list[list[float]]] = None,
+    distance_matrices: Optional[list[list[list[float]]]] = None,
+    toll_matrices: Optional[list[list[list[float]]]] = None,
+    restricted_locations: Optional[list[Any]] = None,
+    travel_lookup: Optional[TravelLookup] = None,
+    route_restrictions: Optional[list[list[RouteRestriction]]] = None,
+    service_fee_eur_per_visit: float = 0.0,
+    operator_wages: Optional[dict[str, float]] = None,
 ) -> tuple[list[dict[str, Any]], set[str]]:
     """Read the OR-Tools solution and build dispatch package dicts.
 
@@ -238,28 +299,71 @@ def _extract_dispatch_packages(
         resource_prices = ResourcePrices()
     dispatch_packages: list[dict[str, Any]] = []
     served_task_ids: set[str] = set()
-    operating_eur_per_h = resource_prices.operating_eur_per_h
-    toll_eur_per_km = resource_prices.toll_eur_per_km
+    wages = operator_wages or {}
 
     for rv_idx, rv in enumerate(routing_vehicles):
         vid = rv["prime"].asset_id
         iid = rv["related"].asset_id
+        # Per-vehicle machine-wear rate (EUR/operating hour), fleet rate fallback.
+        wear_eur_per_h = vehicle_machine_wear_eur_per_h(
+            rv["prime"], resource_prices.machine_wear_eur_per_h
+        )
         index = routing.Start(rv_idx)
+        prev_index = index
         prev_node = 0
         travel_s_in = 0
         dist_km_in = 0.0
+        toll_eur_in = 0.0
+        route_waypoints_in: list[dict[str, float]] = []
+        travel_mode = travel_mode_for_vehicle(rv["prime"])
+        vehicle_restrictions = (
+            route_restrictions[rv_idx]
+            if route_restrictions is not None
+            else [
+                RouteRestriction(polygon)
+                for polygon in restricted_polygons_for_vehicle(
+                    restricted_locations or [], rv
+                )
+            ]
+        )
 
         while not routing.IsEnd(index):
             node_idx = manager.IndexToNode(index)
             node = nodes[node_idx]
             if node_idx != prev_node:
+                previous = nodes[prev_node]
+                arc_start_epoch = now_epoch + solution.Value(
+                    time_dim.CumulVar(prev_index)
+                )
+                arc_end_epoch = now_epoch + solution.Value(
+                    time_dim.CumulVar(index)
+                )
                 if time_matrix is not None:
                     travel_s_in += _matrix_seconds(
                         time_matrix, rv_idx, prev_node, node_idx
                     )
-                if distance_matrix is not None:
-                    dist_km_in += distance_matrix[prev_node][node_idx]
+                if distance_matrices is not None:
+                    dist_km_in += distance_matrices[rv_idx][prev_node][node_idx]
+                if toll_matrices is not None:
+                    toll_eur_in += toll_matrices[rv_idx][prev_node][node_idx]
+                route_waypoints_in.extend(
+                    {"lat": lat, "lon": lon}
+                    for lat, lon in detour_waypoints(
+                        previous.location_ref,
+                        node.location_ref,
+                        (previous.lat, previous.lon),
+                        (node.lat, node.lon),
+                        travel_lookup,
+                        travel_mode,
+                        active_polygons(
+                            vehicle_restrictions,
+                            arc_start_epoch,
+                            arc_end_epoch,
+                        ),
+                    )
+                )
             prev_node = node_idx
+            prev_index = index
             if node.kind != NODE_TASK:
                 index = solution.Value(routing.NextVar(index))
                 continue
@@ -284,12 +388,19 @@ def _extract_dispatch_packages(
             fuel_l = (
                 energy_quantity if energy_resource_type == RATE_TYPE_FUEL else 0.0
             )
-            labor_cost = operating_hours * resource_prices.labor_eur_per_h
-            wear_cost = operating_hours * resource_prices.machine_wear_eur_per_h
-            toll_cost = dist_km_in * toll_eur_per_km
+            operator_id = (
+                cluster_dict.get("task_operators", {}).get(oid)
+                or cluster_dict.get("operator_ref", "")
+            )
+            wage_eur_per_h = wages.get(operator_id, resource_prices.labor_eur_per_h)
+            labor_cost = operating_hours * wage_eur_per_h
+            wear_cost = operating_hours * wear_eur_per_h
+            toll_cost = toll_eur_in
+            service_fee_cost = service_fee_eur_per_visit
             travel_km = dist_km_in
             travel_s_in = 0
             dist_km_in = 0.0
+            toll_eur_in = 0.0
             fertilizer_kg = (
                 float(rv["related"].material_capacity) * RELATED_MATERIAL_FILL_RATIO
             )
@@ -300,6 +411,7 @@ def _extract_dispatch_packages(
                 - labor_cost
                 - wear_cost
                 - toll_cost
+                - service_fee_cost
             )
 
             dispatch_packages.append(
@@ -308,15 +420,15 @@ def _extract_dispatch_packages(
                     "cluster_id": cluster_id,
                     "prime_asset_id": vid,
                     "related_asset_id": iid,
-                    "operator_asset_id": (
-                        cluster_dict.get("task_operators", {}).get(oid)
-                        or cluster_dict.get("operator_ref", "")
-                    ),
+                    "operator_asset_id": operator_id,
                     "task_id": oid,
                     "depot_ref": depot_id,
                     "scheduled_start": datetime.fromtimestamp(start_epoch, tz=timezone.utc).isoformat(),
                     "scheduled_end": datetime.fromtimestamp(end_epoch, tz=timezone.utc).isoformat(),
-                    "route_waypoints": [{"lat": node.lat, "lon": node.lon}],
+                    "route_waypoints": [
+                        *route_waypoints_in,
+                        {"lat": node.lat, "lon": node.lon},
+                    ],
                     "estimated_fuel_l": round(fuel_l, 2),
                     "energy_resource_type": energy_resource_type,
                     "estimated_energy_quantity": round(energy_quantity, 2),
@@ -327,9 +439,11 @@ def _extract_dispatch_packages(
                     "estimated_labor_cost_eur": round(labor_cost, 2),
                     "estimated_machine_wear_cost_eur": round(wear_cost, 2),
                     "estimated_toll_cost_eur": round(toll_cost, 2),
+                    "estimated_service_fee_eur": round(service_fee_cost, 2),
                     "estimated_margin_eur": round(margin_eur, 2),
                 }
             )
+            route_waypoints_in = []
             index = solution.Value(routing.NextVar(index))
 
     return dispatch_packages, served_task_ids

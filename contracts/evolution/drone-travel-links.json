@@ -21,6 +21,11 @@
       "physicalType": "string",
       "required": true
     },
+    "route_geometry": {
+      "logicalType": "array",
+      "physicalType": "string",
+      "required": false
+    },
     "to_id": {
       "logicalType": "string",
       "physicalType": "string",
@@ -33,7 +38,7 @@
     }
   },
   "fingerprints": {
-    "optimizationMetadataHash": "28d8cd8d9a16304d4eb4b06a18a663a7505a2044fa1e2b217605809144c13d2c"
+    "optimizationMetadataHash": "edc646d47e5ae14a1d04039e5a05a25a9e584226d7d7241be18d13ba1960b65b"
   },
   "history": [
     {
@@ -190,16 +195,146 @@
         "mappingVersion": "1.0.0"
       },
       "version": "1.0.0"
+    },
+    {
+      "contractId": "drone-travel-links",
+      "fields": {
+        "distance_km": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": false
+        },
+        "from_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "link_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "network_mode": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "route_geometry": {
+          "logicalType": "array",
+          "physicalType": "string",
+          "required": false
+        },
+        "to_id": {
+          "logicalType": "string",
+          "physicalType": "string",
+          "required": true
+        },
+        "travel_time_s": {
+          "logicalType": "number",
+          "physicalType": "double",
+          "required": true
+        }
+      },
+      "fingerprints": {
+        "optimizationMetadataHash": "edc646d47e5ae14a1d04039e5a05a25a9e584226d7d7241be18d13ba1960b65b"
+      },
+      "odcsId": "travel-links",
+      "registryArtifact": {
+        "artifactId": "drone_logistics/travel-links",
+        "artifactRef": "drone_logistics/travel-links@odcs:1.1.0+mapping:1.1.0",
+        "contractVersion": "1.1.0",
+        "domain": "drone_logistics",
+        "localId": "travel-links",
+        "mappingVersion": "1.1.0",
+        "odcsId": "travel-links",
+        "qualifiedId": "drone_logistics/travel-links",
+        "registryId": "drone-travel-links"
+      },
+      "semanticMetadata": {
+        "blocks": {
+          "contract": {
+            "canonicalEntity": "travel-link",
+            "canonicalModelRef": "urn:xopt:model:canonical:0.1.0",
+            "dataProductRole": "multimodalNetwork",
+            "permittedPlanningUses": [
+              "periodic-planning",
+              "rolling-dispatch"
+            ],
+            "sourceContract": "travel-links"
+          },
+          "field:distance_km": {
+            "binding": "travelLink.distanceKm",
+            "canonicalUnit": "km",
+            "planningUse": [
+              "cost"
+            ],
+            "quantityKind": "length",
+            "semanticTerm": "urn:xopt:travel:distance"
+          },
+          "field:from_id": {
+            "binding": "travelLink.fromLocationRef",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "routing"
+            ],
+            "semanticTerm": "urn:xopt:relationship:from-location"
+          },
+          "field:link_id": {
+            "binding": "travelLink.linkId",
+            "planningUse": [
+              "identity"
+            ],
+            "semanticTerm": "urn:xopt:identity:travel-link-id"
+          },
+          "field:network_mode": {
+            "binding": "travelLink.networkMode",
+            "planningUse": [
+              "routing"
+            ],
+            "semanticTerm": "urn:xopt:travel:network-mode"
+          },
+          "field:route_geometry": {
+            "binding": "travelLink.routeGeometry",
+            "missingValuePolicy": "accept-optional",
+            "planningUse": [
+              "routing",
+              "restriction"
+            ],
+            "quantityKind": "geometry",
+            "semanticTerm": "urn:xopt:attribute:route-geometry"
+          },
+          "field:to_id": {
+            "binding": "travelLink.toLocationRef",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "routing"
+            ],
+            "semanticTerm": "urn:xopt:relationship:to-location"
+          },
+          "field:travel_time_s": {
+            "binding": "travelLink.travelTimeS",
+            "canonicalUnit": "s",
+            "missingValuePolicy": "reject-for-planning",
+            "planningUse": [
+              "routing"
+            ],
+            "quantityKind": "duration",
+            "semanticTerm": "urn:xopt:travel:travel-time"
+          }
+        },
+        "mappingVersion": "1.1.0"
+      },
+      "version": "1.1.0"
     }
   ],
   "odcsId": "travel-links",
   "registryArtifact": {
     "artifactId": "drone_logistics/travel-links",
-    "artifactRef": "drone_logistics/travel-links@odcs:1.0.0+mapping:1.0.0",
-    "contractVersion": "1.0.0",
+    "artifactRef": "drone_logistics/travel-links@odcs:1.1.0+mapping:1.1.0",
+    "contractVersion": "1.1.0",
     "domain": "drone_logistics",
     "localId": "travel-links",
-    "mappingVersion": "1.0.0",
+    "mappingVersion": "1.1.0",
     "odcsId": "travel-links",
     "qualifiedId": "drone_logistics/travel-links",
     "registryId": "drone-travel-links"
@@ -247,6 +382,16 @@
         ],
         "semanticTerm": "urn:xopt:travel:network-mode"
       },
+      "field:route_geometry": {
+        "binding": "travelLink.routeGeometry",
+        "missingValuePolicy": "accept-optional",
+        "planningUse": [
+          "routing",
+          "restriction"
+        ],
+        "quantityKind": "geometry",
+        "semanticTerm": "urn:xopt:attribute:route-geometry"
+      },
       "field:to_id": {
         "binding": "travelLink.toLocationRef",
         "missingValuePolicy": "reject-for-planning",
@@ -266,7 +411,7 @@
         "semanticTerm": "urn:xopt:travel:travel-time"
       }
     },
-    "mappingVersion": "1.0.0"
+    "mappingVersion": "1.1.0"
   },
-  "version": "1.0.0"
+  "version": "1.1.0"
 }

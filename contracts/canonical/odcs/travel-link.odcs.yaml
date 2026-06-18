@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: canonical-travel-link
-version: 0.2.0
+version: 0.4.0
 status: active
 name: Canonical Travel Link
 domain: canonical
@@ -65,3 +65,17 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: travelLink.networkMode, semanticTerm: urn:xopt:travel:network-mode, planningUse: [routing]}
+      - name: routeGeometry
+        logicalType: array
+        required: false
+        description: Ordered network-path vertices as a list of [lat, lon] pairs.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: travelLink.routeGeometry, semanticTerm: urn:xopt:attribute:route-geometry, quantityKind: geometry, planningUse: [routing, restriction]}
+      - name: tollEur
+        logicalType: number
+        required: false
+        description: Directed toll charged to traverse this edge (EUR); 0/absent means untolled.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: travelLink.tollEur, semanticTerm: urn:xopt:travel:toll, canonicalUnit: EUR, quantityKind: money, planningUse: [cost]}
