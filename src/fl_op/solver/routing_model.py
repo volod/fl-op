@@ -6,9 +6,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fl_op.core.constants import RELATED_MATERIAL_FILL_RATIO
 from fl_op.core.constants import FALLBACK_TRAVEL_SPEED_KMH
 from fl_op.core.constants import RATE_TYPE_FUEL
+from fl_op.core.constants import RELATED_MATERIAL_FILL_RATIO
 from fl_op.core.geometry import haversine_km
 from fl_op.solver.cost_rates import (
     ResourcePrices,
@@ -16,10 +16,17 @@ from fl_op.solver.cost_rates import (
     vehicle_energy_resource_type,
     vehicle_energy_unit,
 )
+from fl_op.solver.routing_geography import (
+    RouteRestriction,
+    active_polygons,
+    detour_waypoints,
+    obstacle_aware_travel_seconds,
+    restricted_polygons_for_vehicle,
+    unconditional_polygons,
+)
 from fl_op.solver.travel_time import (
     TravelLookup,
     _estimate_operation_seconds,
-    travel_seconds,
     travel_mode_for_vehicle,
     vehicle_fallback_speed_kmh,
 )
@@ -61,12 +68,10 @@ def build_node_table(
 ) -> list[RoutingNode]:
     """Build the routing node table: depot, pickups/tasks, reload visits.
 
-    Pickup locations resolve against ``pickup_map`` (every known location:
-    sites and depots/hubs), falling back to ``field_map`` so single-domain
-    callers that only pass sites are unaffected. A pickup ref absent from both
-    is a supplier location outside the modelled tables: it falls back to the
-    cluster depot coordinates and is logged, since the canonical model has no
-    standalone supplier-location source yet.
+    Pickup locations resolve against ``pickup_map`` (every known work site,
+    supplier, and depot/hub), falling back to ``field_map`` so single-domain
+    callers that only pass sites are unaffected. A ref absent from both falls
+    back to the cluster depot coordinates and is logged as invalid input.
     """
     pickup_lookup = pickup_map if pickup_map is not None else field_map
     nodes = [RoutingNode(NODE_DEPOT, -1, depot_id, depot_lat, depot_lon)]
@@ -76,8 +81,8 @@ def build_node_table(
             pickup = pickup_lookup.get(pickup_ref) or field_map.get(pickup_ref)
             if pickup is None:
                 logger.warning(
-                    "Pickup location %r for task %s is outside the site and "
-                    "depot tables; falling back to depot coordinates",
+                    "Pickup location %r for task %s is absent from canonical "
+                    "locations; falling back to depot coordinates",
                     pickup_ref,
                     getattr(order, "task_id", "?"),
                 )
@@ -120,14 +125,23 @@ def build_time_matrix(
     travel_lookup: Optional[TravelLookup] = None,
     travel_mode: Optional[str] = None,
     fallback_speed_kmh: float = FALLBACK_TRAVEL_SPEED_KMH,
+    restricted_polygons: Optional[list[list[tuple[float, float]]]] = None,
 ) -> list[list[int]]:
     """Pairwise arc times: network shortest path where one exists, haversine
-    otherwise. ``fallback_speed_kmh`` prices the haversine leg per vehicle."""
+    otherwise. Geometric fallbacks detour around ``restricted_polygons`` when
+    supplied. ``fallback_speed_kmh`` prices the fallback leg per vehicle."""
+    obstacles = restricted_polygons or []
     return [
         [
-            travel_seconds(
-                a.location_ref, b.location_ref, a.lat, a.lon, b.lat, b.lon,
-                travel_lookup, travel_mode, fallback_speed_kmh,
+            obstacle_aware_travel_seconds(
+                a.location_ref,
+                b.location_ref,
+                (a.lat, a.lon),
+                (b.lat, b.lon),
+                travel_lookup,
+                travel_mode,
+                fallback_speed_kmh,
+                obstacles,
             )
             for b in nodes
         ]
@@ -139,6 +153,8 @@ def build_vehicle_time_matrices(
     nodes: list[RoutingNode],
     routing_vehicles: list[dict[str, Any]],
     travel_lookup: Optional[TravelLookup] = None,
+    restricted_locations: Optional[list[Any]] = None,
+    route_restrictions: Optional[list[list[RouteRestriction]]] = None,
 ) -> list[list[list[int]]]:
     """Pairwise arc times per routing vehicle.
 
@@ -147,15 +163,24 @@ def build_vehicle_time_matrices(
     legs, so a genuinely faster mover gets shorter fallback legs and
     ``--objective time`` can prefer it.
     """
-    return [
-        build_time_matrix(
-            nodes,
-            travel_lookup,
-            travel_mode_for_vehicle(rv["prime"]),
-            vehicle_fallback_speed_kmh(rv["prime"]),
+    locations = restricted_locations or []
+    matrices: list[list[list[int]]] = []
+    for vehicle_idx, routing_vehicle in enumerate(routing_vehicles):
+        polygons = (
+            unconditional_polygons(route_restrictions[vehicle_idx])
+            if route_restrictions is not None
+            else restricted_polygons_for_vehicle(locations, routing_vehicle)
         )
-        for rv in routing_vehicles
-    ]
+        matrices.append(
+            build_time_matrix(
+                nodes,
+                travel_lookup,
+                travel_mode_for_vehicle(routing_vehicle["prime"]),
+                vehicle_fallback_speed_kmh(routing_vehicle["prime"]),
+                polygons,
+            )
+        )
+    return matrices
 
 
 def build_distance_matrix(nodes: list[RoutingNode]) -> list[list[float]]:
@@ -223,6 +248,9 @@ def _extract_dispatch_packages(
     time_matrix: Optional[list[list[int]] | list[list[list[int]]]] = None,
     resource_prices: Optional[ResourcePrices] = None,
     distance_matrix: Optional[list[list[float]]] = None,
+    restricted_locations: Optional[list[Any]] = None,
+    travel_lookup: Optional[TravelLookup] = None,
+    route_restrictions: Optional[list[list[RouteRestriction]]] = None,
 ) -> tuple[list[dict[str, Any]], set[str]]:
     """Read the OR-Tools solution and build dispatch package dicts.
 
@@ -245,21 +273,58 @@ def _extract_dispatch_packages(
         vid = rv["prime"].asset_id
         iid = rv["related"].asset_id
         index = routing.Start(rv_idx)
+        prev_index = index
         prev_node = 0
         travel_s_in = 0
         dist_km_in = 0.0
+        route_waypoints_in: list[dict[str, float]] = []
+        travel_mode = travel_mode_for_vehicle(rv["prime"])
+        vehicle_restrictions = (
+            route_restrictions[rv_idx]
+            if route_restrictions is not None
+            else [
+                RouteRestriction(polygon)
+                for polygon in restricted_polygons_for_vehicle(
+                    restricted_locations or [], rv
+                )
+            ]
+        )
 
         while not routing.IsEnd(index):
             node_idx = manager.IndexToNode(index)
             node = nodes[node_idx]
             if node_idx != prev_node:
+                previous = nodes[prev_node]
+                arc_start_epoch = now_epoch + solution.Value(
+                    time_dim.CumulVar(prev_index)
+                )
+                arc_end_epoch = now_epoch + solution.Value(
+                    time_dim.CumulVar(index)
+                )
                 if time_matrix is not None:
                     travel_s_in += _matrix_seconds(
                         time_matrix, rv_idx, prev_node, node_idx
                     )
                 if distance_matrix is not None:
                     dist_km_in += distance_matrix[prev_node][node_idx]
+                route_waypoints_in.extend(
+                    {"lat": lat, "lon": lon}
+                    for lat, lon in detour_waypoints(
+                        previous.location_ref,
+                        node.location_ref,
+                        (previous.lat, previous.lon),
+                        (node.lat, node.lon),
+                        travel_lookup,
+                        travel_mode,
+                        active_polygons(
+                            vehicle_restrictions,
+                            arc_start_epoch,
+                            arc_end_epoch,
+                        ),
+                    )
+                )
             prev_node = node_idx
+            prev_index = index
             if node.kind != NODE_TASK:
                 index = solution.Value(routing.NextVar(index))
                 continue
@@ -316,7 +381,10 @@ def _extract_dispatch_packages(
                     "depot_ref": depot_id,
                     "scheduled_start": datetime.fromtimestamp(start_epoch, tz=timezone.utc).isoformat(),
                     "scheduled_end": datetime.fromtimestamp(end_epoch, tz=timezone.utc).isoformat(),
-                    "route_waypoints": [{"lat": node.lat, "lon": node.lon}],
+                    "route_waypoints": [
+                        *route_waypoints_in,
+                        {"lat": node.lat, "lon": node.lon},
+                    ],
                     "estimated_fuel_l": round(fuel_l, 2),
                     "energy_resource_type": energy_resource_type,
                     "estimated_energy_quantity": round(energy_quantity, 2),
@@ -330,6 +398,7 @@ def _extract_dispatch_packages(
                     "estimated_margin_eur": round(margin_eur, 2),
                 }
             )
+            route_waypoints_in = []
             index = solution.Value(routing.NextVar(index))
 
     return dispatch_packages, served_task_ids

@@ -20,7 +20,7 @@ entities:
     description: A schedulable resource (prime mover, implement, operator).
   location:
     contract: odcs/location.odcs.yaml
-    description: A point of interest (work site, depot, loading station).
+    description: A point of interest (work site, depot, supplier, loading station).
   task:
     contract: odcs/task.odcs.yaml
     description: A unit of work requested by a contract/order.
@@ -81,6 +81,7 @@ semanticTerms:
   urn:xopt:identity:snapshot-id: {valueType: string, quantityKind: identifier}
   # -- attributes ------------------------------------------------------------
   urn:xopt:attribute:asset-type: {valueType: string, quantityKind: categorical}
+  urn:xopt:attribute:location-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:display-name: {valueType: string, quantityKind: text}
   urn:xopt:attribute:latitude: {valueType: number, quantityKind: angle, canonicalUnit: deg}
   urn:xopt:attribute:longitude: {valueType: number, quantityKind: angle, canonicalUnit: deg}
@@ -102,6 +103,7 @@ semanticTerms:
   # shared load dimension bounded by the plain load capacity).
   urn:xopt:attribute:load-material: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:polygon: {valueType: array, quantityKind: geometry}
+  urn:xopt:attribute:route-geometry: {valueType: array, quantityKind: geometry}
   urn:xopt:attribute:soil-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:operation-type: {valueType: string, quantityKind: categorical}
   urn:xopt:attribute:priority-class: {valueType: integer, quantityKind: ordinal}

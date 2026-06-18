@@ -269,6 +269,38 @@ class TestSolverIntegration:
         assert {d["task_id"] for d in dispatch} == {"o0", "o1"}, infeasible
         assert infeasible == []
 
+    def test_every_reload_node_is_optional(self):
+        """Unused reloads carry zero-penalty disjunctions, including the first."""
+        from fl_op.solver.cluster.routing import _make_reload_nodes_optional
+        from fl_op.solver.routing_model import (
+            NODE_DEPOT,
+            NODE_RELOAD,
+            RoutingNode,
+        )
+
+        class RoutingStub:
+            def __init__(self):
+                self.disjunctions = []
+
+            def AddDisjunction(self, indices, penalty):
+                self.disjunctions.append((indices, penalty))
+
+        class ManagerStub:
+            @staticmethod
+            def NodeToIndex(index):
+                return index
+
+        nodes = [
+            RoutingNode(NODE_DEPOT, -1, "d0", 0.0, 0.0),
+            RoutingNode(NODE_RELOAD, -1, "d0", 0.0, 0.0),
+            RoutingNode(NODE_RELOAD, -1, "d0", 0.0, 0.0),
+        ]
+        routing = RoutingStub()
+
+        _make_reload_nodes_optional(routing, ManagerStub(), nodes)
+
+        assert routing.disjunctions == [([1], 0), ([2], 0)]
+
     def test_multiple_reloads_serve_demand_beyond_two_fills(self):
         """Three 80 kg orders on a 100 kg vehicle need two refills (three
         trips); the extra optional reload stop lets all three be served."""

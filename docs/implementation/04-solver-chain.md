@@ -152,6 +152,35 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    `TRAVEL_NETWORK_MAX_COMPOSE_NODES`) and is indexed by `networkMode`
    (`road`, `air`, or `any`), with a reverse-direction and haversine fallback
    for pairs without any network path (`solver/travel_time.py`). That fallback
+   is obstacle-aware: for each bundle, operation-compatible restricted polygons
+   feed a visibility graph over the arc endpoints and polygon vertices; Dijkstra
+   chooses the shortest geodesic path that never enters a polygon interior
+   (`solver/routing_geography.py`, `core/geometry.py`), and its intermediate
+   vertices are published as route waypoints. A declared network link carrying
+   `travelLink.routeGeometry` is treated the same way: at ingest the polyline is
+   de-duplicated (no zero-length segments) and dropped if its traced geodesic
+   length exceeds the link's declared distance by more than
+   `ROUTE_GEOMETRY_MAX_LENGTH_RATIO` (`build_travel_lookup`), and at routing time
+   it is validated at its endpoints (each within
+   `ROUTE_GEOMETRY_ENDPOINT_TOLERANCE_KM` of the arc's coordinates) and rerouted
+   around any blocking polygon; geometry whose ends diverge from the arc is
+   logged and ignored as not topology-aware, and the straight network arc is
+   rerouted instead. Restricted polygons activate by
+   traversal time: each polygon's `restrictionWindows` are clamped to the
+   planning horizon, the initial per-vehicle matrix detours only the
+   always-active (window-less) polygons, then a post-solve refinement loop reads
+   each solved arc's actual occupancy interval, activates every window-bounded
+   polygon it overlaps (`active_polygons`), recomputes those arcs, and re-solves
+   -- bounded by `ROUTE_RESTRICTION_MAX_REFINEMENTS` with a conservative
+   all-window final pass that guarantees termination. An opt-in single-pass
+   alternative (`ROUTE_TIME_EXPANDED_ENABLED`, off by default,
+   `solver/cluster/time_expanded.py`) instead partitions the horizon into
+   stable-restriction segments (`horizon_restriction_segments`) and replicates
+   each task node per segment, binding every copy's Time-dimension cumul to its
+   segment so one solve prices each arc by the polygons active in its departure
+   segment -- no re-solve iterations. It currently handles the single-vehicle,
+   no-load subset and falls back to the refinement loop for any richer cluster.
+   The fallback
    leg duration, like every distance in the engine, routes through the
    centralized `core/geometry.py` module: a `pyproj` geodesic engine configured
    as a sphere of mean Earth radius reproduces the legacy haversine results to
@@ -239,11 +268,14 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    offers each routing vehicle enough reload stops to clear the cluster's
    heaviest single-material demand in successive fills
    (`ceil(total / smallest matching compartment) - 1`, capped by
-   `DEPOT_RELOAD_MAX_TRIPS_PER_VEHICLE`); the first stop per vehicle is
-   mandatory (it sits at the depot, costs only its handling time, and keeps a
-   refill a single cheapest-insertion move) while the additional multi-trip
-   stops carry a zero-penalty disjunction, so a route reloads only as often as
-   its demand requires. Loads are per-material capacity dimensions: a
+   `DEPOT_RELOAD_MAX_TRIPS_PER_VEHICLE`). Every reload carries a zero-penalty
+   disjunction. The warm-start builder now seeds every compatible cluster task,
+   retains the allocation-level greedy vehicle preference, tracks each
+   material compartment, and inserts a reload immediately before a task that
+   would overflow it. This coupled reload/task seed removes the former
+   mandatory first-reload anchor, so a route with one fill makes no reload visit
+   and heavier routes reload only as often as their demand requires. Loads are
+   per-material capacity dimensions: a
    task's `load-material` charges the vehicle's matching compartment
    (`load-capacities`), falling back to the aggregate `load-capacity`
    (vehicles declaring neither are unconstrained). The drone-logistics pack
@@ -262,9 +294,10 @@ solver rows (keyed by `asset_id`, `rated_power`, `task_id`, ...):
    declaring `pickup-location` becomes a paired pickup-and-delivery: same
    vehicle, pickup before the task, served or dropped together, with the
    load on board only between the pair. The pickup location resolves against
-   every known location (sites plus depots/hubs), so a pickup at a hub outside
-   the cluster's site table lands at the hub's coordinates; a ref absent from
-   both tables logs a warning and falls back to the depot. All four packs
+   every known location (work sites, canonical `supplier` locations, and
+   depots/hubs), so a pickup at a supplier or hub outside the task-site subset
+   lands at that location's coordinates; an absent ref logs a warning and falls
+   back to the depot. All four packs
    exercise pickup-and-delivery: drone deliveries pair a hub pickup, the
    agricultural pack collects material at the field's nearest yard, the
    construction pack collects equipment at the nearest yard, and the roadside

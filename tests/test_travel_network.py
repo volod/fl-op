@@ -3,11 +3,17 @@
 import pathlib
 
 from fl_op.core.constants import AIR_TRAVEL_CIRCUITY, GROUND_TRAVEL_CIRCUITY
-from fl_op.solver.routing_model import build_node_table, build_time_matrix
+from fl_op.solver.routing_geography import detour_waypoints
+from fl_op.solver.routing_model import (
+    build_node_table,
+    build_time_matrix,
+    build_vehicle_time_matrices,
+)
 from fl_op.solver.travel_time import (
     _haversine_s,
     build_travel_lookup,
     mode_circuity,
+    network_path,
     travel_seconds,
 )
 from fl_op.solver.types import SiteRow, TaskRow, TravelLinkRow
@@ -39,6 +45,22 @@ def _mode_link(
         "to_location_ref": to_ref,
         "travel_time_s": seconds,
         "network_mode": mode,
+    })
+
+
+def _geometry_link(
+    from_ref: str,
+    to_ref: str,
+    seconds: float,
+    geometry: list[list[float]],
+    link_id: str = "l0",
+) -> TravelLinkRow:
+    return TravelLinkRow.from_canonical_dict({
+        "link_id": link_id,
+        "from_location_ref": from_ref,
+        "to_location_ref": to_ref,
+        "travel_time_s": seconds,
+        "route_geometry": geometry,
     })
 
 
@@ -117,6 +139,20 @@ class TestShortestPathComposition:
             [_link("a", "b", 600.0, "l0"), _link("b", "c", 900.0, "l1")]
         )
         assert ("c", "a") not in lookup
+
+    def test_two_hop_geometry_is_composed(self):
+        lookup = build_travel_lookup(
+            [
+                _geometry_link("a", "b", 60, [[0, 0], [0, 1]], "l0"),
+                _geometry_link("b", "c", 90, [[0, 1], [1, 1]], "l1"),
+            ]
+        )
+
+        assert network_path(lookup, "a", "c") == [
+            (0.0, 0.0),
+            (0.0, 1.0),
+            (1.0, 1.0),
+        ]
 
     def test_oversized_network_keeps_direct_links_only(self, monkeypatch):
         from fl_op.solver import travel_time
@@ -279,6 +315,221 @@ class TestNodeGeometry:
         assert matrix[0][1] == 1234
         assert matrix[1][0] == 4321
 
+    def test_fallback_arc_detours_around_restricted_polygon(self):
+        from fl_op.solver.types import PrimeMoverRow, RelatedRow
+
+        nodes = build_node_table(
+            [self._order("o0", "f0")],
+            {"f0": self._field("f0", 0.0, 0.04)},
+            0.0,
+            0.0,
+            "d0",
+        )
+        vehicle = PrimeMoverRow.from_canonical_dict(
+            {
+                "asset_id": "v0",
+                "travel_speed": 30.0,
+                "compatible_operations": ["SPRAYING"],
+            }
+        )
+        implement = RelatedRow.from_canonical_dict(
+            {
+                "asset_id": "i0",
+                "compatible_operations": ["SPRAYING"],
+            }
+        )
+        restricted = SiteRow.from_canonical_dict(
+            {
+                "location_id": "wetland",
+                "lat": 0.0,
+                "lon": 0.02,
+                "polygon": [
+                    [-0.01, 0.01],
+                    [-0.01, 0.03],
+                    [0.01, 0.03],
+                    [0.01, 0.01],
+                ],
+                "restricted_operations": ["SPRAYING"],
+            }
+        )
+
+        direct = build_vehicle_time_matrices(
+            nodes, [{"prime": vehicle, "related": implement}]
+        )
+        detoured = build_vehicle_time_matrices(
+            nodes,
+            [{"prime": vehicle, "related": implement}],
+            restricted_locations=[restricted],
+        )
+
+        assert detoured[0][0][1] > direct[0][0][1]
+        assert detour_waypoints(
+            "d0",
+            "f0",
+            (0.0, 0.0),
+            (0.0, 0.04),
+            None,
+            "road",
+            [[
+                (-0.01, 0.01),
+                (-0.01, 0.03),
+                (0.01, 0.03),
+                (0.01, 0.01),
+            ]],
+        )
+
+    def test_network_arc_wins_over_geometric_obstacle_detour(self):
+        from fl_op.solver.types import PrimeMoverRow, RelatedRow
+
+        nodes = build_node_table(
+            [self._order("o0", "f0")],
+            {"f0": self._field("f0", 0.0, 0.04)},
+            0.0,
+            0.0,
+            "d0",
+        )
+        routing_vehicle = {
+            "prime": PrimeMoverRow.from_canonical_dict(
+                {
+                    "asset_id": "v0",
+                    "compatible_operations": ["SPRAYING"],
+                }
+            ),
+            "related": RelatedRow.from_canonical_dict(
+                {
+                    "asset_id": "i0",
+                    "compatible_operations": ["SPRAYING"],
+                }
+            ),
+        }
+        restricted = SiteRow.from_canonical_dict(
+            {
+                "location_id": "wetland",
+                "polygon": [
+                    [-0.01, 0.01],
+                    [-0.01, 0.03],
+                    [0.01, 0.03],
+                    [0.01, 0.01],
+                ],
+                "restricted_operations": ["SPRAYING"],
+            }
+        )
+
+        matrix = build_vehicle_time_matrices(
+            nodes,
+            [routing_vehicle],
+            {("d0", "f0"): 123},
+            [restricted],
+        )
+
+        assert matrix[0][0][1] == 123
+
+    def test_geometry_bearing_network_arc_is_rerouted_around_obstacle(self):
+        from fl_op.solver.types import PrimeMoverRow, RelatedRow
+
+        nodes = build_node_table(
+            [self._order("o0", "f0")],
+            {"f0": self._field("f0", 0.0, 0.04)},
+            0.0,
+            0.0,
+            "d0",
+        )
+        routing_vehicle = {
+            "prime": PrimeMoverRow.from_canonical_dict(
+                {"asset_id": "v0", "compatible_operations": ["SPRAYING"]}
+            ),
+            "related": RelatedRow.from_canonical_dict(
+                {"asset_id": "i0", "compatible_operations": ["SPRAYING"]}
+            ),
+        }
+        restricted = SiteRow.from_canonical_dict(
+            {
+                "location_id": "wetland",
+                "polygon": [
+                    [-0.01, 0.01],
+                    [-0.01, 0.03],
+                    [0.01, 0.03],
+                    [0.01, 0.01],
+                ],
+                "restricted_operations": ["SPRAYING"],
+            }
+        )
+        lookup = build_travel_lookup(
+            [_geometry_link("d0", "f0", 123, [[0.0, 0.0], [0.0, 0.04]])]
+        )
+
+        matrix = build_vehicle_time_matrices(
+            nodes, [routing_vehicle], lookup, [restricted]
+        )
+
+        assert matrix[0][0][1] > 123
+
+    def test_matching_route_geometry_supplies_waypoints(self):
+        # Declared geometry whose ends meet the arc endpoints is trusted: its
+        # interior vertices surface as route waypoints even without an obstacle.
+        lookup = build_travel_lookup(
+            [_geometry_link("d0", "f0", 120, [[0.0, 0.0], [0.0, 0.02], [0.0, 0.04]])]
+        )
+
+        waypoints = detour_waypoints(
+            "d0", "f0", (0.0, 0.0), (0.0, 0.04), lookup, "road", []
+        )
+
+        assert waypoints == [(0.0, 0.02)]
+
+    def test_mismatched_route_geometry_is_ignored(self):
+        # A declared polyline whose ends fall far from the arc endpoints is not
+        # topology-trustworthy for the pair: it is discarded and the straight arc
+        # is used, so no bogus waypoints are published.
+        lookup = build_travel_lookup(
+            [_geometry_link("d0", "f0", 120, [[5.0, 5.0], [5.0, 5.02], [5.0, 5.04]])]
+        )
+
+        waypoints = detour_waypoints(
+            "d0", "f0", (0.0, 0.0), (0.0, 0.04), lookup, "road", []
+        )
+
+        assert waypoints == []
+
+    def test_route_geometry_drops_consecutive_duplicate_vertices(self):
+        # Degenerate consecutive duplicates are normalized out at ingest so the
+        # polyline carries no zero-length segments.
+        lookup = build_travel_lookup(
+            [_geometry_link("d0", "f0", 120, [[0.0, 0.0], [0.0, 0.0], [0.0, 0.04]])]
+        )
+
+        assert network_path(lookup, "d0", "f0") == [(0.0, 0.0), (0.0, 0.04)]
+
+    def test_route_geometry_far_beyond_link_distance_is_dropped(self):
+        # A polyline that traces ~19 km cannot belong to a link that declares a
+        # 1 km distance: it is inconsistent with the link and dropped at ingest.
+        link = TravelLinkRow.from_canonical_dict({
+            "link_id": "l0", "from_location_ref": "d0", "to_location_ref": "f0",
+            "travel_time_s": 120, "distance_km": 1.0,
+            "route_geometry": [[0.0, 0.0], [0.08, 0.0], [0.0, 0.04]],
+        })
+
+        lookup = build_travel_lookup([link])
+
+        assert network_path(lookup, "d0", "f0") is None
+
+    def test_route_geometry_consistent_with_link_distance_is_kept(self):
+        # A polyline whose traced length is within the declared distance is a
+        # plausible shape for the link and is retained verbatim.
+        link = TravelLinkRow.from_canonical_dict({
+            "link_id": "l0", "from_location_ref": "d0", "to_location_ref": "f0",
+            "travel_time_s": 120, "distance_km": 5.0,
+            "route_geometry": [[0.0, 0.0], [0.0, 0.02], [0.0, 0.04]],
+        })
+
+        lookup = build_travel_lookup([link])
+
+        assert network_path(lookup, "d0", "f0") == [
+            (0.0, 0.0),
+            (0.0, 0.02),
+            (0.0, 0.04),
+        ]
+
     def test_matrix_falls_back_to_haversine_without_links(self):
         orders = [self._order("o0", "f0")]
         field_map = {"f0": self._field("f0", 48.9, 32.4)}
@@ -330,6 +581,7 @@ class TestRoutesMapping:
                     "to_id": "field_000001",
                     "travel_time_s": 1800.0,
                     "distance_km": 10.0,
+                    "route_geometry": [[48.5, 32.0], [48.6, 32.1]],
                     "road_class": "paved",
                 }
             ],
@@ -340,6 +592,7 @@ class TestRoutesMapping:
         assert link.to_location_ref == "field_000001"
         assert link.travel_time_s == 1800.0
         assert link.distance_km == 10.0
+        assert link.route_geometry == [[48.5, 32.0], [48.6, 32.1]]
 
 
 class TestSnapshotIntegration:

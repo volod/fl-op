@@ -1,7 +1,7 @@
 apiVersion: v3.0.0
 kind: DataContract
 id: canonical-location
-version: 0.3.0
+version: 0.4.0
 status: active
 name: Canonical Location
 domain: canonical
@@ -32,6 +32,16 @@ schema:
         customProperties:
           - property: canonicalBinding
             value: {binding: location.name, semanticTerm: urn:xopt:attribute:display-name, planningUse: [display]}
+      - name: locationType
+        logicalType: string
+        required: false
+        description: >-
+          Routing role of the location (field, depot, supplier, or
+          loading-station). Source mappings may alternatively declare the same
+          role as assetRole metadata.
+        customProperties:
+          - property: canonicalBinding
+            value: {binding: location.locationType, semanticTerm: urn:xopt:attribute:location-type, planningUse: [classification, routing]}
       - name: lat
         logicalType: number
         required: true

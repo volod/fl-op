@@ -12,12 +12,6 @@ every implementation note belongs to exactly one numbered item.
 
 Recommended order, optimized for dependency reuse and low rework:
 
-21. Routing topology and geography. Remaining work is research-grade and not a
-   blocking engine gap: coupled-insertion search support for fully-optional
-   reloads, routing the path around restricted sub-polygons, and a dedicated
-   external supplier-location source. The delivered routing behavior (network
-   access, reloads, pickup resolution, compartments, pickup-and-delivery,
-   work-area clipping) lives in current-implementation.md.
 22. Cost model expansion. Remaining work is incremental polish, not a blocking
    engine gap: network-distance and per-link (toll-road) toll pricing, fixed
    per-visit service fees, and per-vehicle/per-operator operating rates. The
@@ -83,26 +77,6 @@ Recommended order, optimized for dependency reuse and low rework:
     to dispatch, and per-hub charging-bay queue scheduling with turnaround
     readiness) lives in current-implementation.md.
 
-
-## 21. Routing topology and geography
-
-- Fully-optional reload insertions (research-grade). One reload per vehicle
-  stays mandatory as an anchor. Making all reloads optional was tried and
-  reverted — the greedy warm start seeds only one task per implement, so the
-  remaining tasks are added by local search, and without a reload already in the
-  route cheapest-insertion cannot perform the coupled "insert reload + insert
-  task" move within the time limit and drops the task. Removing the anchor needs
-  coupled-insertion search support (or a capacity-aware warm start that seeds all
-  cluster tasks, not just one per implement).
-- External supplier-location source. Pickup locations resolve against every
-  known location (sites plus depots/hubs); a ref outside both tables (a true
-  external supplier) falls back to the depot with a warning. A dedicated
-  supplier-location source in the canonical model is not yet modelled.
-- Routing around a restricted sub-polygon (research-grade). Geometric
-  restrictions clip the work area by the unrestricted fraction; routing the path
-  *around* a restricted sub-polygon (rather than scaling the work area down) is
-  not modelled. OR-Tools arcs are point-to-point and do not represent intra-arc
-  obstacle detours, so this needs added waypoints or arc-crossing penalties.
 
 ## 22. Cost model expansion
 

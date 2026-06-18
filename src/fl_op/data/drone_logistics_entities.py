@@ -438,6 +438,7 @@ def _add_link(
     distance_km: float,
     mode: str,
     speed_kmh: float,
+    route_geometry: list[list[float]],
 ) -> None:
     seconds = max(45.0, distance_km / speed_kmh * 3600.0)
     rows.append(
@@ -448,6 +449,7 @@ def _add_link(
             "travel_time_s": float(seconds),
             "distance_km": float(distance_km),
             "network_mode": mode,
+            "route_geometry": route_geometry,
         }
     )
 
@@ -469,8 +471,26 @@ def _generate_travel_links(
             )
             for mode, speed in (("road", road_speed), ("air", 78.0)):
                 dist = road_km if mode == "road" else km
-                _add_link(rows, hub["hub_id"], loc["location_id"], dist, mode, speed)
-                _add_link(rows, loc["location_id"], hub["hub_id"], dist, mode, speed)
+                hub_point = [float(hub["lat"]), float(hub["lon"])]
+                loc_point = [float(loc["lat"]), float(loc["lon"])]
+                _add_link(
+                    rows,
+                    hub["hub_id"],
+                    loc["location_id"],
+                    dist,
+                    mode,
+                    speed,
+                    [hub_point, loc_point],
+                )
+                _add_link(
+                    rows,
+                    loc["location_id"],
+                    hub["hub_id"],
+                    dist,
+                    mode,
+                    speed,
+                    [loc_point, hub_point],
+                )
 
     seen_pairs: set[tuple[str, str, str]] = set()
     for order in orders:
@@ -490,7 +510,11 @@ def _generate_travel_links(
                     continue
                 seen_pairs.add(key)
                 dist = km * 1.35 if mode == "road" else km
-                _add_link(rows, a, b, dist, mode, speed)
+                point_a = [float(loc_map[a]["lat"]), float(loc_map[a]["lon"])]
+                point_b = [float(loc_map[b]["lat"]), float(loc_map[b]["lon"])]
+                _add_link(
+                    rows, a, b, dist, mode, speed, [point_a, point_b]
+                )
     return rows
 
 

@@ -7,7 +7,7 @@ fall back to haversine distance and asset travel speed.
 
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TravelLink(BaseModel):
@@ -21,4 +21,7 @@ class TravelLink(BaseModel):
     travel_time_s: float
     distance_km: Optional[float] = None
     network_mode: str = "any"
+    # Ordered [lat, lon] vertices of the travelled network path. Optional for
+    # distance-matrix sources that carry measures but no spatial geometry.
+    route_geometry: list[list[float]] = Field(default_factory=list)
     source_ref: str = ""

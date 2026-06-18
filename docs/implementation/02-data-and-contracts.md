@@ -43,6 +43,13 @@ bump. Reviewed baselines carry both the normalized semantic metadata and the
 registry artifact ref, so metadata edits are classified before the hash gate is
 accepted.
 
+Canonical locations carry an optional `location.locationType` classification.
+In addition to `field` and `depot`, a source contract can bind `supplier` (or
+declare `assetRole: supplier` in mapping metadata). All non-depot locations are
+projected into the routable location table, so a task's `pickup-location` can
+resolve an external supplier directly instead of falling back to its cluster
+depot.
+
 ## Multi-domain staging and policy composition
 
 A snapshot build can span several domains at once. The registry composes the

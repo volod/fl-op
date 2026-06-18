@@ -8,13 +8,16 @@ from typing import Any, Optional
 
 from fl_op.canonical.enums import ReasonCode
 from fl_op.core import constants
+from fl_op.solver.cluster.bundles import bundle_supports_operation
 from fl_op.solver.cluster.conflict import build_resource_conflict, no_solution_conflict
 from fl_op.solver.cluster.context import ClusterContext
 from fl_op.solver.cluster.infeasible import mark_all_infeasible, unserved_orders
+from fl_op.solver.cluster.loads import compartment_capacity_kg, load_kg
 from fl_op.solver.cluster.penalties import (
     EUR_TO_DROP_PENALTY_SECONDS,
     order_drop_penalty_s,
 )
+from fl_op.solver.cluster.warm_start import build_capacity_aware_initial_routes
 from fl_op.solver.cost_rates import (
     ResourcePrices,
     vehicle_energy_consumption_rate,
@@ -25,7 +28,6 @@ from fl_op.solver.routing_model import (
     NODE_RELOAD,
     NODE_TASK,
     RoutingNode,
-    _build_initial_routes,
     _extract_dispatch_packages,
     build_distance_matrix,
     build_node_table,
@@ -33,17 +35,31 @@ from fl_op.solver.routing_model import (
     pickup_node_indices,
     task_node_indices,
 )
+from fl_op.solver.cluster.time_expanded import maybe_solve_time_expanded
+from fl_op.solver.routing_geography import (
+    ArcRoute,
+    RouteRestriction,
+    active_polygons,
+    arc_route,
+    route_restrictions_for_vehicle,
+)
 from fl_op.solver.solve_telemetry import (
     STATUS_NO_SOLUTION,
     STATUS_SOLVED,
     ClusterSolveTelemetry,
     routing_status_name,
 )
-from fl_op.solver.travel_time import _estimate_operation_seconds, operation_set
+from fl_op.solver.travel_time import (
+    _estimate_operation_seconds,
+    operation_set,
+    travel_mode_for_vehicle,
+    vehicle_fallback_speed_kmh,
+)
 
 logger = logging.getLogger(__name__)
 
 _ROUTING_HORIZON_S = constants.ROUTING_HORIZON_S
+ArcTimeOverrides = dict[tuple[int, int, int], int]
 
 # Asset id -> [(start_epoch_s, end_epoch_s), ...] busy intervals from held
 # (frozen / carried-forward) assignments of a rolling plan. Covers prime
@@ -64,6 +80,9 @@ def solve_routing_context(
     now_epoch: Optional[int] = None,
     resource_prices: Optional[ResourcePrices] = None,
     optimization_objective: str = constants.OBJECTIVE_MODE_COST,
+    _route_time_overrides: Optional[ArcTimeOverrides] = None,
+    _restriction_refinement: int = 0,
+    _final_restriction_pass: bool = False,
 ) -> tuple[list[dict], list[dict], ClusterSolveTelemetry]:
     """Build, solve, and extract one OR-Tools routing model.
 
@@ -82,7 +101,30 @@ def solve_routing_context(
 
     if resource_prices is None:
         resource_prices = ResourcePrices()
-    has_load = any(_load_kg(o.load_demand) > 0 for o in context.cluster_orders)
+    if now_epoch is None:
+        now_epoch = int(datetime.now(tz=timezone.utc).timestamp())
+    # Opt-in single-pass time-expanded path (off by default); only the initial
+    # solve, never the refinement re-entries. Returns None for any cluster outside
+    # its supported subset, so the refinement path below stays the default.
+    if _restriction_refinement == 0 and not _final_restriction_pass:
+        expanded = maybe_solve_time_expanded(
+            context,
+            cluster_dict,
+            now_epoch,
+            resource_prices,
+            solve_time_limit_s,
+            optimization_objective,
+            held_windows,
+        )
+        if expanded is not None:
+            return expanded
+    route_restrictions = [
+        route_restrictions_for_vehicle(
+            list(context.field_map.values()), routing_vehicle, now_epoch
+        )
+        for routing_vehicle in context.routing_vehicles
+    ]
+    has_load = any(load_kg(o.load_demand) > 0 for o in context.cluster_orders)
     n_reloads = (
         _reload_nodes_per_vehicle(context) * len(context.routing_vehicles)
         if constants.DEPOT_RELOAD_ENABLED and has_load
@@ -98,8 +140,16 @@ def solve_routing_context(
         pickup_map=context.pickup_location_map,
     )
     time_matrices = build_vehicle_time_matrices(
-        nodes, context.routing_vehicles, context.travel_lookup
+        nodes,
+        context.routing_vehicles,
+        context.travel_lookup,
+        list(context.field_map.values()),
+        route_restrictions,
     )
+    for (vehicle_idx, from_node, to_node), seconds in (
+        _route_time_overrides or {}
+    ).items():
+        time_matrices[vehicle_idx][from_node][to_node] = seconds
     # Single geodesic distance matrix shared by every vehicle; priced only when
     # a per-kilometre toll rate is supplied (zero by default).
     distance_matrix = (
@@ -127,14 +177,10 @@ def solve_routing_context(
     time_dim = _add_time_dimension(routing, manager, time_matrices, service_times)
     _add_operation_vehicle_constraints(routing, manager, context, nodes)
 
-    if now_epoch is None:
-        now_epoch = int(datetime.now(tz=timezone.utc).timestamp())
     _add_order_windows_and_disjunctions(
         routing, manager, time_dim, context, now_epoch, service_times, nodes
     )
-    _make_reload_nodes_optional(
-        routing, manager, nodes, len(context.routing_vehicles)
-    )
+    _make_reload_nodes_optional(routing, manager, nodes)
     _add_completion_time_costs(
         routing,
         manager,
@@ -169,12 +215,8 @@ def solve_routing_context(
     search_params.log_search = False
     search_params.sat_parameters.num_workers = 1
 
-    initial_routes = _build_initial_routes(
-        context.routing_vehicles,
-        context.cluster_orders,
-        greedy_assignment,
-        vehicle_index,
-        nodes,
+    initial_routes = build_capacity_aware_initial_routes(
+        context, greedy_assignment, vehicle_index, nodes
     )
     solve_started = time.perf_counter()
     solution = _solve_with_warm_start(routing, initial_routes, search_params)
@@ -216,6 +258,54 @@ def solve_routing_context(
         return dispatch, infeasible, telemetry
 
     first_objective = solution.ObjectiveValue()
+    if not _final_restriction_pass:
+        activated = _activated_timed_arc_overrides(
+            solution,
+            routing,
+            manager,
+            time_dim,
+            context,
+            nodes,
+            time_matrices,
+            service_times,
+            route_restrictions,
+            now_epoch,
+        )
+        current_overrides = dict(_route_time_overrides or {})
+        new_activations = {
+            arc: seconds
+            for arc, seconds in activated.items()
+            if seconds > current_overrides.get(arc, 0)
+        }
+        if new_activations:
+            current_overrides.update(new_activations)
+            final_pass = (
+                _restriction_refinement
+                >= constants.ROUTE_RESTRICTION_MAX_REFINEMENTS
+            )
+            if final_pass:
+                current_overrides.update(
+                    _all_timed_arc_overrides(
+                        context,
+                        nodes,
+                        time_matrices,
+                        route_restrictions,
+                    )
+                )
+            return solve_routing_context(
+                context,
+                cluster_dict,
+                greedy_assignment,
+                vehicle_index,
+                held_windows=held_windows,
+                solve_time_limit_s=solve_time_limit_s,
+                now_epoch=now_epoch,
+                resource_prices=resource_prices,
+                optimization_objective=optimization_objective,
+                _route_time_overrides=current_overrides,
+                _restriction_refinement=_restriction_refinement + 1,
+                _final_restriction_pass=final_pass,
+            )
     solution, lns_info = _maybe_improve_with_lns(routing, solution, cluster_dict)
     wall_s = time.perf_counter() - solve_started
 
@@ -234,6 +324,9 @@ def solve_routing_context(
         time_matrices,
         resource_prices,
         distance_matrix,
+        list(context.field_map.values()),
+        context.travel_lookup,
+        route_restrictions,
     )
     infeasible = unserved_orders(
         context.task_ids,
@@ -395,25 +488,13 @@ def _add_operation_vehicle_constraints(
         allowed = [
             rv_idx
             for rv_idx, routing_vehicle in enumerate(context.routing_vehicles)
-            if _bundle_supports_operation(routing_vehicle, operation)
+            if bundle_supports_operation(routing_vehicle, operation)
         ]
         index = manager.NodeToIndex(node_idx)
         if allowed:
             routing.VehicleVar(index).SetValues([-1, *allowed])
         else:
             routing.solver().Add(routing.ActiveVar(index) == 0)
-
-
-def _bundle_supports_operation(routing_vehicle: dict[str, Any], operation: str) -> bool:
-    prime_ops = operation_set(
-        getattr(routing_vehicle.get("prime"), "compatible_operations", [])
-    )
-    related_ops = operation_set(
-        getattr(routing_vehicle.get("related"), "compatible_operations", [])
-    )
-    return (not prime_ops or operation in prime_ops) and (
-        not related_ops or operation in related_ops
-    )
 
 
 def _add_time_dimension(
@@ -452,6 +533,107 @@ def _add_time_dimension(
     return routing.GetDimensionOrDie("Time")
 
 
+def _activated_timed_arc_overrides(
+    solution: Any,
+    routing: Any,
+    manager: Any,
+    time_dim: Any,
+    context: ClusterContext,
+    nodes: list[RoutingNode],
+    time_matrices: list[list[list[int]]],
+    service_times: list[list[int]],
+    restrictions_by_vehicle: list[list[RouteRestriction]],
+    now_epoch: int,
+) -> ArcTimeOverrides:
+    """Detour durations for solved arcs overlapping active timed polygons."""
+    overrides: ArcTimeOverrides = {}
+    for vehicle_idx, routing_vehicle in enumerate(context.routing_vehicles):
+        index = routing.Start(vehicle_idx)
+        travel_mode = travel_mode_for_vehicle(routing_vehicle["prime"])
+        fallback_speed = vehicle_fallback_speed_kmh(routing_vehicle["prime"])
+        while not routing.IsEnd(index):
+            next_index = solution.Value(routing.NextVar(index))
+            from_node = manager.IndexToNode(index)
+            to_node = manager.IndexToNode(next_index)
+            start_epoch = (
+                now_epoch
+                + solution.Value(time_dim.CumulVar(index))
+                + service_times[vehicle_idx][from_node]
+            )
+            end_epoch = now_epoch + solution.Value(
+                time_dim.CumulVar(next_index)
+            )
+            polygons = active_polygons(
+                restrictions_by_vehicle[vehicle_idx], start_epoch, end_epoch
+            )
+            route = _route_for_nodes(
+                context,
+                nodes[from_node],
+                nodes[to_node],
+                travel_mode,
+                fallback_speed,
+                polygons,
+            )
+            base_seconds = time_matrices[vehicle_idx][from_node][to_node]
+            if route.detoured and route.seconds > base_seconds:
+                overrides[(vehicle_idx, from_node, to_node)] = route.seconds
+            index = next_index
+    return overrides
+
+
+def _all_timed_arc_overrides(
+    context: ClusterContext,
+    nodes: list[RoutingNode],
+    time_matrices: list[list[list[int]]],
+    restrictions_by_vehicle: list[list[RouteRestriction]],
+) -> ArcTimeOverrides:
+    """Conservative all-window detours used only after refinement exhaustion."""
+    overrides: ArcTimeOverrides = {}
+    for vehicle_idx, routing_vehicle in enumerate(context.routing_vehicles):
+        polygons = [
+            restriction.polygon
+            for restriction in restrictions_by_vehicle[vehicle_idx]
+        ]
+        travel_mode = travel_mode_for_vehicle(routing_vehicle["prime"])
+        fallback_speed = vehicle_fallback_speed_kmh(routing_vehicle["prime"])
+        for from_node, from_route_node in enumerate(nodes):
+            for to_node, to_route_node in enumerate(nodes):
+                if from_node == to_node:
+                    continue
+                route = _route_for_nodes(
+                    context,
+                    from_route_node,
+                    to_route_node,
+                    travel_mode,
+                    fallback_speed,
+                    polygons,
+                )
+                base_seconds = time_matrices[vehicle_idx][from_node][to_node]
+                if route.detoured and route.seconds > base_seconds:
+                    overrides[(vehicle_idx, from_node, to_node)] = route.seconds
+    return overrides
+
+
+def _route_for_nodes(
+    context: ClusterContext,
+    from_node: RoutingNode,
+    to_node: RoutingNode,
+    travel_mode: str,
+    fallback_speed: float,
+    polygons: list[list[tuple[float, float]]],
+) -> ArcRoute:
+    return arc_route(
+        from_node.location_ref,
+        to_node.location_ref,
+        (from_node.lat, from_node.lon),
+        (to_node.lat, to_node.lon),
+        context.travel_lookup,
+        travel_mode,
+        fallback_speed,
+        polygons,
+    )
+
+
 def _add_order_windows_and_disjunctions(
     routing: Any,
     manager: Any,
@@ -466,9 +648,8 @@ def _add_order_windows_and_disjunctions(
     A paired order's pickup node carries no penalty of its own: the pair is
     served or dropped together (active-variable equality), on one vehicle,
     pickup first. Reload nodes are handled separately
-    (``_make_reload_nodes_optional``): one stays mandatory per vehicle and any
-    extra multi-trip stops are optional, so a route reloads only as often as its
-    demand requires.
+    (``_make_reload_nodes_optional``): every offered stop is optional, and the
+    capacity-aware warm start inserts only those needed by its seeded routes.
     """
     solver = routing.solver()
     pickup_nodes = pickup_node_indices(nodes)
@@ -889,17 +1070,17 @@ def _reload_nodes_per_vehicle(context: ClusterContext) -> int:
     materials = {
         str(order.load_material or "")
         for order in context.cluster_orders
-        if _load_kg(order.load_demand) > 0
+        if load_kg(order.load_demand) > 0
     }
     refills = 1
     for material in materials:
         total = sum(
-            _load_kg(order.load_demand)
+            load_kg(order.load_demand)
             for order in context.cluster_orders
             if str(order.load_material or "") == material
         )
         capacities = [
-            _compartment_capacity_kg(rv["prime"], material)
+            compartment_capacity_kg(rv["prime"], material)
             for rv in context.routing_vehicles
         ]
         min_capacity = min((c for c in capacities if c > 0), default=0.0)
@@ -912,33 +1093,17 @@ def _make_reload_nodes_optional(
     routing: Any,
     manager: Any,
     nodes: list[RoutingNode],
-    n_mandatory: int,
 ) -> None:
-    """Make reload visits beyond the first per vehicle optional.
+    """Make every offered reload visit optional with zero drop penalty.
 
-    The first ``n_mandatory`` reload stops (one per routing vehicle) stay
-    mandatory: they sit at the depot, cost only their handling time, and act as
-    an anchor that keeps serving a task behind a reload a single
-    cheapest-insertion move so the proven multi-trip routes survive. Any
-    additional reload stops offered for heavier multi-trip demand get a
-    zero-penalty disjunction, so the solver visits them only when a route
-    genuinely needs a second (or later) refill and drops the surplus otherwise.
-
-    Fully optional reloads (no mandatory anchor) regress: the greedy warm start
-    seeds only one task per implement, so the remaining tasks must be added by
-    local search, and without a reload already in the route cheapest-insertion
-    cannot perform the coupled "insert reload + insert task" move within the
-    time limit -- it drops the task instead. Removing the anchor therefore needs
-    coupled-insertion search support, which remains future work.
+    The capacity-aware warm start inserts the reload/task pairs needed by its
+    seeded routes, so first-solution search no longer depends on a mandatory
+    reload anchor. Unused reloads therefore disappear entirely, avoiding both
+    their handling time and an unnecessary depot visit.
     """
-    seen = 0
     for node_idx, node in enumerate(nodes):
-        if node.kind != NODE_RELOAD:
-            continue
-        seen += 1
-        if seen <= n_mandatory:
-            continue
-        routing.AddDisjunction([manager.NodeToIndex(node_idx)], 0)
+        if node.kind == NODE_RELOAD:
+            routing.AddDisjunction([manager.NodeToIndex(node_idx)], 0)
 
 
 def _cluster_load_materials(context: ClusterContext) -> set[str]:
@@ -946,7 +1111,7 @@ def _cluster_load_materials(context: ClusterContext) -> set[str]:
     return {
         str(order.load_material or "")
         for order in context.cluster_orders
-        if _load_kg(order.load_demand) > 0
+        if load_kg(order.load_demand) > 0
     }
 
 
@@ -1002,7 +1167,7 @@ def _extract_resource_conflict(
                 index = solution.Value(routing.NextVar(index))
             max_end_s = max(max_end_s, solution.Value(time_dim.CumulVar(index)))
             for material, dim in load_dims.items():
-                capacity_units = _compartment_capacity_kg(rv["prime"], material) * scale
+                capacity_units = compartment_capacity_kg(rv["prime"], material) * scale
                 if capacity_units > 0:
                     capacity_utilization[material] = max(
                         capacity_utilization.get(material, 0.0),
@@ -1053,7 +1218,7 @@ def _add_load_capacity_dimensions(
             order = context.cluster_orders[node.order_idx]
             if str(order.load_material or "") != material:
                 continue
-            quantity = int(_load_kg(order.load_demand) * scale)
+            quantity = int(load_kg(order.load_demand) * scale)
             if quantity <= 0:
                 continue
             paired = bool(str(order.pickup_location_ref or ""))
@@ -1063,7 +1228,7 @@ def _add_load_capacity_dimensions(
                 demands[i] = -quantity if paired else quantity
 
         capacities = [
-            int(_compartment_capacity_kg(rv["prime"], material) * scale)
+            int(compartment_capacity_kg(rv["prime"], material) * scale)
             for rv in context.routing_vehicles
         ]
         max_capacity = max(capacities)
@@ -1090,25 +1255,6 @@ def _add_load_capacity_dimensions(
                 dimension.SlackVar(manager.NodeToIndex(i)).SetValue(0)
             for v_idx in range(len(context.routing_vehicles)):
                 dimension.SlackVar(routing.Start(v_idx)).SetValue(0)
-
-
-def _compartment_capacity_kg(prime: Any, material: str) -> float:
-    """Vehicle capacity for one material: compartment, aggregate, unlimited."""
-    compartments = (
-        prime.load_capacities if isinstance(prime.load_capacities, dict) else {}
-    )
-    value = compartments.get(material) if material else None
-    if value is None:
-        value = prime.load_capacity
-    capacity_kg = _load_kg(value)
-    return capacity_kg if capacity_kg > 0 else constants.VEHICLE_LOAD_UNLIMITED_KG
-
-
-def _load_kg(value: Any) -> float:
-    try:
-        return max(0.0, float(value or 0.0))
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _add_precedence_constraints(

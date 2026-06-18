@@ -61,9 +61,11 @@ def _generate_routes(
         road_km = round(line_km * _ROAD_CURVATURE_FACTOR, 2)
         travel_s = round(road_km / _ROAD_SPEED_KMH * 3600.0, 1)
         road_class = str(rng.choice(_ROAD_CLASSES))
-        for from_id, to_id in (
-            (depot["depot_id"], field["field_id"]),
-            (field["field_id"], depot["depot_id"]),
+        depot_point = [float(depot["lat"]), float(depot["lon"])]
+        field_point = [float(field["centroid_lat"]), float(field["centroid_lon"])]
+        for from_id, to_id, route_geometry in (
+            (depot["depot_id"], field["field_id"], [depot_point, field_point]),
+            (field["field_id"], depot["depot_id"], [field_point, depot_point]),
         ):
             routes.append(
                 {
@@ -72,6 +74,7 @@ def _generate_routes(
                     "to_id": to_id,
                     "travel_time_s": travel_s,
                     "distance_km": road_km,
+                    "route_geometry": route_geometry,
                     "road_class": road_class,
                 }
             )

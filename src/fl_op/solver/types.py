@@ -207,6 +207,7 @@ class SiteRow(_SolverRow):
     """A work site (field) where tasks are executed."""
 
     location_id: str
+    location_type: str = "field"
     name: str = ""
     lat: float = 0.0
     lon: float = 0.0
@@ -258,6 +259,7 @@ class TravelLinkRow(_SolverRow):
     travel_time_s: float = 0.0
     distance_km: float = 0.0
     network_mode: str = "any"
+    route_geometry: Any = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

@@ -50,7 +50,10 @@ def build_location(
     result: MappingResult,
 ) -> Location:
     """Build a Location and append any inventory positions."""
-    loc_type = "depot" if table.asset_role == "depot" else "field"
+    # Location-role metadata distinguishes external pickup suppliers from work
+    # sites and depots without introducing a domain-specific canonical entity.
+    # Legacy mappings omit the role and therefore remain work sites.
+    loc_type = str(acc.get("locationType") or table.asset_role or "field")
     location_id = str(acc["locationId"])
     for material, unit, qty in acc["_inventory"]:
         result.inventory.append(
@@ -156,6 +159,29 @@ def parse_polygon(raw: Any) -> list[list[float]]:
     return points if len(points) >= 3 else []
 
 
+def parse_route_geometry(raw: Any) -> list[list[float]]:
+    """Parse an ordered route polyline represented as ``[[lat, lon], ...]``."""
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            logger.warning("Skipping malformed route geometry %r", raw)
+            return []
+    if not isinstance(raw, (list, tuple)):
+        return []
+    points: list[list[float]] = []
+    for pair in raw:
+        if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+            continue
+        try:
+            points.append([float(pair[0]), float(pair[1])])
+        except (TypeError, ValueError):
+            logger.warning("Skipping malformed route vertex %r", pair)
+    return points if len(points) >= 2 else []
+
+
 def build_forecast(table: BindingTable, acc: dict[str, Any]) -> Forecast:
     """Build a Forecast from one accumulated source row."""
     forecast_for = acc.get("forecastFor", {})
@@ -205,6 +231,7 @@ def build_travel_link(table: BindingTable, acc: dict[str, Any]) -> TravelLink:
         travel_time_s=float(acc["travelTimeS"]),
         distance_km=float(acc["distanceKm"]) if "distanceKm" in acc else None,
         network_mode=str(acc.get("networkMode", "any") or "any"),
+        route_geometry=parse_route_geometry(acc.get("routeGeometry")),
         source_ref=f"{table.contract_id}:{acc['linkId']}",
     )
 
